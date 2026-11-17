@@ -1,0 +1,7 @@
+anthropic>=2.0,<3        # API Claude
+feedparser>=6.0          # flux RSS / Atom
+beautifulsoup4>=4.12     # nettoyage HTML des emails
+PyYAML>=6.0              # config.yaml
+python-dotenv>=1.0       # lecture du fichier .env
+requests>=2.31           # Telegram / Discord / téléchargement RSS
+flask>=3.0               # interface web (dashboard.py) — optionnel

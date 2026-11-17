@@ -1,0 +1,166 @@
+# =============================================================================
+#  Deal Sniper — configuration
+#  Les mots-clés sont insensibles à la casse et aux accents ("oxydé" = "OXYDE").
+#  Ils sont recherchés comme mots entiers ("hs" ne matche pas "hstore").
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+#  Sources d'annonces
+# -----------------------------------------------------------------------------
+sources:
+  imap:
+    enabled: true
+    folder: INBOX
+    lookback_days: 3          # on relit les emails des 3 derniers jours (le dédoublonnage évite les doublons)
+    max_emails: 100
+    mark_as_read: false       # true = marque les alertes comme lues après lecture
+    # nom de la source -> morceau de l'adresse/nom d'expéditeur à reconnaître
+    # (laisser vide {} pour accepter TOUS les expéditeurs)
+    senders:
+      leboncoin: "leboncoin"
+      agorastore: "agorastore"
+      ebay: "ebay"
+      vinted: "vinted"
+    # Expressions régulières reconnaissant un lien d'annonce dans un email
+    ad_url_patterns:
+      - 'leboncoin\.fr/(?:ad|vi|[a-z_]+)/.*\d{6,}'
+      - 'agorastore\.fr/.+'
+      - 'ebay\.[a-z.]+/itm/'
+      - 'vinted\.fr/items/'
+
+  rss:
+    enabled: true
+    timeout: 20
+    # Ajoutez vos flux ici (eBay, RSS-Bridge, rss.app, etc.)
+    feeds: []
+    #  - name: ebay-thinkpad
+    #    url: "https://www.ebay.fr/sch/i.html?_nkw=thinkpad+sans+ssd&_rss=1"
+    #  - name: rssbridge-lbc
+    #    url: "https://rss-bridge.example.org/?action=display&bridge=...&format=Atom"
+
+# -----------------------------------------------------------------------------
+#  Pré-filtre (Python pur, 0 token)
+# -----------------------------------------------------------------------------
+filters:
+  drop_uncategorized: true    # rejette les annonces qui ne correspondent à aucune catégorie
+  keep_unknown_price: true    # garde les annonces dont le prix n'a pas pu être lu
+  min_price: 5                # en dessous : souvent un faux prix (« 1 € à débattre »)
+
+  # Annonces d'acheteurs (cherchés dans le TITRE uniquement)
+  buyer_ad_keywords:
+    - "recherche"
+    - "recherché"
+    - "achete"
+    - "j'achete"
+    - "je cherche"
+    - "rachat"
+    - "cherche"
+
+  # Pannes rédhibitoires / pièges, cherchés dans titre + description
+  global_exclude_keywords:
+    - "carte mere hs"
+    - "carte mere morte"
+    - "carte mere defectueuse"
+    - "sans carte mere"
+    - "pour pieces uniquement sans carte mere"
+    - "oxyde"
+    - "oxydation"
+    - "tombe dans l'eau"
+    - "degat des eaux"
+    - "liquide renverse"
+    - "bloque icloud"
+    - "verrouille icloud"
+    - "compte google bloque"
+    - "frp"
+    - "mot de passe bios"
+    - "bios verrouille"
+    - "bios bloque"
+    - "computrace"
+    - "blacklist"
+    - "vole"
+    - "ecran casse"            # retirez-le si vous changez des dalles
+    - "ne s'allume pas du tout apres orage"
+    - "boite vide"
+    - "photo seulement"
+    - "lot de pieces"
+
+# -----------------------------------------------------------------------------
+#  Catégories (la première dont un mot-clé est dans le titre l'emporte)
+#    keywords         : reconnaissance de la catégorie
+#    max_budget       : prix + livraison maximum (€)
+#    min_price        : (optionnel) surcharge le min_price global
+#    exclude_keywords : exclusions propres à la catégorie
+#    include_keywords : « signaux » de panne simple → priorisés et transmis à Claude
+#    require_include  : true = on n'envoie à Claude QUE les annonces avec un signal
+# -----------------------------------------------------------------------------
+categories:
+  - name: "PC portables pros"
+    keywords: ["thinkpad", "latitude", "elitebook", "probook", "zbook", "precision", "macbook pro",
+               "macbook air", "dell xps", "surface pro", "surface laptop", "travelmate", "lifebook", "dynabook"]
+    max_budget: 180
+    exclude_keywords: ["coque seule", "clavier seul", "chargeur seul", "nappe seule"]
+    include_keywords: ["sans disque", "sans ssd", "sans disque dur", "sans hdd", "sans os", "sans windows",
+                       "sans chargeur", "batterie hs", "batterie morte", "batterie a changer",
+                       "ecran a changer", "clavier hs", "charniere", "ne charge plus", "port usb-c", "dc jack"]
+    require_include: false
+
+  - name: "Mini-PC"
+    keywords: ["mini pc", "mini-pc", "nuc", "optiplex micro", "thinkcentre tiny", "thinkcentre m7", "elitedesk mini",
+               "prodesk mini", "mac mini", "tiny"]
+    max_budget: 120
+    include_keywords: ["sans disque", "sans ssd", "sans ram", "sans memoire", "sans os", "sans alimentation",
+                       "sans chargeur"]
+
+  - name: "Consoles"
+    keywords: ["ps5", "ps4", "playstation", "xbox", "switch", "steam deck", "nintendo"]
+    max_budget: 200
+    exclude_keywords: ["jeu seul", "manette seule", "boite seule", "jeux uniquement", "puce", "hackee", "ban",
+                       "switch reseau", "gigabit", "ethernet"]
+    include_keywords: ["surchauffe", "bruyante", "ventilateur", "hdmi", "port hdmi", "lecteur hs",
+                       "ne lit plus", "joycon", "drift", "s'eteint", "ecran bleu", "carte sd"]
+
+  - name: "Écrans & TV"
+    keywords: ["ecran", "moniteur", "tv", "televiseur", "television", "oled", "qled"]
+    max_budget: 150
+    exclude_keywords: ["dalle cassee", "dalle fissuree", "ecran fissure", "fissure", "impact", "pied seul",
+                       "telecommande seule"]
+    include_keywords: ["retroeclairage", "backlight", "ecran noir avec son", "son mais pas d'image",
+                       "pas d'image", "led", "alimentation", "ne s'allume plus", "clignote"]
+
+  - name: "Outillage sans fil"
+    keywords: ["makita", "dewalt", "milwaukee", "bosch pro", "hikoki", "metabo", "festool", "ryobi"]
+    max_budget: 120
+    exclude_keywords: ["batterie seule", "chargeur seul", "coffret vide"]
+    include_keywords: ["sans batterie", "machine nue", "solo", "sans chargeur", "body only"]
+
+# -----------------------------------------------------------------------------
+#  Analyse IA (Anthropic)
+# -----------------------------------------------------------------------------
+analyzer:
+  # Modèle économique. claude-haiku-5-5 est ~10x moins cher que claude-haiku-4-5
+  # ($0.10 / $0.50 par million de tokens contre $1 / $5) : passez-y si vous voulez
+  # réduire encore le coût (et ajoutez alors  effort: low  ci-dessous).
+  model: "claude-haiku-4-5"
+  # effort: low               # uniquement pour les modèles qui le supportent (pas haiku-4-5)
+  batch_size: 10              # annonces par appel API
+  max_description_chars: 600  # troncature des descriptions envoyées
+  max_tokens: 4096            # plafond de la réponse (le lot est coupé en deux s'il est atteint)
+  max_ads_per_run: 60         # garde-fou : au-delà, report au passage suivant
+  max_daily_cost_usd: 0.10    # plafond de dépense journalier estimé (null = pas de plafond)
+  max_retries: 4              # retries automatiques (429, 5xx, surcharge, réseau)
+  timeout_seconds: 90
+  structured_output: true     # réponse JSON garantie par schéma
+
+# -----------------------------------------------------------------------------
+#  Notifications
+# -----------------------------------------------------------------------------
+notifier:
+  min_score: 7                # seuil de notification (score_rentabilite >= min_score)
+  max_per_run: 15             # au-delà, un simple résumé est envoyé
+
+# -----------------------------------------------------------------------------
+#  Stockage local (dossier data/)
+# -----------------------------------------------------------------------------
+storage:
+  seen_retention_days: 60     # durée de mémoire des annonces déjà vues
+  max_deals_history: 500      # nombre d'annonces analysées conservées pour l'interface
