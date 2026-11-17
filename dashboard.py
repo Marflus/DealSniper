@@ -4,7 +4,7 @@ dashboard.py — Petite interface web locale pour Deal Sniper.
     python dashboard.py            # puis ouvrir http://127.0.0.1:5000
 
 Fonctions :
-  * tableau des annonces analysées (tri par score, filtres catégorie / score / texte) ;
+  * tableau des annonces analysées (tri par score, filtres catégorie / type d'affaire / score / texte) ;
   * statistiques : coût API du jour et du mois, nombre d'annonces, bonnes affaires ;
   * bouton « Lancer un passage » (exécute main.run en arrière-plan) ;
   * bouton « Tester les notifications ».
@@ -55,6 +55,11 @@ def index():
     stats = {
         "total": len(deals),
         "good": sum(1 for d in deals if (d.get("analysis") or {}).get("score_rentabilite", 0) >= min_score),
+    "direct": sum(
+        1 for d in deals
+        if (d.get("analysis") or {}).get("score_rentabilite", 0) >= min_score
+        and (d.get("analysis") or {}).get("type_affaire") == "revente_directe"
+    ),
         "cost_today": sum(r.get("cost_usd", 0) for r in runs if str(r.get("started_at", "")).startswith(today)),
         "cost_month": sum(r.get("cost_usd", 0) for r in runs if str(r.get("started_at", "")).startswith(month)),
         "last_run": runs[0] if runs else None,
@@ -120,6 +125,7 @@ TEMPLATE = r"""<!doctype html>
   .s-good { background:var(--good); } .s-mid { background:var(--mid); } .s-bad { background:var(--bad); }
   a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
   .muted { color:var(--muted); font-size:12px; }
+  .tag-direct { border-color:#7c3aed !important; color:#7c3aed !important; }
   .tag { font-size:11px; border:1px solid var(--line); border-radius:999px; padding:1px 7px; margin-right:4px; color:var(--muted); }
   #toast { position:fixed; bottom:16px; right:16px; background:var(--fg); color:var(--bg); padding:10px 14px; border-radius:8px; display:none; }
   .empty { padding:40px; text-align:center; color:var(--muted); }
@@ -137,7 +143,7 @@ TEMPLATE = r"""<!doctype html>
 <main>
   <div class="stats">
     <div class="card"><b>{{ stats.total }}</b><span>annonces analysées</span></div>
-    <div class="card"><b>{{ stats.good }}</b><span>bonnes affaires (≥ {{ min_score }})</span></div>
+    <div class="card"><b>{{ stats.good }}</b><span>bonnes affaires (≥ {{ min_score }}) · dont {{ stats.direct }} 💎 revente directe</span></div>
     <div class="card"><b>{{ "%.4f"|format(stats.cost_today) }} $</b><span>coût API aujourd'hui</span></div>
     <div class="card"><b>{{ "%.3f"|format(stats.cost_month) }} $</b><span>coût API ce mois</span></div>
     <div class="card"><b style="font-size:16px">{{ (stats.last_run.started_at[:16].replace('T',' ') + ' UTC') if stats.last_run else '—' }}</b>
@@ -148,6 +154,8 @@ TEMPLATE = r"""<!doctype html>
     <input id="q" type="search" placeholder="Rechercher…" oninput="applyFilters()">
     <select id="cat" onchange="applyFilters()"><option value="">Toutes catégories</option>
       {% for c in categories %}<option>{{ c }}</option>{% endfor %}</select>
+    <select id="dtype" onchange="applyFilters()"><option value="">Tous types</option>
+      <option value="reparation">🔧 Réparation</option><option value="revente_directe">💎 Revente directe</option></select>
     <select id="minscore" onchange="applyFilters()">
       <option value="0">Tous les scores</option>
       {% for s in [5,6,7,8,9] %}<option value="{{ s }}" {% if s == min_score %}selected{% endif %}>Score ≥ {{ s }}</option>{% endfor %}
@@ -159,22 +167,23 @@ TEMPLATE = r"""<!doctype html>
   <table id="deals">
     <thead><tr>
       <th onclick="sortBy(0,true)">Score</th><th onclick="sortBy(1)">Annonce</th>
-      <th onclick="sortBy(2,true)">Prix total</th><th>Panne probable</th>
+      <th onclick="sortBy(2,true)">Prix total</th><th>Panne / état</th>
       <th onclick="sortBy(4,true)">Pièce</th><th onclick="sortBy(5,true)">Revente</th>
       <th onclick="sortBy(6,true)">Marge</th><th onclick="sortBy(7)">Date</th>
     </tr></thead>
     <tbody>
     {% for d in deals %}{% set a = d.analysis or {} %}{% set s = a.get('score_rentabilite', 0) %}
-      <tr data-cat="{{ d.category or '?' }}" data-score="{{ s }}">
+      {% set t = a.get('type_affaire', 'reparation') %}
+      <tr data-cat="{{ d.category or '?' }}" data-score="{{ s }}" data-type="{{ t }}">
         <td data-v="{{ s }}"><span class="score {{ 's-good' if s >= min_score else ('s-mid' if s >= 5 else 's-bad') }}">{{ s }}</span></td>
         <td data-v="{{ d.title }}"><a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.title }}</a>
-          <div class="muted"><span class="tag">{{ d.category }}</span><span class="tag">{{ d.source }}</span>
+          <div class="muted"><span class="tag {{ 'tag-direct' if t == 'revente_directe' else '' }}">{{ '💎 revente directe' if t == 'revente_directe' else '🔧 réparation' }}</span><span class="tag">{{ d.category }}</span><span class="tag">{{ d.source }}</span>
           {% if d.get('notified') %}<span class="tag">🔔 notifiée</span>{% endif %}
           {{ a.get('justification_courte','') }}</div></td>
         <td class="num" data-v="{{ d.total_price if d.total_price is not none else 99999 }}">
           {{ ('%.0f €'|format(d.total_price)) if d.total_price is not none else '?' }}
           {% if d.shipping %}<div class="muted">dont {{ '%.0f'|format(d.shipping) }} € port</div>{% endif %}</td>
-        <td>{{ a.get('panne_probable','') }}</td>
+        <td>{{ '—' if t == 'revente_directe' else a.get('panne_probable','') }}</td>
         <td class="num" data-v="{{ a.get('cout_piece_estime',0) }}">{{ '%.0f €'|format(a.get('cout_piece_estime',0)) }}</td>
         <td class="num" data-v="{{ a.get('valeur_revente_estimee',0) }}">{{ '%.0f €'|format(a.get('valeur_revente_estimee',0)) }}</td>
         <td class="num" data-v="{{ a.get('marge_nette_estimee',0) }}"><b>{{ '%+.0f €'|format(a.get('marge_nette_estimee',0)) }}</b></td>
@@ -192,10 +201,10 @@ TEMPLATE = r"""<!doctype html>
 <script>
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',4000); }
 function applyFilters(){
-  const q=document.getElementById('q').value.toLowerCase(), cat=document.getElementById('cat').value,
+  const q=document.getElementById('q').value.toLowerCase(), cat=document.getElementById('cat').value, dt=document.getElementById('dtype').value,
         min=+document.getElementById('minscore').value;
   document.querySelectorAll('#deals tbody tr').forEach(tr=>{
-    const ok=(!cat||tr.dataset.cat===cat)&&(+tr.dataset.score>=min)&&(!q||tr.textContent.toLowerCase().includes(q));
+    const ok=(!cat||tr.dataset.cat===cat)&&(!dt||tr.dataset.type===dt)&&(+tr.dataset.score>=min)&&(!q||tr.textContent.toLowerCase().includes(q));
     tr.style.display=ok?'':'none';
   });
 }

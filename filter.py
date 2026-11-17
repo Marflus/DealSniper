@@ -9,8 +9,11 @@ Chaque annonce passe, dans l'ordre :
   3. **Mots-clés rédhibitoires** globaux + propres à la catégorie → rejet.
   4. **Budget** : prix + livraison > `max_budget` de la catégorie → rejet ;
      prix < `min_price` (souvent des arnaques ou des « prix à débattre » à 1 €) → rejet.
-  5. **Signaux positifs** (`include_keywords`) : notés sur l'annonce et transmis
-     à Claude ; si `require_include: true`, au moins un signal est obligatoire.
+  5. **Signaux positifs** : `include_keywords` de la catégorie (pannes simples) et
+     `deal_signals` globaux (vente urgente, déménagement, facture…), utiles pour
+     repérer les objets FONCTIONNELS vendus sous leur cote. Ils sont notés sur
+     l'annonce et transmis à Claude ; si `require_include: true`, au moins un
+     signal (de l'un ou l'autre type) est obligatoire.
 
 Les comparaisons ignorent la casse et les accents ("Oxydé" == "oxyde").
 Note : le module s'appelle `filter` comme demandé ; importez-le avec
@@ -87,9 +90,11 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
         if ad.price is not None and ad.price < float(min_price or 0):
             return f"prix suspect ({ad.price:.0f} € < {min_price} €)"
 
-    ad.signals = [k for k in cat.get("include_keywords", []) if contains_keyword(full_n, k)]
+    # Signaux « panne simple » (catégorie) + signaux « bonne affaire » (globaux : urgent, déménagement…)
+    candidates = cat.get("include_keywords", []) + filters.get("deal_signals", [])
+    ad.signals = list(dict.fromkeys(k for k in candidates if contains_keyword(full_n, k)))
     if cat.get("require_include") and not ad.signals:
-        return "aucun signal de panne simple"
+        return "aucun signal de panne simple ni de bonne affaire"
     return None
 
 

@@ -44,3 +44,15 @@ def test_sort_prioritizes_signals():
     kept, rejected = apply_filters([ad("Dell Latitude 5490", 60), ad("Dell Latitude 5490 batterie HS", 80)], CFG)
     assert [k.title for k in kept][0].endswith("batterie HS")
     assert not rejected
+
+
+def test_deal_signals_for_working_items():
+    a = ad("PS5 édition standard comme neuve, vente urgente déménagement", 180)
+    assert check(a, CFG) is None
+    assert {"urgent", "demenagement"} <= set(a.signals)
+
+
+def test_require_include_accepts_deal_signals():
+    cfg = {**CFG, "categories": [{**CFG["categories"][0], "require_include": True}]}
+    assert check(ad("Dell Latitude 7490", 90), cfg).startswith("aucun signal")
+    assert check(ad("Dell Latitude 7490 cause départ", 90), cfg) is None

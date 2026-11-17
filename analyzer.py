@@ -2,6 +2,8 @@
 analyzer.py — Évaluation des annonces pré-filtrées par l'API Anthropic.
 
 Stratégie « coût minimal » :
+  * deux types d'affaires évalués : « reparation » (objet en panne) et
+    « revente_directe » (objet fonctionnel vendu sous sa cote) ;
   * modèle économique (par défaut `claude-haiku-4-5`, modifiable dans config.yaml) ;
   * annonces envoyées **par paquets** (un seul prompt système pour N annonces) ;
   * descriptions tronquées à 600 caractères, format d'annonce ultra-compact ;
@@ -39,18 +41,21 @@ DEFAULT_PRICING = {
     "claude-sonnet-5-5": (2.00, 10.00),
 }
 
-SYSTEM_PROMPT = """Tu es expert en achat-revente d'électronique d'occasion à réparer (marché français : leboncoin, eBay, Back Market).
-Pour chaque annonce, estime la rentabilité d'un achat pour réparation puis revente d'occasion.
+SYSTEM_PROMPT = """Tu es expert en achat-revente d'électronique d'occasion (marché français : leboncoin, eBay, Back Market).
+Pour chaque annonce, estime la rentabilité d'un achat pour revente. Deux types d'affaires :
+- "reparation" : objet en panne ou incomplet, à remettre en état puis revendre.
+- "revente_directe" : objet fonctionnel vendu nettement sous sa cote d'occasion, revendable tel quel.
 
 Barème score_rentabilite (entier 1-10) :
-- 8-10 : panne facile et peu coûteuse (pièce < 40 €, < 1 h) ET marge nette ≥ 40 €. Exemples : PC pro sans disque/SSD ou sans OS, batterie HS, chargeur absent, port HDMI/USB-C dessoudé, rétroéclairage TV/écran, console qui surchauffe (nettoyage, pâte thermique), outillage vendu sans batterie, nappe/clavier/écran courant à changer.
-- 4-7 : réparation moyenne, pièce chère, ou marge faible/incertaine.
-- 1-3 : panne lourde ou inconnue (carte mère, oxydation, liquide, verrouillage iCloud/BIOS/compte), annonce trop vague, ou prix déjà proche de la revente.
+- 8-10 : marge nette ≥ 40 € ET risque faible. Réparation : panne facile et peu coûteuse (pièce < 40 €, < 1 h), ex. PC pro sans disque/SSD ou sans OS, batterie HS, chargeur absent, port HDMI/USB-C dessoudé, rétroéclairage TV/écran, console qui surchauffe, outillage vendu sans batterie, nappe/clavier/écran courant. Revente directe : fonctionnel, au moins 30 % sous la cote, modèle recherché, annonce crédible (photos/état/facture évoqués).
+- 4-7 : réparation moyenne, pièce chère, décote modeste, ou marge faible/incertaine.
+- 1-3 : panne lourde ou inconnue (carte mère, oxydation, liquide, verrouillage iCloud/BIOS/compte), annonce trop vague, prix proche de la cote, ou prix anormalement bas sur un produit récent et recherché (arnaque probable).
 
 Règles :
 - Montants en euros. prix_total = prix + livraison.
-- valeur_revente_estimee : prix d'occasion réaliste une fois réparé, pas le prix neuf.
+- valeur_revente_estimee : prix d'occasion réaliste (après réparation le cas échéant), pas le prix neuf.
 - marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais de revente.
+- Revente directe : panne_probable = "aucune", cout_piece_estime = 0 (sauf petit accessoire manquant).
 - Dans le doute (infos manquantes, modèle imprécis), sois prudent et baisse le score.
 - panne_probable : 8 mots max. justification_courte : 20 mots max.
 - Renvoie une entrée par annonce, avec son id."""
@@ -65,6 +70,7 @@ RESPONSE_SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "properties": {
                     "id": {"type": "integer"},
+                    "type_affaire": {"type": "string", "enum": ["reparation", "revente_directe"]},
                     "score_rentabilite": {"type": "integer"},
                     "panne_probable": {"type": "string"},
                     "cout_piece_estime": {"type": "number"},
@@ -74,6 +80,7 @@ RESPONSE_SCHEMA: dict[str, Any] = {
                 },
                 "required": [
                     "id",
+                    "type_affaire",
                     "score_rentabilite",
                     "panne_probable",
                     "cout_piece_estime",
@@ -88,6 +95,9 @@ RESPONSE_SCHEMA: dict[str, Any] = {
     "required": ["annonces"],
     "additionalProperties": False,
 }
+
+
+DEAL_TYPES = ("reparation", "revente_directe")
 
 
 class FatalAPIError(RuntimeError):
@@ -160,7 +170,11 @@ def _clamp_analysis(raw: dict[str, Any]) -> dict[str, Any]:
         score = int(round(float(raw.get("score_rentabilite", 1))))
     except (TypeError, ValueError):
         score = 1
+    deal_type = str(raw.get("type_affaire", "reparation")).strip().lower()
+    if deal_type not in DEAL_TYPES:
+        deal_type = "revente_directe" if "direct" in deal_type else "reparation"
     return {
+        "type_affaire": deal_type,
         "score_rentabilite": max(1, min(10, score)),
         "panne_probable": str(raw.get("panne_probable", ""))[:120],
         "cout_piece_estime": num("cout_piece_estime"),

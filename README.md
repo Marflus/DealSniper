@@ -1,7 +1,11 @@
 # 🎯 Deal Sniper
 
-Chasseur automatique de **bonnes affaires électroniques à réparer** : PC portables pros sans SSD,
-consoles qui surchauffent, TV au rétroéclairage HS, outillage vendu sans batterie…
+Chasseur automatique de **bonnes affaires électroniques** :
+
+- 🔧 **à réparer** : PC portables pros sans SSD, consoles qui surchauffent, TV au rétroéclairage HS,
+  outillage vendu sans batterie… ;
+- 💎 **en revente directe** : appareils **fonctionnels** vendus nettement sous leur cote
+  (vente urgente, déménagement, succession…), revendables tels quels.
 
 Deal Sniper lit vos **alertes email** (leboncoin, Agorastore, eBay, Vinted…) et des **flux RSS**,
 élimine gratuitement les annonces sans intérêt, fait noter les autres par **Claude** (modèle économique)
@@ -46,7 +50,7 @@ et vous envoie sur **Telegram / Discord** uniquement les affaires notées **≥ 
 |---|---|
 | `collector.py` | Lit la boîte mail (IMAP) et les flux RSS ; extrait titre, prix, livraison, description nettoyée, source, URL. |
 | `filter.py` | Pré-filtre gratuit : catégorie, budget max (prix + port), mots-clés rédhibitoires, annonces d'acheteurs. |
-| `analyzer.py` | Envoie les annonces par lots à Claude et récupère un JSON structuré (score, panne, coûts, marge…). |
+| `analyzer.py` | Envoie les annonces par lots à Claude et récupère un JSON structuré (type d'affaire, score, panne, coûts, marge…). |
 | `notifier.py` | Envoie les annonces ≥ seuil sur Telegram et/ou Discord (console si aucun canal). |
 | `main.py` | Orchestre le tout + options de test (`--dry-run`, `--test-notif`, `--loop`…). |
 | `dashboard.py` | Petite interface web locale : tableau des affaires, coûts, bouton « Lancer ». |
@@ -119,7 +123,9 @@ Autres fournisseurs : Outlook/Hotmail `outlook.office365.com`, GMX `imap.gmx.com
   `sources.imap.senders` et le format d'URL dans `ad_url_patterns`.
 
 💡 Faites des recherches **ciblées pannes simples** : « sans ssd », « sans disque », « batterie hs »,
-« sans batterie », « surchauffe », « pas d'image »… Le pré-filtre fera le reste.
+« sans batterie », « surchauffe », « pas d'image »… et, pour la revente directe, des recherches
+**par modèle avec un prix max bas** (ex. « ps5 » à 250 € max, « thinkpad t14 » à 200 € max).
+Le pré-filtre fera le reste.
 
 Vérifiez l'extraction sur un vrai email : enregistrez-le en `.eml` (Gmail : ⋮ → *Télécharger le message*) puis :
 
@@ -144,10 +150,10 @@ Les deux sont optionnels et cumulables. Sans aucun canal, les affaires s'affiche
 
 Test : `python main.py --test-notif`
 
-Exemple de notification :
+Exemples de notification :
 
 ```
-🎯 8/10 · PC portables pros · leboncoin
+🎯 8/10 · 🔧 Réparation · PC portables pros · leboncoin
 Lenovo ThinkPad T480 i5 16 Go sans SSD
 
 💶 Prix : 85 € + 6,50 € port = 91,50 €
@@ -155,6 +161,17 @@ Lenovo ThinkPad T480 i5 16 Go sans SSD
 🧩 Pièce ≈ 25 € · 📈 Revente ≈ 220 €
 💰 Marge nette ≈ 82 €
 💬 Modèle très demandé, simple ajout d'un SSD M.2.
+🔗 Voir l'annonce
+```
+
+```
+🔥 9/10 · 💎 Revente directe · Consoles · leboncoin
+PS5 Slim lecteur + 2 manettes — déménagement, vente urgente
+
+💶 Prix : 250 €
+📈 Revente ≈ 390 € (en l'état)
+💰 Marge nette ≈ 101 €
+💬 Fonctionnelle, facture fournie, 35 % sous la cote.
 🔗 Voir l'annonce
 ```
 
@@ -175,6 +192,7 @@ categories:
 
 filters:
   global_exclude_keywords: ["carte mere hs", "oxyde", "bloque icloud", "mot de passe bios"]
+  deal_signals: ["urgent", "demenagement", "succession", "avec facture"]  # signaux « bonne affaire »
 
 analyzer:
   model: "claude-haiku-4-5"
@@ -182,7 +200,19 @@ analyzer:
 
 notifier:
   min_score: 7
+  deal_types: ["reparation", "revente_directe"]   # retirez un type pour ne plus le recevoir
 ```
+
+### Deux types d'affaires
+
+Claude classe chaque annonce en **`reparation`** (objet en panne ou incomplet) ou **`revente_directe`**
+(objet fonctionnel au moins ~30 % sous sa cote d'occasion), avec le même barème de marge :
+une note ≥ 8 exige une **marge nette ≥ 40 €** et un risque faible. Un prix anormalement bas sur un produit
+récent et recherché est traité comme une **arnaque probable** (note ≤ 3).
+
+- Les `deal_signals` (vente urgente, déménagement, facture, comme neuf…) font remonter les annonces
+  fonctionnelles en priorité, comme les `include_keywords` le font pour les pannes simples.
+- Les `max_budget` s'appliquent aux deux types : relevez-les si vous visez du matériel fonctionnel plus cher.
 
 - Les mots-clés sont **insensibles à la casse et aux accents**, cherchés en **mots entiers**,
   et tolèrent les accords (`oxyde` attrape « oxydée », « oxydés »).
@@ -212,7 +242,7 @@ python dashboard.py
 # → http://127.0.0.1:5000
 ```
 
-- tableau des annonces analysées, triable (score, prix, marge…) et filtrable (catégorie, score, texte) ;
+- tableau des annonces analysées, triable (score, prix, marge…) et filtrable (catégorie, type d'affaire, score, texte) ;
 - coût API du jour et du mois, dernier passage ;
 - boutons **Lancer un passage**, **Collecte sans IA**, **Tester les notifications**.
 

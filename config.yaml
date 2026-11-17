@@ -46,6 +46,29 @@ filters:
   keep_unknown_price: true    # garde les annonces dont le prix n'a pas pu être lu
   min_price: 5                # en dessous : souvent un faux prix (« 1 € à débattre »)
 
+  # Signaux « bonne affaire » (titre + description), valables pour toutes les catégories.
+  # Ils aident à repérer les objets FONCTIONNELS vendus sous leur cote (revente directe) :
+  # ces annonces sont priorisées et le signal est transmis à Claude.
+  deal_signals:
+    - "urgent"
+    - "vente rapide"
+    - "demenagement"
+    - "cause depart"
+    - "depart a l'etranger"
+    - "succession"
+    - "debarras"
+    - "vide maison"
+    - "doit partir"
+    - "prix sacrifie"
+    - "a saisir"
+    - "jamais servi"
+    - "neuf sous blister"
+    - "sous garantie"
+    - "avec facture"
+    - "comme neuf"
+    - "comme neuve"
+    - "tres bon etat"
+
   # Annonces d'acheteurs (cherchés dans le TITRE uniquement)
   buyer_ad_keywords:
     - "recherche"
@@ -92,6 +115,9 @@ filters:
 #    exclude_keywords : exclusions propres à la catégorie
 #    include_keywords : « signaux » de panne simple → priorisés et transmis à Claude
 #    require_include  : true = on n'envoie à Claude QUE les annonces avec un signal
+#                       (panne simple OU bonne affaire)
+#  Les budgets valent pour les deux types d'affaires : un appareil fonctionnel
+#  sous sa cote doit aussi y rentrer (relevez-les si vous visez du haut de gamme).
 # -----------------------------------------------------------------------------
 categories:
   - name: "PC portables pros"
@@ -156,6 +182,8 @@ analyzer:
 # -----------------------------------------------------------------------------
 notifier:
   min_score: 7                # seuil de notification (score_rentabilite >= min_score)
+  # types d'affaires à notifier : reparation (objet en panne) / revente_directe (fonctionnel sous la cote)
+  deal_types: ["reparation", "revente_directe"]
   max_per_run: 15             # au-delà, un simple résumé est envoyé
 
 # -----------------------------------------------------------------------------

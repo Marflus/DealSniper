@@ -68,3 +68,14 @@ def test_budget_stops_analysis(monkeypatch):
     an = make_analyzer(monkeypatch, [("end_turn", {"annonces": [item(i) for i in range(1, 11)]})])
     res = an.analyze(ads(20), budget_left_usd=0.0001)
     assert len(res.analyzed) == 10 and len(res.failed) == 10
+
+
+def test_deal_type_is_returned_and_sanitized(monkeypatch):
+    direct = {**item(1), "type_affaire": "revente_directe", "panne_probable": "aucune", "cout_piece_estime": 0}
+    odd = {**item(2), "type_affaire": "n'importe quoi"}
+    an = make_analyzer(monkeypatch, [("end_turn", {"annonces": [direct, odd]})])
+    res = an.analyze(ads(2))
+    assert res.analyzed[0].analysis["type_affaire"] == "revente_directe"
+    assert res.analyzed[1].analysis["type_affaire"] == "reparation"
+    schema = an.client.messages.calls[0]["output_config"]["format"]["schema"]
+    assert "type_affaire" in schema["properties"]["annonces"]["items"]["required"]
