@@ -103,7 +103,9 @@ Utilisez une **adresse créée uniquement pour les alertes** (ne donnez jamais l
    IMAP_PASSWORD=abcd efgh ijkl mnop   # le mot de passe d'application
    ```
 
-Autres fournisseurs : Outlook/Hotmail `outlook.office365.com`, GMX `imap.gmx.com`, OVH `ssl0.ovh.net`
+Autres fournisseurs : GMX `imap.gmx.com`, OVH `ssl0.ovh.net`.
+⚠️ **Outlook / Hotmail / Live** n'acceptent plus la connexion IMAP par mot de passe (Microsoft impose OAuth2) :
+utilisez plutôt une boîte Gmail dédiée, ou transférez vos alertes vers elle
 (certains imposent aussi un mot de passe d'application ou l'activation d'IMAP dans les réglages).
 
 > Astuce : vous pouvez aussi garder vos alertes sur votre compte habituel et créer une **règle de transfert
@@ -299,7 +301,7 @@ les annonces restantes sont reportées au lendemain.
 
 | Problème | Solution |
 |---|---|
-| `Connexion IMAP impossible` | Vérifiez serveur/port, IMAP activé, **mot de passe d'application** (Gmail/Outlook). |
+| `Connexion IMAP impossible` | Vérifiez serveur/port, IMAP activé, **mot de passe d'application** (Gmail). Outlook/Hotmail : non compatible, voir § 3. |
 | 0 annonce extraite d'un email | `python main.py --test-email alerte.eml` puis ajustez `ad_url_patterns` / `senders`. |
 | Trop d'annonces « hors catégorie » | Ajoutez des modèles dans `keywords` de la catégorie. |
 | Trop d'appels IA | Baissez les `max_budget`, ajoutez des exclusions, ou `require_include: true`. |
