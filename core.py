@@ -262,7 +262,7 @@ def extract_price(text: str) -> float | None:
 #  URL & identifiants
 # --------------------------------------------------------------------------- #
 # Paramètres d'URL qui contiennent souvent la vraie destination d'un lien de tracking
-_REDIRECT_PARAMS = ("url", "u", "redirect", "redirect_url", "target", "dest", "destination", "link")
+_REDIRECT_PARAMS = ("url", "u", "redirect", "redirect_url", "target", "dest", "destination", "link", "mpre")  # mpre : redirection rover.ebay.com
 # Paramètres de tracking sans valeur pour l'identification d'une annonce
 _TRACKING_PREFIXES = ("utm_", "xtor", "at_", "mc_", "fbclid", "gclid", "campid", "mkevt", "mkcid", "mkrid", "_trk", "hash")
 

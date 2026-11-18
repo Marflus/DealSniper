@@ -40,3 +40,10 @@ def test_uid_is_stable_across_tracking_params():
     b = ad_uid("https://www.leboncoin.fr/ad/ordinateurs/2512345678")
     assert a == b == "lbc:2512345678"
     assert canonical_url("https://x.fr/a/?utm_source=1&id=3#top") == "https://x.fr/a?id=3"
+
+
+def test_unwrap_ebay_rover_redirect():
+    from core import unwrap_tracking_url
+    url = "https://rover.ebay.com/rover/0/0/0?mpre=https%3A%2F%2Fwww.ebay.fr%2Fitm%2F123456789012%3Fhash%3Dx"
+    assert unwrap_tracking_url(url) == "https://www.ebay.fr/itm/123456789012?hash=x"
+    assert ad_uid(unwrap_tracking_url(url)) == "ebay:123456789012"
