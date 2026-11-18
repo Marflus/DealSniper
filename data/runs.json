@@ -1,1 +1,17 @@
-[]
+[
+ {
+  "analyzed": 0,
+  "collected": 0,
+  "cost_usd": 0.0,
+  "duration_s": 0.1,
+  "failed": 0,
+  "input_tokens": 0,
+  "kept": 0,
+  "model": "claude-haiku-4-5",
+  "notified": 0,
+  "output_tokens": 0,
+  "rejected": 0,
+  "started_at": "2026-11-17T22:57:51+00:00",
+  "status": "ok"
+ }
+]
