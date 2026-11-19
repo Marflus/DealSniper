@@ -1,5 +1,24 @@
 [
  {
+  "analyzed": 5,
+  "collected": 20,
+  "cost_usd": 0.00471,
+  "duration_s": 17.0,
+  "failed": 0,
+  "health_alert_sent": false,
+  "input_tokens": 1474,
+  "kept": 5,
+  "model": "claude-haiku-4-5",
+  "notified": 0,
+  "output_tokens": 648,
+  "rejected": 15,
+  "sources": {
+   "emails": "ok"
+  },
+  "started_at": "2026-11-19T08:12:18+00:00",
+  "status": "ok"
+ },
+ {
   "analyzed": 0,
   "collected": 0,
   "cost_usd": 0.0,
