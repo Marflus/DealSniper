@@ -96,6 +96,10 @@ suppression de compte, choisissez l'exemption *« Not persisting eBay data »*.
 
 ## Interface
 
+Le plus simple : double-cliquez sur **`start_ui.bat`** (Windows) ou lancez `./start_ui.sh` (Linux / Mac).
+Au premier lancement, le script crée l'environnement Python `.venv` et installe les dépendances, puis
+ouvre l'interface dans le navigateur.
+
 ```bash
 python -m dealsniper ui                  # puis http://127.0.0.1:5000
 python -m dealsniper ui --host 0.0.0.0   # accessible depuis le téléphone sur le même Wi-Fi
