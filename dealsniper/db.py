@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS seen (
     score INTEGER,
     notified INTEGER NOT NULL DEFAULT 0,
     seen_at TEXT NOT NULL,
-    data TEXT                      -- annonce complète en JSON (pour le récapitulatif)
+    data TEXT,                     -- annonce complète en JSON
+    reason TEXT                    -- raison du rejet par le filtre
 );
 CREATE TABLE IF NOT EXISTS sites (name TEXT PRIMARY KEY, paused_until TEXT, last_error TEXT);
 CREATE TABLE IF NOT EXISTS costs (day TEXT PRIMARY KEY, usd REAL NOT NULL DEFAULT 0);
@@ -37,6 +38,8 @@ class Database:
         self._conn.execute("PRAGMA journal_mode=WAL")    # lectures/écritures sans blocage
         self._conn.execute("PRAGMA synchronous=NORMAL")  # ménage la carte SD d'un Raspberry Pi
         self._conn.executescript(SCHEMA)
+        if "reason" not in {row[1] for row in self._conn.execute("PRAGMA table_info(seen)")}:
+            self._conn.execute("ALTER TABLE seen ADD COLUMN reason TEXT")  # bases créées avant l'interface
         self._lock = threading.Lock()
 
     def _sql(self, query: str, params: tuple = ()) -> list[tuple]:
@@ -56,12 +59,29 @@ class Database:
         rows = await self._asql(f"SELECT uid FROM seen WHERE uid IN ({','.join('?' * len(uids))})", tuple(uids))
         return set(uids) - {uid for (uid,) in rows}
 
-    async def remember(self, ad: Ad, status: str, notified: bool = False) -> None:
+    async def remember(self, ad: Ad, status: str, notified: bool = False, reason: str | None = None) -> None:
         await self._asql(
-            "INSERT OR REPLACE INTO seen (uid, site, status, score, notified, seen_at, data) VALUES (?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO seen (uid, site, status, score, notified, seen_at, data, reason) "
+            "VALUES (?,?,?,?,?,?,?,?)",
             (ad.uid, ad.source, status, ad.score if ad.analysis else None, int(notified),
-             _now().isoformat(timespec="seconds"), json.dumps(ad.to_dict(), ensure_ascii=False)),
+             _now().isoformat(timespec="seconds"), json.dumps(ad.to_dict(), ensure_ascii=False), reason),
         )
+
+    def search(self, status: str | None = None, days: int = 30, limit: int = 2000) -> list[dict]:
+        """Annonces récentes pour l'interface (les filtres fins sont faits dans le navigateur)."""
+        since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
+        query = "SELECT data, status, score, notified, seen_at, reason FROM seen WHERE seen_at >= ?"
+        params: list = [since]
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        rows = self._sql(query + " ORDER BY seen_at DESC LIMIT ?", (*params, limit))
+        ads = []
+        for data, row_status, score, notified, seen_at, reason in rows:
+            ad = json.loads(data or "{}")
+            ad.update(status=row_status, score=score, notified=bool(notified), seen_at=seen_at, reason=reason)
+            ads.append(ad)
+        return ads
 
     def analyzed_since(self, hours: int) -> list[Ad]:
         """Annonces notées par Claude ces dernières `hours` heures (meilleures d'abord)."""

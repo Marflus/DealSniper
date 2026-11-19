@@ -46,8 +46,9 @@ class Engine:
 
         candidates = []
         for ad in new_ads:
-            if filters.check(ad, self.config):
-                await self.db.remember(ad, "rejected")
+            reason = filters.check(ad, self.config)
+            if reason:
+                await self.db.remember(ad, "rejected", reason=reason)
                 continue
             await self.sleep(random.uniform(*self.network["detail_delay"]))
             try:
@@ -56,8 +57,9 @@ class Engine:
                 raise
             except Exception as exc:  # fiche illisible : on garde les infos de la liste
                 log.debug("%s : fiche non lue (%s)", site.name, exc)
-            if filters.check(ad, self.config):
-                await self.db.remember(ad, "rejected")
+            reason = filters.check(ad, self.config)
+            if reason:
+                await self.db.remember(ad, "rejected", reason=reason)
             else:
                 candidates.append(ad)
 

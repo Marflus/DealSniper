@@ -1,4 +1,4 @@
-"""Ligne de commande : python -m dealsniper [run|watch|test-notif|recap|reset]."""
+"""Ligne de commande : python -m dealsniper [run|watch|ui|test-notif|recap|reset]."""
 
 from __future__ import annotations
 
@@ -19,6 +19,14 @@ def cmd_watch(args, config) -> int:
     from .engine import watch
 
     watch(config)
+    return 0
+
+
+def cmd_ui(args, config) -> int:
+    from .web.app import create_app
+
+    print(f"Deal Sniper : interface sur http://{args.host}:{args.port}")
+    create_app().run(host=args.host, port=args.port, debug=False)
     return 0
 
 
@@ -65,6 +73,10 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("run", help="un passage de chaque site").set_defaults(func=cmd_run)
     sub.add_parser("watch", help="surveillance continue").set_defaults(func=cmd_watch)
+    ui = sub.add_parser("ui", help="interface web locale")
+    ui.add_argument("--host", default="127.0.0.1", help="0.0.0.0 pour y accéder depuis le réseau local")
+    ui.add_argument("--port", type=int, default=5000)
+    ui.set_defaults(func=cmd_ui)
     sub.add_parser("test-notif", help="notification de test").set_defaults(func=cmd_test_notif)
     recap = sub.add_parser("recap", help="récapitulatif des annonces notées")
     recap.add_argument("--hours", type=int, default=24)

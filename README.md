@@ -33,7 +33,7 @@ DealSniper/
 ├── config.yaml               ← tous les réglages (sites, recherches, budgets, mots-clés, seuils)
 ├── .env.example              ← modèle des secrets (à copier en .env)
 ├── dealsniper/
-│   ├── cli.py                commandes : run, watch, test-notif, recap, reset
+│   ├── cli.py                commandes : run, watch, ui, test-notif, recap, reset
 │   ├── engine.py             moteur commun (les 6 étapes ci-dessus)
 │   ├── sites/                ← UN FICHIER PAR SITE
 │   │   ├── base.py           interface commune (list_recent / fetch_detail)
@@ -46,6 +46,7 @@ DealSniper/
 │   ├── db.py                 base SQLite
 │   ├── http.py               client HTTP (délais, robots.txt, 429, 403)
 │   ├── config.py, models.py
+│   ├── web/                  interface locale (app.py + static/)
 │   └── utils/                prix, texte, URL, localisation
 ├── tests/                    python -m pytest
 ├── deploy/dealsniper.service service systemd (Raspberry Pi)
@@ -85,11 +86,27 @@ suppression de compte, choisissez l'exemption *« Not persisting eBay data »*.
 **Telegram** : @BotFather → `/newbot` → token ; envoyez un message à votre bot puis ouvrez
 `https://api.telegram.org/bot<TOKEN>/getUpdates` pour lire votre `chat.id`.
 
+## Interface
+
+```bash
+python -m dealsniper ui                  # puis http://127.0.0.1:5000
+python -m dealsniper ui --host 0.0.0.0   # accessible depuis le téléphone sur le même Wi-Fi
+```
+
+- **Annonces** : toutes les annonces vues (notées par l'IA ou écartées par le filtre, avec la raison),
+  filtrables par texte, site, catégorie, type, note, prix, marge, période ; tri par date, note, marge ou prix.
+- **Recherches & filtres** : recherches de chaque site, catégories et budgets, mots interdits, seuils de
+  notification, modèle et plafond de dépense. « Enregistrer » écrit dans `config.yaml` en gardant les commentaires.
+- Boutons **Lancer un passage** et **Test notif**.
+
+L'interface n'a pas de mot de passe : ne l'exposez pas sur Internet.
+
 ## Commandes
 
 ```bash
 python -m dealsniper run            # un passage de chaque site (commande par défaut)
 python -m dealsniper watch          # surveillance continue, chaque site à son rythme (serveur / Raspberry Pi)
+python -m dealsniper ui             # interface web locale
 python -m dealsniper test-notif     # fausse annonce sur Telegram / Discord
 python -m dealsniper recap          # annonces notées ces 24 dernières heures (--hours N)
 python -m dealsniper reset          # oublie les annonces déjà vues

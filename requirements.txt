@@ -6,3 +6,5 @@ PyYAML>=6.0              # config.yaml
 python-dotenv>=1.0       # lecture du fichier .env
 curl_cffi>=0.7.0         # empreinte TLS Chrome (Vinted, leboncoin)
 playwright>=1.48.0       # navigateur persistant (Facebook Marketplace)
+flask>=3.0               # interface web (python -m dealsniper ui)
+ruamel.yaml>=0.18        # édition de config.yaml depuis l'interface (garde les commentaires)
