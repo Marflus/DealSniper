@@ -52,6 +52,7 @@ Règles :
 - valeur_revente_estimee : prix d'occasion réaliste en France (après réparation le cas échéant), jamais le prix neuf ni un prix demandé par d'autres vendeurs.
 - marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais de revente.
 - Revente directe : panne_probable = "aucune", cout_piece_estime = 0 (sauf petit accessoire manquant).
+- Les alertes email ne donnent souvent que le titre (parfois tronqué par « … » ou « ... »), le prix et la ville : ce manque d'informations n'est pas en soi un signe d'arnaque. Juge alors sur le modèle et le prix, avec une confiance "faible".
 - confiance : "haute" si modèle et état sont clairs, "faible" si l'annonce est vague. Dans le doute, baisse le score.
 - question_vendeur : la question la plus utile à poser au vendeur avant d'acheter.
 - panne_probable : 8 mots max. justification_courte : 20 mots max. question_vendeur : 15 mots max.
