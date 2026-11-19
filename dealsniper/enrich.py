@@ -152,6 +152,10 @@ def enrich(ads: list[Ad], cfg: dict[str, Any]) -> dict[str, Any]:
     stats: dict[str, Any] = {"enriched": 0, "failed": 0, "blocked": {}}
     if not cfg.get("enabled", True):
         return stats
+    # eBay : fiche complète via l'API officielle (aucune page web lue).
+    from .sources import ebay_api
+
+    stats["enriched"] += ebay_api.enrich_ads(ads, cfg.get("ebay_api") or {})
     sources = set(cfg.get("sources") or [])
     delay = float(cfg.get("delay_seconds", 2))
     timeout = float(cfg.get("timeout", 15))

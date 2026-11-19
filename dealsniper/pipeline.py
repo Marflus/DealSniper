@@ -88,7 +88,7 @@ def run(config: dict[str, Any], mode: str = "run") -> dict[str, Any]:
         kept, rejected = filters.apply_filters(ads, config)
         # Description et vendeur depuis la page de l'annonce, puis nouveau passage du
         # filtre : une exclusion présente seulement dans la description est écartée.
-        enrich_stats = enrich.enrich(kept, config["enrich"])
+        enrich_stats = enrich.enrich(kept, {**config["enrich"], "ebay_api": config["sources"]["ebay_api"]})
         if enrich_stats["enriched"]:
             kept, rejected_after = filters.apply_filters(kept, config)
             rejected += rejected_after

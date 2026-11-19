@@ -80,3 +80,38 @@ def test_seller_reputation_is_kept():
     assert ad.seller_summary == "99,2 % positifs · 1 534 avis"
     from dealsniper.analyzer import format_ad
     assert "vendeur: 99,2 % positifs" in format_ad(1, ad, 600)
+
+
+DETAILS = {
+    "description": "<p>ThinkPad T480, <b>écran parfait</b>, vendu sans SSD ni chargeur.</p>",
+    "condition": "Pour pièces détachées ou ne fonctionne pas",
+    "conditionDescription": "Ne démarre pas sans disque",
+    "itemLocation": {"city": "Lyon", "postalCode": "69003", "country": "FR"},
+    "seller": {"feedbackPercentage": "100.0", "feedbackScore": 87},
+}
+
+
+def test_details_to_fields():
+    info = ebay_api.details_to_fields(DETAILS)
+    assert info["description"] == "ThinkPad T480, écran parfait , vendu sans SSD ni chargeur."
+    assert info["condition"].endswith("Ne démarre pas sans disque") and info["location"] == "Lyon 69003"
+    assert info["seller"] == {"positive_pct": 100.0, "reviews": 87}
+
+
+def test_enrich_ads_reads_full_item(monkeypatch):
+    import requests
+
+    class DetailSession(FakeSession):
+        def get(self, url, **kw):
+            self.calls.append(kw)
+            assert kw["params"] == {"legacy_item_id": "123456789012"}
+            return FakeResponse(DETAILS)
+
+    session = DetailSession()
+    monkeypatch.setattr(requests, "Session", lambda: session)
+    monkeypatch.setenv("EBAY_CLIENT_ID", "id")
+    monkeypatch.setenv("EBAY_CLIENT_SECRET", "secret")
+    ad = ebay_api.item_to_ad(ITEM, "thinkpad")
+    ad.location = None
+    assert ebay_api.enrich_ads([ad], {}) == 1
+    assert "vendu sans SSD" in ad.description and ad.location == "Lyon 69003" and ad.seller["reviews"] == 87

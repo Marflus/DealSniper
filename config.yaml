@@ -8,8 +8,8 @@
 #  Sources d'annonces
 # -----------------------------------------------------------------------------
 sources:
-  # Emails d'alerte lus dans la boîte dédiée (IMAP). Les emails transférés ou
-  # redirigés depuis votre boîte perso sont reconnus aussi.
+  # Emails d'alerte (IMAP) : complément pour leboncoin / Vinted, qui n'ont aucune API publique.
+  # Source pauvre (titre, prix, ville). Mettez enabled: false pour n'utiliser que l'API eBay.
   email:
     enabled: true
     folder: INBOX

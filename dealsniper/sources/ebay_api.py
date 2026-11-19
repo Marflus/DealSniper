@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 
 TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
+ITEM_URL = "https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id"
 SCOPE = "https://api.ebay.com/oauth/api_scope"
 CONDITION_IDS = {"parts": "7000", "used": "3000|4000|5000|6000", "any": None}
 CONDITION_LABELS = {"7000": "pour pièces / ne fonctionne pas"}
@@ -145,3 +146,56 @@ def collect(cfg: dict[str, Any]) -> tuple[list[Ad], SourceReport]:
             log.info("eBay « %s » : %d annonce(s)", name, len(found))
     report.ads = len(ads)
     return ads, report
+
+
+# --------------------------------------------------------------------------- #
+#  Fiche complète d'une annonce (description du vendeur, état détaillé, ville)
+# --------------------------------------------------------------------------- #
+def details_to_fields(item: dict[str, Any]) -> dict[str, Any]:
+    """Champs utiles de la réponse `get_item_by_legacy_id`."""
+    from ..text import clean_html
+
+    location = item.get("itemLocation") or {}
+    return {
+        "description": clean_html(item.get("description") or item.get("shortDescription") or ""),
+        "condition": " — ".join(p for p in (item.get("condition"), item.get("conditionDescription")) if p),
+        "location": " ".join(p for p in (location.get("city"), location.get("postalCode")) if p) or None,
+        "seller": _seller(item.get("seller") or {}),
+    }
+
+
+def enrich_ads(ads: list[Ad], cfg: dict[str, Any]) -> int:
+    """Complète les annonces eBay retenues par le filtre avec leur fiche complète (1 appel par annonce)."""
+    import requests
+
+    from ..urls import native_id
+
+    targets = [a for a in ads if a.source == "ebay" and (native_id(a.url) or "").startswith("ebay:")]
+    client_id, client_secret = env("EBAY_CLIENT_ID"), env("EBAY_CLIENT_SECRET")
+    if not (targets and client_id and client_secret):
+        return 0
+    timeout = int(cfg.get("timeout", 20))
+    done = 0
+    with requests.Session() as session:
+        try:
+            token = get_token(session, client_id, client_secret, timeout)
+        except (requests.RequestException, KeyError, ValueError) as exc:
+            log.warning("Fiches eBay non lues (authentification : %s)", exc)
+            return 0
+        headers = {"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": cfg.get("marketplace", "EBAY_FR")}
+        for ad in targets:
+            legacy_id = native_id(ad.url).split(":", 1)[1]
+            try:
+                resp = session.get(ITEM_URL, headers=headers, params={"legacy_item_id": legacy_id}, timeout=timeout)
+                resp.raise_for_status()
+                info = details_to_fields(resp.json())
+            except (requests.RequestException, ValueError) as exc:
+                log.debug("Fiche eBay %s non lue : %s", legacy_id, exc)
+                continue
+            parts = [f"État : {info['condition']}" if info["condition"] else "", info["description"][:2000]]
+            ad.description = " | ".join(p for p in parts + [ad.description] if p)
+            ad.location = ad.location or info["location"]
+            ad.seller = info["seller"] or ad.seller
+            done += 1
+    log.info("eBay : %d fiche(s) complète(s) lue(s)", done)
+    return done

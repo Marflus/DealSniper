@@ -95,10 +95,24 @@ Remplissez `.env` (jamais commité : il est exclu par `.gitignore`).
 
 ---
 
+## Sources disponibles
+
+| Plateforme | API publique gratuite ? | Ce que Deal Sniper utilise | Infos obtenues |
+|---|---|---|---|
+| **eBay** | ✅ Browse API | API officielle | titre complet, prix, port, état, **description complète**, ville, **note du vendeur** |
+| leboncoin | ❌ (API réservée aux pros pour publier) | emails d'alerte | titre (souvent coupé), prix, ville |
+| Vinted | ❌ | emails d'alerte | titre, prix |
+| Facebook Marketplace | ❌ | — | — |
+
+Les plateformes sans API ne sont pas lues directement : cela demanderait de contourner leurs protections
+anti-robots, ce que Deal Sniper ne fait pas.
+
 ## 3. API eBay (recommandé)
 
-C'est la source la plus riche : jusqu'à 200 annonces récentes par recherche, filtrées par eBay (objets **situés en
-France**, prix max, état « pour pièces » ou « occasion »), 5 000 appels gratuits par jour. Aucun email nécessaire.
+C'est la source principale : jusqu'à 200 annonces récentes par recherche, filtrées par eBay (objets **situés en
+France**, prix max, état « pour pièces » ou « occasion »), 5 000 appels gratuits par jour. Pour chaque annonce
+retenue par le filtre, la **fiche complète** est lue (description du vendeur, état détaillé, ville, réputation),
+puis le filtre repasse sur la description. Aucun email nécessaire.
 
 1. Créez un compte sur [developer.ebay.com](https://developer.ebay.com) (gratuit ; validation sous ~1 jour).
 2. **Application Keys** → créez un jeu de clés **Production** : récupérez l'**App ID (Client ID)** et le
