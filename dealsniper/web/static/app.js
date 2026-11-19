@@ -3,11 +3,28 @@
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const euros = (v) => (v == null ? "?" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`);
-const FILTER_IDS = ["f-text", "f-site", "f-category", "f-type", "f-score", "f-price", "f-margin", "f-days", "f-sort"];
+const FILTER_IDS = ["f-text", "f-category", "f-type", "f-score", "f-price", "f-margin", "f-days", "f-sort"];
 const SEARCH_FIELDS = { ebay: ["query", "condition", "max_price"], default: ["query", "category", "max_price"] };
+const FIELD_LABELS = { query: "Recherche", condition: "État", max_price: "Prix max (€)", category: "Catégorie (n°)" };
+const CONDITIONS = { any: "Tous états", parts: "Pour pièces / HS", used: "Occasion" };
+
+// Logos des sites : favicon officiel du site, avec repli sur l'initiale.
+const SITE_DOMAINS = { ebay: "www.ebay.fr", leboncoin: "www.leboncoin.fr", vinted: "www.vinted.fr", facebook: "www.facebook.com" };
+const SITE_NAMES = { ebay: "eBay", leboncoin: "leboncoin", vinted: "Vinted", facebook: "Facebook" };
+const siteName = (site) => SITE_NAMES[site] || site;
+function siteLogo(site, size = 16) {
+  const initial = esc((siteName(site) || "?")[0].toUpperCase());
+  const fallback = `<span class="logo-fallback" style="width:${size}px;height:${size}px">${initial}</span>`;
+  const domain = SITE_DOMAINS[site];
+  if (!domain) return fallback;
+  // 1er échec : service d'icônes de Google ; 2e échec : initiale du site.
+  return `<img class="logo" src="https://${domain}/favicon.ico" width="${size}" height="${size}" alt="" referrerpolicy="no-referrer"
+    onerror="if(!this.dataset.retry){this.dataset.retry=1;this.src='https://www.google.com/s2/favicons?domain=${domain}&sz=64'}else{this.outerHTML='${fallback.replace(/"/g, "&quot;")}'}">`;
+}
 
 let allAds = [];
 let status = "analyzed";
+let selectedSites = new Set();  // vide = tous les sites
 let settings = null;
 
 function toast(message) {
@@ -39,7 +56,7 @@ document.querySelectorAll(".tab").forEach((btn) =>
 function saveFilters() {
   try {
     const values = Object.fromEntries(FILTER_IDS.map((id) => [id, $("#" + id).value]));
-    localStorage.setItem("dealsniper-filters", JSON.stringify({ ...values, status }));
+    localStorage.setItem("dealsniper-filters", JSON.stringify({ ...values, status, sites: [...selectedSites] }));
   } catch (e) { /* stockage indisponible */ }
 }
 
@@ -48,6 +65,7 @@ function restoreFilters() {
     const values = JSON.parse(localStorage.getItem("dealsniper-filters") || "{}");
     FILTER_IDS.forEach((id) => { if (values[id] != null) $("#" + id).value = values[id]; });
     if (values.status != null) setStatus(values.status, false);
+    selectedSites = new Set(values.sites || []);
   } catch (e) { /* idem */ }
 }
 
@@ -64,16 +82,46 @@ function fillSelect(id, values) {
   if (values.has(current)) el.value = current;
 }
 
+// ---------- Budget IA et sites ----------
+const dollars = (v) => `${Number(v || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
+
+function renderBudget(spent, cap) {
+  const ratio = cap ? Math.min(1, spent / cap) : 0;
+  $("#budget-text").textContent = cap ? `IA : ${dollars(spent)} / ${dollars(cap)}` : `IA : ${dollars(spent)} (sans limite)`;
+  $("#budget-fill").style.width = `${Math.round(ratio * 100)}%`;
+  $("#budget-fill").className = ratio >= 1 ? "full" : ratio >= 0.8 ? "warn" : "";
+  $("#budget-today").textContent = `Dépensé aujourd'hui : ${dollars(spent)}${cap ? ` sur ${dollars(cap)}` : ""}`;
+}
+
+function renderSiteChips(sites) {
+  const chip = (value, label, logo, on) =>
+    `<button class="chip ${on ? "on" : ""}" data-site="${esc(value)}">${logo}${esc(label)}</button>`;
+  $("#f-sites").innerHTML = chip("", "Tous les sites", "", selectedSites.size === 0)
+    + [...sites].sort().map((site) => chip(site, siteName(site), siteLogo(site), selectedSites.has(site))).join("");
+}
+
+$("#f-sites").addEventListener("click", (e) => {
+  const button = e.target.closest(".chip");
+  if (!button) return;
+  const site = button.dataset.site;
+  if (!site) selectedSites.clear();
+  else if (selectedSites.has(site)) selectedSites.delete(site);
+  else selectedSites.add(site);
+  saveFilters();
+  renderSiteChips(new Set(allAds.map((a) => a.source).filter(Boolean)));
+  renderAds();
+});
+
 // ---------- Annonces ----------
 async function loadAds() {
   try {
     const data = await api(`/api/ads?status=${encodeURIComponent(status)}&days=${$("#f-days").value}`);
     allAds = data.ads;
-    $("#cost").textContent = `IA aujourd'hui : ${data.cost_today} $`;
+    renderBudget(data.cost_today, data.cost_cap);
     $("#run").disabled = data.running;
     $("#run").textContent = data.running ? "⏳ Passage en cours…" : "▶ Lancer un passage";
     if (data.error) toast("Dernier passage en erreur : " + data.error);
-    fillSelect("#f-site", new Set(allAds.map((a) => a.source).filter(Boolean)));
+    renderSiteChips(new Set(allAds.map((a) => a.source).filter(Boolean)));
     fillSelect("#f-category", new Set(allAds.map((a) => a.category).filter(Boolean)));
     renderAds();
   } catch (e) {
@@ -83,7 +131,7 @@ async function loadAds() {
 
 function filteredAds() {
   const text = $("#f-text").value.trim().toLowerCase();
-  const site = $("#f-site").value, category = $("#f-category").value, type = $("#f-type").value;
+  const category = $("#f-category").value, type = $("#f-type").value;
   const minScore = Number($("#f-score").value || 0);
   const maxPrice = $("#f-price").value === "" ? null : Number($("#f-price").value);
   const minMargin = $("#f-margin").value === "" ? null : Number($("#f-margin").value);
@@ -91,7 +139,7 @@ function filteredAds() {
   const ads = allAds.filter((ad) => {
     const a = ad.analysis || {};
     if (text && !`${ad.title} ${ad.description} ${ad.location} ${ad.category}`.toLowerCase().includes(text)) return false;
-    if (site && ad.source !== site) return false;
+    if (selectedSites.size && !selectedSites.has(ad.source)) return false;
     if (category && ad.category !== category) return false;
     if (type && a.type_affaire !== type) return false;
     if (minScore && (ad.score ?? 0) < minScore) return false;
@@ -141,7 +189,7 @@ function adCard(ad) {
       ${ad.reason ? `<div class="reason">✗ ${esc(ad.reason)}</div>` : ""}
       <div class="meta">
         <div>${place ? `📍 ${esc(place)} · ` : ""}${saleType}</div>
-        <div>${esc(ad.source)}${ad.category ? ` · ${esc(ad.category)}` : ""}</div>
+        <div class="site-line">${siteLogo(ad.source, 14)} ${esc(siteName(ad.source))}${ad.category ? ` · ${esc(ad.category)}` : ""}</div>
       </div>
     </div>
   </article>`;
@@ -165,6 +213,7 @@ document.querySelectorAll("#f-status button").forEach((b) => b.addEventListener(
 $("#reset-filters").addEventListener("click", () => {
   FILTER_IDS.forEach((id) => { const el = $("#" + id); el.value = el.tagName === "SELECT" ? el.options[0].value : ""; });
   $("#f-days").value = "7";
+  selectedSites.clear();
   setStatus("analyzed");
 });
 
@@ -186,17 +235,25 @@ $("#test-notif").addEventListener("click", async () => {
 });
 
 // ---------- Réglages ----------
+document.querySelectorAll(".side").forEach((btn) =>
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".side").forEach((b) => b.classList.toggle("on", b === btn));
+    document.querySelectorAll(".panel-page").forEach((p) => (p.hidden = p.id !== btn.dataset.panel));
+  })
+);
+
 const words = (list) => (list || []).join(", ");
 
 function searchRow(siteName, row) {
   const fields = SEARCH_FIELDS[siteName] || SEARCH_FIELDS.default;
   const cells = fields.map((f) => {
     if (f === "condition") {
-      const opts = ["any", "parts", "used"].map((o) => `<option ${row[f] === o ? "selected" : ""}>${o}</option>`).join("");
+      const opts = Object.entries(CONDITIONS)
+        .map(([value, label]) => `<option value="${value}" ${(row[f] || "any") === value ? "selected" : ""}>${label}</option>`).join("");
       return `<td><select data-field="condition">${opts}</select></td>`;
     }
     const type = f === "max_price" ? "number" : "text";
-    return `<td><input data-field="${f}" type="${type}" value="${esc(row[f] ?? "")}" placeholder="${f}"></td>`;
+    return `<td><input data-field="${f}" type="${type}" value="${esc(row[f] ?? "")}" placeholder="${FIELD_LABELS[f] || f}"></td>`;
   });
   return `<tr>${cells.join("")}<td><button class="danger" data-remove title="Supprimer">✕</button></td></tr>`;
 }
@@ -207,14 +264,14 @@ function renderSites() {
     const interval = site.interval || ["", ""];
     return `<div class="card" data-site="${esc(name)}">
       <div class="card-head">
-        <strong>${esc(name)}</strong>
+        <strong class="site-title">${siteLogo(name, 20)} ${esc(siteName(name))}</strong>
         <label class="field"><input type="checkbox" data-enabled ${site.enabled !== false ? "checked" : ""}> activé</label>
-        <label class="field">toutes les <input type="number" data-interval="0" value="${esc(interval[0])}"> à
-          <input type="number" data-interval="1" value="${esc(interval[1])}"> s</label>
+        <label class="field">Vérifier toutes les <input type="number" data-interval="0" value="${esc(interval[0])}"> à
+          <input type="number" data-interval="1" value="${esc(interval[1])}"> secondes</label>
       </div>
-      <table><thead><tr>${fields.map((f) => `<th>${f}</th>`).join("")}<th></th></tr></thead>
+      <table><thead><tr>${fields.map((f) => `<th>${FIELD_LABELS[f] || f}</th>`).join("")}<th></th></tr></thead>
         <tbody>${(site.searches || []).map((r) => searchRow(name, r)).join("")}</tbody></table>
-      <button class="ghost" data-add-search>+ Recherche</button>
+      <button class="ghost" data-add-search>+ Ajouter une recherche</button>
     </div>`;
   }).join("");
 }
@@ -258,7 +315,10 @@ async function loadSettings() {
   const types = n.deal_types || ["reparation", "revente_directe"];
   $("#n-repair").checked = types.includes("reparation");
   $("#n-direct").checked = types.includes("revente_directe");
-  $("#a-model").value = a.model || "";
+  if (a.model && ![...$("#a-model").options].some((o) => o.value === a.model)) {
+    $("#a-model").insertAdjacentHTML("beforeend", `<option value="${esc(a.model)}">${esc(a.model)}</option>`);
+  }
+  $("#a-model").value = a.model || "claude-haiku-4-5";
   $("#a-cap").value = a.max_daily_cost_usd ?? "";
 }
 

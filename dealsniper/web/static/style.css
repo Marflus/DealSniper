@@ -98,3 +98,34 @@ button.danger { color: var(--bad); border-color: transparent; background: transp
   .top-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
   main { padding: 14px; }
 }
+
+/* Budget IA (barre du haut) */
+.budget { display: grid; gap: 3px; min-width: 150px; font-size: 12px; color: var(--muted); }
+.budget-bar { height: 5px; background: var(--soft); border-radius: 99px; overflow: hidden; }
+.budget-bar div { height: 100%; width: 0; background: var(--good); transition: width .3s; }
+.budget-bar div.warn { background: var(--mid); }
+.budget-bar div.full { background: var(--bad); }
+
+/* Logos et puces de sites */
+.logo { border-radius: 4px; vertical-align: -3px; object-fit: contain; }
+.logo-fallback { display: inline-grid; place-items: center; border-radius: 4px; background: var(--accent); color: #fff;
+  font-size: 10px; font-weight: 700; vertical-align: -3px; }
+.site-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 12px; color: var(--muted); }
+.chip.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--card)); font-weight: 600; }
+.site-line { display: flex; align-items: center; gap: 4px; }
+.card-head strong.site-title { display: inline-flex; align-items: center; gap: 8px; text-transform: none; }
+
+/* Réglages : menu à gauche, une section à la fois */
+.settings { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: start; }
+.side-nav { position: sticky; top: 76px; display: grid; gap: 4px; background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 8px; box-shadow: var(--shadow); }
+.side { border: 0; background: transparent; text-align: left; padding: 9px 12px; color: var(--muted); }
+.side.on { background: var(--soft); color: var(--fg); font-weight: 600; }
+.panels h2 { margin-top: 0; }
+.big { font-size: 18px; font-weight: 600; margin: 0; }
+.push { margin-left: auto; }
+@media (max-width: 800px) {
+  .settings { grid-template-columns: 1fr; }
+  .side-nav { position: static; grid-auto-flow: column; overflow-x: auto; }
+}
