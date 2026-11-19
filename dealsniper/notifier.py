@@ -17,8 +17,6 @@ log = logging.getLogger(__name__)
 TIMEOUT = 15
 MESSAGE_LIMIT = 3500  # Telegram : 4096 caractères max par message
 MAX_ATTEMPTS = 3
-DEAL_LABELS = {"reparation": "🔧 Réparation", "revente_directe": "💎 Revente directe"}
-CONFIDENCE_LABELS = {"haute": "confiance haute", "moyenne": "confiance moyenne", "faible": "⚠️ confiance faible"}
 
 
 def _eur(value: float | None) -> str:
@@ -27,86 +25,62 @@ def _eur(value: float | None) -> str:
     return f"{value:.0f} €" if float(value).is_integer() else f"{value:.2f} €".replace(".", ",")
 
 
-def _score_emoji(score: int) -> str:
-    return "🔥" if score >= 9 else "🎯" if score >= 8 else "👍"
-
-
-def _price_line(ad: Ad) -> str:
-    line = _eur(ad.price)
-    if ad.shipping:
-        line += f" + {_eur(ad.shipping)} port = {_eur(ad.total_price)}"
-    if ad.price_mode == "enchere":
-        line += " (enchère en cours)"
-    return line
-
-
-def format_telegram(ad: Ad) -> str:
-    a, e = ad.analysis or {}, html.escape
-    label = DEAL_LABELS.get(ad.deal_type, "")
-    header = f"{_score_emoji(ad.score)} <b>{ad.score}/10</b> · {label} · {e(ad.category or '')}"
-    lines = [header, f"<b>{e(ad.title)}</b>", "", f"💶 Prix : {_price_line(ad)}"]
-    delivery = " · 📦 livraison possible" if ad.delivery_possible else ""
-    lines.append(f"📍 {e(ad.location or 'lieu ?')} · <i>{e(ad.source)}</i>{delivery}")
-    if ad.seller:
-        lines.append(f"👤 Vendeur : {e(ad.seller_summary)}")
-    if ad.deal_type == "reparation":
-        lines.append(f"🔧 Panne probable : {e(a.get('panne_probable', '?'))}")
-        part, resale = _eur(a.get("cout_piece_estime")), _eur(a.get("valeur_revente_estimee"))
-        lines.append(f"🧩 Pièce ≈ {part} · 📈 Revente ≈ {resale}")
-    else:
-        lines.append(f"📈 Revente ≈ {_eur(a.get('valeur_revente_estimee'))} (en l'état)")
-    lines += [
-        f"💰 <b>Marge nette ≈ {_eur(a.get('marge_nette_estimee'))}</b>"
-        f" ({CONFIDENCE_LABELS.get(a.get('confiance'), '')})",
-        f"💬 {e(a.get('justification_courte', ''))}",
-    ]
-    if a.get("question_vendeur"):
-        lines.append(f"❓ À demander : {e(a['question_vendeur'])}")
-    lines += ["", f'🔗 <a href="{e(ad.url, quote=True)}">Voir l\'annonce</a>']
-    return "\n".join(lines)
-
-
-def format_discord(ad: Ad) -> dict[str, Any]:
+def _summary(ad: Ad) -> dict[str, str]:
+    """Les 5 informations d'une notification : titre, achat, revente (+ marge), panne, lien."""
     a = ad.analysis or {}
-    color = 0xE74C3C if ad.score >= 9 else 0xF39C12 if ad.score >= 8 else 0x2ECC71
-    fields = [
-        {"name": "💶 Prix", "value": _price_line(ad), "inline": True},
-        {"name": "💰 Marge nette", "value": _eur(a.get("marge_nette_estimee")), "inline": True},
-        {"name": "📈 Revente", "value": _eur(a.get("valeur_revente_estimee")), "inline": True},
-    ]
-    if ad.deal_type == "reparation":
-        fields += [
-            {"name": "🔧 Panne probable", "value": (a.get("panne_probable") or "?")[:200], "inline": True},
-            {"name": "🧩 Pièce", "value": _eur(a.get("cout_piece_estime")), "inline": True},
-        ]
-    fields.append({"name": "📍 Lieu", "value": (ad.location or "?")[:100], "inline": True})
-    if ad.seller:
-        fields.append({"name": "👤 Vendeur", "value": ad.seller_summary[:100], "inline": True})
-    if a.get("question_vendeur"):
-        fields.append({"name": "❓ À demander", "value": a["question_vendeur"][:200], "inline": False})
+    buy = _eur(ad.price) + (f" + {_eur(ad.shipping)} port" if ad.shipping else "")
+    if ad.price_mode == "enchere":
+        buy += " (enchère en cours)"
+    margin = a.get("marge_nette_estimee")
+    margin_txt = f"{'+' if (margin or 0) >= 0 else ''}{_eur(margin)}" if margin is not None else "?"
+    fault = a.get("panne_probable") or "?"
+    ease = a.get("facilite_reparation")
     return {
-        "title": f"{_score_emoji(ad.score)} {ad.score}/10 · {DEAL_LABELS.get(ad.deal_type, '')} — {ad.title}"[:256],
+        "title": ad.title,
+        "buy": buy,
+        "resale": f"{_eur(a.get('valeur_revente_estimee'))} (marge {margin_txt})",
+        "fault": "aucune (revente en l'état)" if fault.lower() == "aucune"
+        else f"{fault} (facilité {ease}/10)" if ease else fault,
         "url": ad.url,
-        "color": color,
-        "description": f"{a.get('justification_courte', '')} ({CONFIDENCE_LABELS.get(a.get('confiance'), '')})"[:500],
-        "fields": fields,
-        "footer": {"text": f"Deal Sniper · {ad.category} · {ad.source}"},
     }
 
 
+def format_telegram(ad: Ad) -> str:
+    s, e = _summary(ad), html.escape
+    return (
+        f"<b>{e(s['title'])}</b>\n"
+        f"💶 Achat : {e(s['buy'])}\n"
+        f"📈 Revente : {e(s['resale'])}\n"
+        f"🔧 Panne : {e(s['fault'])}\n"
+        f'🔗 <a href="{e(s["url"], quote=True)}">Voir l\'annonce</a>'
+    )
+
+
+def format_discord(ad: Ad) -> dict[str, Any]:
+    s = _summary(ad)
+    embed: dict[str, Any] = {
+        "title": s["title"][:256],
+        "url": s["url"],
+        "color": 0x16A34A,
+        "description": f"💶 Achat : {s['buy']}\n📈 Revente : {s['resale']}\n🔧 Panne : {s['fault']}"[:2000],
+    }
+    if ad.image:
+        embed["thumbnail"] = {"url": ad.image}
+    return embed
+
+
+def format_console(ad: Ad) -> str:
+    s = _summary(ad)
+    return f"\n{s['title']}\n   Achat {s['buy']} · Revente {s['resale']} · Panne {s['fault']}\n   {s['url']}"
+
+
 def _digest_line(ad: Ad, html_mode: bool) -> str:
-    """Une ligne de récapitulatif : note, titre cliquable, prix, lieu, marge."""
-    a = ad.analysis or {}
-    margin = _eur(a.get("marge_nette_estimee"))
-    delivery = " · 📦" if ad.delivery_possible else ""
-    seller = f" · 👤 {ad.seller_summary}" if ad.seller else ""
-    details = f"{_price_line(ad)} · {ad.location or 'lieu ?'}{delivery}{seller} · marge ≈ {margin}"
-    reason = a.get("justification_courte", "")
+    s = _summary(ad)
     if html_mode:
         e = html.escape
-        return (f'{_score_emoji(ad.score) if ad.score >= 7 else "•"} <b>{ad.score}/10</b> '
-                f'<a href="{e(ad.url, quote=True)}">{e(ad.title[:70])}</a>\n   {e(details)}\n   <i>{e(reason)}</i>')
-    return f"• **{ad.score}/10** [{ad.title[:70]}]({ad.url})\n   {details}\n   _{reason}_"
+        return (f'• <a href="{e(s["url"], quote=True)}">{e(s["title"][:70])}</a>\n'
+                f"   Achat {e(s['buy'])} · Revente {e(s['resale'])} · {e(s['fault'])}")
+    return f"• [{s['title'][:70]}]({s['url']})\n   Achat {s['buy']} · Revente {s['resale']} · {s['fault']}"
 
 
 def _chunks(header: str, lines: list[str]) -> list[str]:
@@ -119,15 +93,6 @@ def _chunks(header: str, lines: list[str]) -> list[str]:
         current += "\n\n" + line
     messages.append(current)
     return messages
-
-
-def format_console(ad: Ad) -> str:
-    a = ad.analysis or {}
-    return (
-        f"\n{_score_emoji(ad.score)} {ad.score}/10 | {DEAL_LABELS.get(ad.deal_type, '')} | {ad.title}\n"
-        f"   {_price_line(ad)} | {ad.location or 'lieu ?'} | marge ≈ {_eur(a.get('marge_nette_estimee'))}\n"
-        f"   {a.get('justification_courte', '')}\n   {ad.url}"
-    )
 
 
 def _post(url: str, payload: dict[str, Any], channel: str) -> bool:
@@ -238,7 +203,7 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
     cfg = config["notifier"]
     min_score = int(cfg["min_score"])
     watch_score = cfg.get("watch_score")
-    deal_types = set(cfg.get("deal_types") or DEAL_LABELS)
+    deal_types = set(cfg.get("deal_types") or ("reparation", "revente_directe"))
     analyzed = [a for a in ads if a.analysis and a.deal_type in deal_types]
     good = _rank([a for a in analyzed if a.score >= min_score])
     watch = _rank([a for a in analyzed if watch_score is not None and int(watch_score) <= a.score < min_score])
@@ -252,17 +217,13 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
         return []
 
     sent: list[Ad] = []
-    max_per_run = int(cfg.get("max_per_run") or len(good))  # None = toutes
-    for ad in good[:max_per_run]:
+    for ad in good:
         try:
             if notifier.send_ad(ad):
                 sent.append(ad)
             time.sleep(0.5)  # Telegram : ~1 message/seconde par conversation
         except Exception as exc:
             log.error("Notification impossible pour « %s » : %s", ad.title[:50], exc)
-    if len(good) > max_per_run:
-        extra = len(good) - max_per_run
-        notifier.send_text(f"… et {extra} autre(s) bonne(s) affaire(s), voir le récapitulatif (mode recap).")
     log.info("Notifications : %d envoyée(s) via %s", len(sent), ", ".join(notifier.channels) or "console")
     return sent
 
@@ -274,10 +235,8 @@ def demo_ad() -> Ad:
         url="https://example.com/annonce-de-test",
         source="test", price=85.0, shipping=6.5, category="PC portables pros", location="Lyon 69003",
         analysis={
-            "type_affaire": "reparation", "score_rentabilite": 8, "confiance": "haute",
+            "type_affaire": "reparation", "score_rentabilite": 8, "facilite_reparation": 9,
             "panne_probable": "SSD manquant", "cout_piece_estime": 25, "valeur_revente_estimee": 220,
             "marge_nette_estimee": 82,
-            "justification_courte": "Message de test : si vous le lisez, les notifications fonctionnent !",
-            "question_vendeur": "Le chargeur d'origine est-il fourni ?",
         },
     )

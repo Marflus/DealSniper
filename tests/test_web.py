@@ -3,7 +3,7 @@ import shutil
 
 import pytest
 
-from dealsniper.config import PROJECT_DIR, data_dir, load_config
+from dealsniper.config import data_dir, load_config
 from dealsniper.db import Database
 from dealsniper.models import Ad
 from dealsniper.web.app import create_app
@@ -14,7 +14,7 @@ def client(tmp_path, monkeypatch, config):
     # Copie d'un config.yaml valide, modifiable sans toucher au vrai fichier.
     import os
 
-    source = os.getenv("DEALSNIPER_CONFIG") or PROJECT_DIR / "config.yaml"
+    source = os.environ["DEALSNIPER_CONFIG"]
     path = tmp_path / "config.yaml"
     shutil.copy(source, path)
     monkeypatch.setenv("DEALSNIPER_CONFIG", str(path))

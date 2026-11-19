@@ -51,6 +51,11 @@ def _place(location: dict[str, Any]) -> str | None:
     return " ".join(p for p in (location.get("city"), location.get("postalCode")) if p) or None
 
 
+def _image(item: dict[str, Any]) -> str | None:
+    images = [item.get("image") or {}, *(item.get("thumbnailImages") or [])]
+    return next((i["imageUrl"] for i in images if i.get("imageUrl")), None)
+
+
 def item_to_ad(item: dict[str, Any]) -> Ad | None:
     """Une entrée de résultat de recherche eBay → Ad."""
     if not (item.get("itemWebUrl") and item.get("title")):
@@ -70,11 +75,13 @@ def item_to_ad(item: dict[str, Any]) -> Ad | None:
         location=_place(item.get("itemLocation") or {}),
         price_mode="enchere" if auction else "fixe",
         seller=_seller(item.get("seller") or {}),
+        image=_image(item),
     )
 
 
 class EbaySite(Site):
     name = "ebay"
+    label = "eBay"
 
     def __init__(self, cfg: dict[str, Any], config: dict[str, Any]):
         super().__init__(cfg, config)
@@ -105,6 +112,7 @@ class EbaySite(Site):
             resp = await http.get(SEARCH_URL, headers=headers, params=params)
             resp.raise_for_status()
             ads += [ad for ad in map(item_to_ad, resp.json().get("itemSummaries") or []) if ad]
+            self.report(search["query"], len(ads))
         return ads
 
     async def fetch_detail(self, http: PoliteClient, ad: Ad) -> Ad:
@@ -121,4 +129,5 @@ class EbaySite(Site):
         ad.description = " | ".join(p for p in (f"État : {condition}" if condition else "", description) if p)
         ad.location = ad.location or _place(item.get("itemLocation") or {})
         ad.seller = _seller(item.get("seller") or {}) or ad.seller
+        ad.image = _image(item) or ad.image
         return ad

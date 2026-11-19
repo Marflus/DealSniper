@@ -30,7 +30,7 @@ DEFAULTS: dict[str, Any] = {
     "filters": {"drop_uncategorized": True, "keep_unknown_price": True, "min_price": 5,
                 "deal_signals": [], "buyer_ad_keywords": [], "global_exclude_keywords": []},
     "categories": [],
-    "analyzer": {"model": "claude-haiku-4-5", "effort": None, "batch_size": 10, "max_description_chars": 600,
+    "analyzer": {"model": "claude-haiku-4-5", "effort": None, "batch_size": 20, "max_description_chars": 400,
                  "max_tokens": 4096, "max_daily_cost_usd": 1.00, "max_retries": 4, "timeout_seconds": 90,
                  "structured_output": True, "pricing": {}},
     "notifier": {"min_score": 7, "watch_score": 5, "deal_types": ["reparation", "revente_directe"]},

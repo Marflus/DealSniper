@@ -30,9 +30,9 @@ def ads(n):
 
 
 def item(i, score=8):
-    return {"id": i, "type_affaire": "reparation", "score_rentabilite": score, "confiance": "haute",
+    return {"id": i, "type_affaire": "reparation", "score_rentabilite": score, "facilite_reparation": 9,
             "panne_probable": "SSD absent", "cout_piece_estime": 20, "valeur_revente_estimee": 200,
-            "marge_nette_estimee": 90, "justification_courte": "ok", "question_vendeur": "Chargeur fourni ?"}
+            "marge_nette_estimee": 90}
 
 
 def test_batch_schema_truncation_and_cost(monkeypatch, config):
@@ -55,8 +55,8 @@ def test_split_on_max_tokens_and_budget(monkeypatch, config):
 
 
 def test_prompt_rules():
-    assert "JAMAIS une arnaque sans indice concret" in analyzer.SYSTEM_PROMPT
-    assert "ne parle jamais d'arnaque pour une enchère" in analyzer.SYSTEM_PROMPT
+    assert "pas un indice d'arnaque" in analyzer.SYSTEM_PROMPT
+    assert "enchère actuelle" in analyzer.SYSTEM_PROMPT and "facilite_reparation" in analyzer.SYSTEM_PROMPT
 
 
 def deal(score=8, deal_type="reparation"):
@@ -65,9 +65,15 @@ def deal(score=8, deal_type="reparation"):
               analysis={**item(1, score), "type_affaire": deal_type})
 
 
-def test_telegram_format():
-    txt = format_telegram(deal(deal_type="revente_directe"))
-    assert "Revente directe" in txt and "Lyon 69003" in txt and "99,2 % positifs · 1 534 avis" in txt
+def test_telegram_format_is_short():
+    txt = format_telegram(deal(deal_type="reparation"))
+    assert txt.splitlines() == [
+        "<b>PS5 Slim</b>",
+        "💶 Achat : 250 €",
+        "📈 Revente : 200 € (marge +90 €)",
+        "🔧 Panne : SSD absent (facilité 9/10)",
+        '🔗 <a href="https://www.ebay.fr/itm/123456789012">Voir l\'annonce</a>',
+    ]
 
 
 def test_notify_good_and_watch_digest(monkeypatch, config):
@@ -76,3 +82,10 @@ def test_notify_good_and_watch_digest(monkeypatch, config):
                         lambda self, header, ads: digests.append([a.score for a in ads]) or True)
     sent = notify([deal(8), deal(6), deal(5), deal(3)], config)
     assert [a.score for a in sent] == [8] and digests == [[6, 5]]
+
+
+def test_sanitize_ease_score_and_schema():
+    clean = analyzer.sanitize_analysis({"facilite_reparation": "12", "score_rentabilite": "x"})
+    assert clean["facilite_reparation"] == 10 and clean["score_rentabilite"] == 1
+    required = analyzer.RESPONSE_SCHEMA["properties"]["annonces"]["items"]["required"]
+    assert "facilite_reparation" in required and "justification_courte" not in required

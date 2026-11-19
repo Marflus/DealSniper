@@ -21,44 +21,35 @@ DEFAULT_PRICING = {
     "claude-sonnet-5-5": (2.00, 10.00),
 }
 DEAL_TYPES = ("reparation", "revente_directe")
-CONFIDENCE_LEVELS = ("faible", "moyenne", "haute")
 
-SYSTEM_PROMPT = """Tu es expert en achat-revente d'électronique d'occasion sur le marché français (leboncoin, eBay.fr, Back Market). Toutes les annonces sont situées en France.
-Pour chaque annonce, estime la rentabilité d'un achat pour revente en France. Deux types d'affaires :
-- "reparation" : objet en panne ou incomplet, à remettre en état puis revendre.
-- "revente_directe" : objet fonctionnel vendu nettement sous sa cote d'occasion, revendable tel quel.
+SYSTEM_PROMPT = """Tu es expert en achat-revente d'électronique d'occasion en France (leboncoin, eBay.fr, Vinted). Toutes les annonces sont en France.
+Pour chaque annonce, estime la rentabilité d'un achat pour revente. type_affaire : "reparation" (objet en panne ou incomplet) ou "revente_directe" (fonctionnel, vendu sous sa cote).
 
-Barème score_rentabilite (entier 1-10) :
-- 8-10 : marge nette ≥ 40 € ET risque faible. Réparation : panne facile et peu coûteuse (pièce < 40 €, < 1 h), ex. PC pro sans disque/SSD ou sans OS, batterie HS, chargeur absent, port HDMI/USB-C dessoudé, rétroéclairage TV/écran, console qui surchauffe, outillage vendu sans batterie, nappe/clavier/écran courant. Revente directe : fonctionnel, au moins 30 % sous la cote, modèle recherché, annonce crédible.
-- 5-7 : marge nette potentielle ≥ 40 € mais état ou modèle incertain (titre seul, tronqué), ou réparation moyenne. Une annonce à forte marge potentielle mérite au moins 5 : c'est à l'acheteur de vérifier.
-- 4 : décote modeste ou marge faible.
-- 1-3 : panne lourde ou inconnue (carte mère, oxydation, liquide, verrouillage iCloud/BIOS/compte), prix proche de la cote, accessoire seul, ou marge négative.
+score_rentabilite (1-10) :
+- 8-10 : marge nette ≥ 40 € et risque faible (panne simple et peu chère, ou fonctionnel ≥ 30 % sous la cote sur un modèle recherché).
+- 5-7 : marge ≥ 40 € possible mais état ou modèle incertain (titre seul ou tronqué), ou réparation moyenne.
+- 1-4 : décote faible, marge faible ou négative, panne lourde (carte mère, oxydation, liquide, verrouillage iCloud/BIOS/compte), accessoire seul.
+
+facilite_reparation (1-10) : 10 = rien à réparer ou pièce à brancher sans outil ; 7-9 = pièce standard et tournevis (SSD, RAM, batterie, nettoyage, pâte thermique, chargeur) ; 4-6 = démontage poussé (écran, clavier, nappe, port) ; 1-3 = soudure, micro-soudure ou panne inconnue.
 
 Règles :
-- Montants en euros. prix_total = prix + livraison.
-- Enchère : le prix affiché est l'enchère ACTUELLE, pas le prix final. Calcule la marge sur un prix final probable (souvent 50 à 70 % de la cote d'occasion) et ne parle jamais d'arnaque pour une enchère.
-- valeur_revente_estimee : prix d'occasion réaliste en France (après réparation le cas échéant), jamais le prix neuf ni un prix demandé par d'autres vendeurs.
-- marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais de revente.
-- Revente directe : panne_probable = "aucune", cout_piece_estime = 0 (sauf petit accessoire manquant).
-- Il arrive que seuls le titre (parfois tronqué par « … »), le prix et la ville soient connus, sans description. Note alors le potentiel en supposant l'objet conforme à son titre, et mets la confiance à "faible" : le manque d'informations baisse la confiance, pas le score. La note mesure le potentiel, pas la quantité d'informations.
-- N'évoque JAMAIS une arnaque sans indice concret : seul un prix inférieur à 30 % de la cote sur un produit récent et très demandé, ou une mention explicite (paiement hors plateforme, « sans boîte ni facture » sur un téléphone récent…), le justifie. Un titre court, vague, coupé ou un modèle que tu ne reconnais pas n'est PAS un indice d'arnaque.
-- vendeur (si fourni) : ≥ 98 % et ≥ 50 avis = fiable ; < 95 %, < 5 avis ou compte créé il y a quelques semaines = risque plus élevé, à signaler dans la justification. Un particulier sans avis n'est pas suspect pour autant.
-- confiance : "haute" si modèle et état sont clairs, "moyenne" si l'état est incertain, "faible" si seul le titre est connu.
-- question_vendeur : la question la plus utile à poser au vendeur avant d'acheter.
-- panne_probable : 8 mots max. justification_courte : 20 mots max. question_vendeur : 15 mots max.
-- Renvoie une entrée par annonce, avec son id."""
+- Montants en euros, prix_total = prix + port. Enchère : le prix est l'enchère actuelle, raisonne sur un prix final probable.
+- valeur_revente_estimee : prix d'occasion réaliste en France une fois réparé, jamais le prix neuf.
+- marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais.
+- Revente directe : panne_probable = "aucune", cout_piece_estime = 0.
+- Sans description, suppose l'objet conforme à son titre. Un titre court, tronqué ou un modèle inconnu n'est pas un indice d'arnaque ; ne parle d'arnaque que pour un prix < 30 % de la cote sur un produit récent très demandé.
+- Vendeur (si fourni) : < 95 % d'avis positifs ou < 5 avis = risque plus élevé, baisse le score d'un point.
+- panne_probable : 6 mots max. Une entrée par annonce, avec son id."""
 
 _ITEM_FIELDS: dict[str, Any] = {
     "id": {"type": "integer"},
     "type_affaire": {"type": "string", "enum": list(DEAL_TYPES)},
     "score_rentabilite": {"type": "integer"},
-    "confiance": {"type": "string", "enum": list(CONFIDENCE_LEVELS)},
+    "facilite_reparation": {"type": "integer"},
     "panne_probable": {"type": "string"},
     "cout_piece_estime": {"type": "number"},
     "valeur_revente_estimee": {"type": "number"},
     "marge_nette_estimee": {"type": "number"},
-    "justification_courte": {"type": "string"},
-    "question_vendeur": {"type": "string"},
 }
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -140,24 +131,23 @@ def sanitize_analysis(raw: dict[str, Any]) -> dict[str, Any]:
         except (TypeError, ValueError):
             return 0.0
 
-    try:
-        score = int(round(float(raw.get("score_rentabilite", 1))))
-    except (TypeError, ValueError):
-        score = 1
+    def note(key: str, default: int) -> int:
+        try:
+            return max(1, min(10, int(round(float(raw.get(key, default))))))
+        except (TypeError, ValueError):
+            return default
+
     deal_type = str(raw.get("type_affaire", "")).strip().lower()
     if deal_type not in DEAL_TYPES:
         deal_type = "revente_directe" if "direct" in deal_type else "reparation"
-    confidence = str(raw.get("confiance", "")).strip().lower()
     return {
         "type_affaire": deal_type,
-        "score_rentabilite": max(1, min(10, score)),
-        "confiance": confidence if confidence in CONFIDENCE_LEVELS else "moyenne",
+        "score_rentabilite": note("score_rentabilite", 1),
+        "facilite_reparation": note("facilite_reparation", 5),
         "panne_probable": str(raw.get("panne_probable", ""))[:120],
         "cout_piece_estime": num("cout_piece_estime"),
         "valeur_revente_estimee": num("valeur_revente_estimee"),
         "marge_nette_estimee": num("marge_nette_estimee"),
-        "justification_courte": str(raw.get("justification_courte", ""))[:240],
-        "question_vendeur": str(raw.get("question_vendeur", ""))[:200],
     }
 
 
@@ -172,6 +162,8 @@ class Analyzer:
         self.max_chars = int(cfg["max_description_chars"])
         self.max_tokens = int(cfg["max_tokens"])
         self.effort: str | None = cfg.get("effort")
+        if self.effort is None and not self.model.startswith("claude-haiku-4"):
+            self.effort = "low"  # modèles récents : réflexion minimale, inutile pour cette tâche et facturée
         self.use_schema = bool(cfg["structured_output"])
         pricing = {**DEFAULT_PRICING, **{k: tuple(v) for k, v in (cfg.get("pricing") or {}).items()}}
         self.price_in, self.price_out = pricing.get(self.model, (1.0, 5.0))

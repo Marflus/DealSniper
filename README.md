@@ -21,7 +21,15 @@ Pour chaque site, à chaque passage :
 3. **filtre gratuit** : catégorie, budget, France uniquement, mots interdits (« oxydé », « iCloud »…) ;
 4. **fiche détaillée**, seulement pour les nouvelles retenues, puis nouveau filtre sur la description ;
 5. **Claude** note de 1 à 10, estime la marge, donne une question à poser au vendeur ;
-6. **notification** : 🎯 un message par annonce ≥ 7/10, 👀 un récapitulatif pour celles à 5-6/10.
+6. **notification** : un message par annonce ≥ 7/10, un récapitulatif 👀 pour celles à 5-6/10.
+
+```
+Dell Latitude E5530 sans système d'exploitation
+💶 Achat : 20 €
+📈 Revente : 180 € (marge +143 €)
+🔧 Panne : système d'exploitation absent
+🔗 Voir l'annonce
+```
 
 Un site qui refuse l'accès (HTTP 401/403, robots.txt) est mis en pause 6 h et vous êtes prévenu : rien n'est
 contourné. Les requêtes sont espacées et identifiées honnêtement (`DealSniper/3.0`).
@@ -93,8 +101,9 @@ python -m dealsniper ui                  # puis http://127.0.0.1:5000
 python -m dealsniper ui --host 0.0.0.0   # accessible depuis le téléphone sur le même Wi-Fi
 ```
 
-- **Annonces** : toutes les annonces vues (notées par l'IA ou écartées par le filtre, avec la raison),
-  filtrables par texte, site, catégorie, type, note, prix, marge, période ; tri par date, note, marge ou prix.
+- **Annonces** : cartes avec photo, note, barre Achat / Revente / Marge, panne suspectée, puis lieu, type de vente,
+  site et catégorie. Filtres : texte, notées / écartées / toutes, site, catégorie, type, note, prix, marge, période ;
+  tri par date, note, marge ou prix.
 - **Recherches & filtres** : recherches de chaque site, catégories et budgets, mots interdits, seuils de
   notification, modèle et plafond de dépense. « Enregistrer » écrit dans `config.yaml` en gardant les commentaires.
 - Boutons **Lancer un passage** et **Test notif**.
@@ -110,8 +119,19 @@ python -m dealsniper ui             # interface web locale
 python -m dealsniper test-notif     # fausse annonce sur Telegram / Discord
 python -m dealsniper recap          # annonces notées ces 24 dernières heures (--hours N)
 python -m dealsniper reset          # oublie les annonces déjà vues
-python -m dealsniper -v run         # logs détaillés
+python -m dealsniper -v run         # logs détaillés (au lieu des lignes de progression)
 ```
+
+Pendant un passage, le terminal (et l'interface web) affiche une ligne par site, mise à jour en direct :
+
+```
+eBay : Recherche "thinkpad" — 25 annonces /
+Leboncoin : 50 annonces · 6 nouvelles · 2 analysées · 0 notifiées
+```
+
+Un connecteur alimente cette ligne en appelant `self.report(requete, nb_annonces)` après chaque recherche.
+Chaque annonce notée reçoit aussi une **facilité de réparation** de 1 à 10 (10 = aucune réparation ou pièce
+qui se change sans outil, 1 = soudure ou panne inconnue), visible dans l'interface et sur Telegram.
 
 ## Où le faire tourner
 

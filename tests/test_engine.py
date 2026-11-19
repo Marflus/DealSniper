@@ -70,7 +70,7 @@ class FakeSite(Site):
 
 def fake_analyze(ads, config, budget):
     for ad in ads:
-        ad.analysis = {"type_affaire": "reparation", "score_rentabilite": 8, "confiance": "haute",
+        ad.analysis = {"type_affaire": "reparation", "score_rentabilite": 8, "facilite_reparation": 9,
                        "marge_nette_estimee": 80}
     return AnalysisResult(analyzed=list(ads), cost_usd=0.001)
 

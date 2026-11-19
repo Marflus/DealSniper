@@ -1,0 +1,232 @@
+# Configuration figée utilisée par les tests (indépendante de votre config.yaml).
+
+# -----------------------------------------------------------------------------
+#  Sites surveillés : un bloc par fichier de dealsniper/sites/
+#  interval : pause (secondes, tirée au hasard) entre deux passages en mode `watch`
+# -----------------------------------------------------------------------------
+sites:
+  # API officielle eBay (secrets EBAY_CLIENT_ID / EBAY_CLIENT_SECRET), objets situés en France.
+  #   condition : parts (pour pièces), used (occasion), any (tout) ; max_price en euros
+  ebay:
+    enabled: true
+    interval: [600, 900]       # 16 recherches toutes les 10-15 min ≈ 2 000 appels/jour (quota : 5 000)
+    marketplace: EBAY_FR
+    country: FR
+    limit: 100                 # annonces récentes par recherche (max 200)
+    searches:
+      # --- À réparer ---
+      - {query: "thinkpad", condition: parts, max_price: 120}
+      - {query: "dell latitude", condition: parts, max_price: 120}
+      - {query: "hp elitebook", condition: parts, max_price: 120}
+      - {query: "macbook", condition: parts, max_price: 180}
+      - {query: "ps5", condition: parts, max_price: 180}
+      - {query: "ps4", condition: parts, max_price: 80}
+      - {query: "xbox series", condition: parts, max_price: 150}
+      - {query: "nintendo switch", condition: parts, max_price: 100}
+      - {query: "steam deck", condition: parts, max_price: 200}
+      - {query: "tv led", condition: parts, max_price: 100}
+      - {query: "ecran pc", condition: parts, max_price: 60}
+      # --- Revente directe (occasion fonctionnelle, prix bas) ---
+      - {query: "thinkpad t480", condition: used, max_price: 150}
+      - {query: "ps5", condition: used, max_price: 250}
+      - {query: "nintendo switch oled", condition: used, max_price: 160}
+      - {query: "makita sans batterie", condition: any, max_price: 80}
+      - {query: "dewalt machine nue", condition: any, max_price: 80}
+
+
+  # Vos propres sites : copiez dealsniper/sites/_template.py, puis ajoutez un bloc ici.
+  # mon_site:
+  #   enabled: true
+  #   interval: [1800, 3600]
+  #   list_url: "https://exemple.fr/annonces?tri=recent"
+
+# -----------------------------------------------------------------------------
+#  Réseau (commun à tous les sites)
+# -----------------------------------------------------------------------------
+network:
+  user_agent: "DealSniper/3.0 (veille personnelle non commerciale)"  # identification honnête
+  min_host_interval: 10        # secondes minimum entre deux requêtes vers un même site
+  detail_delay: [2, 6]         # pause avant chaque lecture de fiche détaillée
+  access_denied_pause_hours: 6 # un refus (401/403, robots.txt) met le site en pause
+
+# -----------------------------------------------------------------------------
+#  Localisation : uniquement les annonces situées en France
+# -----------------------------------------------------------------------------
+location:
+  france_only: true           # rejette « Provenance : Chine », « Lieu : Allemagne », prix en £ / $…
+  exclude_overseas: true      # rejette aussi les DOM-TOM (codes postaux 971-976, 986-989)
+
+# -----------------------------------------------------------------------------
+#  Pré-filtre (Python pur, 0 token)
+# -----------------------------------------------------------------------------
+filters:
+  drop_uncategorized: true    # rejette les annonces qui ne correspondent à aucune catégorie
+  keep_unknown_price: true    # garde les annonces dont le prix n'a pas pu être lu
+  min_price: 5                # en dessous : souvent un faux prix (« 1 € à débattre »)
+
+  # Signaux « bonne affaire » (titre + description), valables pour toutes les catégories.
+  # Ils aident à repérer les objets FONCTIONNELS vendus sous leur cote (revente directe) :
+  # ces annonces sont priorisées et le signal est transmis à Claude.
+  deal_signals:
+    - "urgent"
+    - "vente rapide"
+    - "demenagement"
+    - "cause depart"
+    - "depart a l'etranger"
+    - "succession"
+    - "debarras"
+    - "vide maison"
+    - "doit partir"
+    - "prix sacrifie"
+    - "a saisir"
+    - "jamais servi"
+    - "neuf sous blister"
+    - "sous garantie"
+    - "avec facture"
+    - "comme neuf"
+    - "comme neuve"
+    - "tres bon etat"
+
+  # Annonces d'acheteurs (cherchés dans le TITRE uniquement)
+  buyer_ad_keywords:
+    - "recherche"
+    - "recherché"
+    - "achete"
+    - "j'achete"
+    - "je cherche"
+    - "rachat"
+    - "cherche"
+
+  # Pannes rédhibitoires / pièges, cherchés dans titre + description
+  global_exclude_keywords:
+    - "carte mere hs"
+    - "carte mere morte"
+    - "carte mere defectueuse"
+    - "sans carte mere"
+    - "pour pieces uniquement sans carte mere"
+    - "oxyde"
+    - "oxydation"
+    - "tombe dans l'eau"
+    - "degat des eaux"
+    - "liquide renverse"
+    - "bloque icloud"
+    - "verrouille icloud"
+    - "compte google bloque"
+    - "frp"
+    - "mot de passe bios"
+    - "bios verrouille"
+    - "bios bloque"
+    - "computrace"
+    - "blacklist"
+    - "vole"
+    - "ecran casse"            # retirez-le si vous changez des dalles
+    - "ne s'allume pas du tout apres orage"
+    - "boite vide"
+    - "photo seulement"
+    - "lot de pieces"
+    # Accessoires vendus seuls
+    - "coque seule"
+    - "housse seule"
+    - "boite seule"
+    - "chargeur seul"
+    - "manette seule"
+    - "telecommande seule"
+    - "pied seul"
+    - "notice seule"
+
+# -----------------------------------------------------------------------------
+#  Catégories (la première dont un mot-clé est dans le titre l'emporte)
+#    keywords         : reconnaissance de la catégorie
+#    max_budget       : prix + livraison maximum (€)
+#    min_price        : (optionnel) surcharge le min_price global
+#    exclude_keywords : exclusions propres à la catégorie
+#    include_keywords : « signaux » de panne simple → priorisés et transmis à Claude
+#    require_include  : true = on n'envoie à Claude QUE les annonces avec un signal
+#                       (panne simple OU bonne affaire)
+#  Les budgets valent pour les deux types d'affaires : un appareil fonctionnel
+#  sous sa cote doit aussi y rentrer (relevez-les si vous visez du haut de gamme).
+# -----------------------------------------------------------------------------
+categories:
+  - name: "PC portables pros"
+    keywords: ["thinkpad", "latitude", "elitebook", "probook", "zbook", "dell precision", "macbook pro",
+               "macbook air", "dell xps", "surface pro", "surface laptop", "travelmate", "lifebook", "dynabook"]
+    max_budget: 180
+    exclude_keywords: ["coque seule", "clavier seul", "chargeur seul", "nappe seule"]
+    include_keywords: ["sans disque", "sans ssd", "sans disque dur", "sans hdd", "sans os", "sans windows",
+                       "sans chargeur", "batterie hs", "batterie morte", "batterie a changer",
+                       "ecran a changer", "clavier hs", "charniere", "ne charge plus", "port usb-c", "dc jack"]
+    require_include: false
+
+  - name: "Mini-PC"
+    keywords: ["mini pc", "mini-pc", "nuc", "optiplex micro", "thinkcentre tiny", "thinkcentre m7", "elitedesk mini",
+               "prodesk mini", "mac mini"]
+    max_budget: 120
+    include_keywords: ["sans disque", "sans ssd", "sans ram", "sans memoire", "sans os", "sans alimentation",
+                       "sans chargeur"]
+
+  - name: "PC portables grand public"
+    keywords: ["pc portable", "ordinateur portable", "laptop", "ideapad", "vivobook", "zenbook", "aspire",
+               "pavilion", "inspiron", "omen", "rog", "tuf gaming", "legion", "predator", "nitro", "chromebook"]
+    max_budget: 150
+    exclude_keywords: ["coque seule", "clavier seul", "chargeur seul"]
+    include_keywords: ["sans disque", "sans ssd", "sans os", "sans windows", "sans chargeur", "batterie hs",
+                       "ecran a changer", "charniere", "ne charge plus", "lent", "a reinstaller"]
+
+  - name: "Raspberry Pi & micro-ordinateurs"
+    keywords: ["raspberry", "raspberry pi"]
+    max_budget: 40
+    exclude_keywords: ["boitier seul", "alimentation seule"]
+
+  - name: "Consoles"
+    keywords: ["ps5", "ps4", "playstation", "xbox", "switch", "steam deck", "nintendo"]
+    max_budget: 200
+    exclude_keywords: ["jeu seul", "manette seule", "boite seule", "jeux uniquement", "puce", "hackee", "ban",
+                       "switch reseau", "gigabit", "ethernet"]
+    include_keywords: ["surchauffe", "bruyante", "ventilateur", "hdmi", "port hdmi", "lecteur hs",
+                       "ne lit plus", "joycon", "drift", "s'eteint", "ecran bleu", "carte sd"]
+
+  - name: "Écrans & TV"
+    keywords: ["ecran", "moniteur", "tv", "televiseur", "television", "oled", "qled"]
+    max_budget: 150
+    exclude_keywords: ["dalle cassee", "dalle fissuree", "ecran fissure", "fissure", "impact", "pied seul",
+                       "telecommande seule"]
+    include_keywords: ["retroeclairage", "backlight", "ecran noir avec son", "son mais pas d'image",
+                       "pas d'image", "led", "alimentation", "ne s'allume plus", "clignote"]
+
+  - name: "Outillage sans fil"
+    keywords: ["makita", "dewalt", "milwaukee", "bosch pro", "hikoki", "metabo", "festool", "ryobi"]
+    max_budget: 120
+    exclude_keywords: ["batterie seule", "chargeur seul", "coffret vide"]
+    include_keywords: ["sans batterie", "machine nue", "solo", "sans chargeur", "body only"]
+
+# -----------------------------------------------------------------------------
+#  Analyse IA (Anthropic)
+# -----------------------------------------------------------------------------
+analyzer:
+  # Modèle économique. claude-haiku-5-5 est ~10x moins cher que claude-haiku-4-5
+  # ($0.10 / $0.50 par million de tokens contre $1 / $5) : passez-y si vous voulez
+  # réduire encore le coût (et ajoutez alors  effort: low  ci-dessous).
+  model: "claude-haiku-4-5"
+  # effort: low               # uniquement pour les modèles qui le supportent (pas haiku-4-5)
+  batch_size: 20
+  max_description_chars: 400
+  max_tokens: 4096            # plafond de la réponse (le lot est coupé en deux s'il est atteint)
+  max_daily_cost_usd: 1.00    # sécurité anti-facture : ~1 000 annonces/jour avec haiku-4-5 (null = aucun plafond)
+  max_retries: 4              # retries automatiques (429, 5xx, surcharge, réseau)
+  timeout_seconds: 90
+  structured_output: true     # réponse JSON garantie par schéma
+
+# -----------------------------------------------------------------------------
+#  Notifications
+# -----------------------------------------------------------------------------
+notifier:
+  min_score: 7                # bonne affaire : un message Telegram par annonce
+  watch_score: 5              # « à vérifier » (5-6/10) : regroupées dans un seul message par passage (null = désactivé)
+  # types d'affaires à notifier : reparation (objet en panne) / revente_directe (fonctionnel sous la cote)
+  deal_types: ["reparation", "revente_directe"]
+
+# -----------------------------------------------------------------------------
+#  Stockage (data/dealsniper.db)
+# -----------------------------------------------------------------------------
+storage:
+  seen_retention_days: 90     # durée de mémoire des annonces déjà vues

@@ -14,6 +14,7 @@ ITEM = {
     "shippingOptions": [{"shippingCost": {"value": "6.50", "currency": "EUR"}}],
     "itemLocation": {"postalCode": "69***", "country": "FR", "city": "Lyon"},
     "seller": {"feedbackPercentage": "99.2", "feedbackScore": 1534},
+    "image": {"imageUrl": "https://i.ebayimg.com/images/g/abc/s-l500.jpg"},
 }
 DETAILS = {"description": "<p>Écran parfait, vendu sans SSD ni chargeur.</p>",
            "condition": "Pour pièces", "conditionDescription": "Ne démarre pas sans disque",
@@ -26,6 +27,7 @@ def test_filter_and_conversion():
     ad = ebay.item_to_ad(ITEM)
     assert ad.uid == "ebay:123456789012" and ad.price == 85.0 and ad.shipping == 6.5
     assert ad.location == "Lyon 69***" and ad.seller == {"positive_pct": 99.2, "reviews": 1534}
+    assert ad.image == "https://i.ebayimg.com/images/g/abc/s-l500.jpg"
     auction = ebay.item_to_ad({**ITEM, "buyingOptions": ["AUCTION"], "currentBidPrice": {"value": "12", "currency": "EUR"}})
     assert auction.price == 12.0 and auction.price_mode == "enchere"
 

@@ -4,97 +4,159 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Deal Sniper</title>
+  <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
-    <h1>🎯 Deal Sniper</h1>
-    <nav>
+  <header class="topbar">
+    <div class="brand"><img src="/static/logo.svg" alt="" width="30" height="30"><span>Deal<b>Sniper</b></span></div>
+    <nav class="tabs">
       <button class="tab active" data-tab="ads">Annonces</button>
-      <button class="tab" data-tab="settings">Recherches &amp; filtres</button>
+      <button class="tab" data-tab="settings">Réglages</button>
     </nav>
-    <div class="actions">
-      <span id="cost" class="muted"></span>
+    <div class="top-actions">
+      <div id="budget" class="budget" title="Dépense IA du jour / limite quotidienne">
+        <span id="budget-text">IA : —</span>
+        <div class="budget-bar"><div id="budget-fill"></div></div>
+      </div>
+      <button id="test-notif" class="ghost" title="Envoyer une fausse annonce sur Telegram / Discord">🔔</button>
       <button id="run" class="primary">▶ Lancer un passage</button>
-      <button id="test-notif">🔔 Test notif</button>
     </div>
   </header>
 
   <main>
     <!-- ANNONCES -->
     <section id="tab-ads">
-      <div class="filters">
-        <input id="f-text" type="search" placeholder="Rechercher (titre, description, ville…)">
-        <select id="f-status">
-          <option value="analyzed">Notées par l'IA</option>
-          <option value="rejected">Écartées par le filtre</option>
-          <option value="">Toutes</option>
-        </select>
-        <select id="f-site"><option value="">Tous les sites</option></select>
-        <select id="f-category"><option value="">Toutes catégories</option></select>
-        <select id="f-type">
-          <option value="">Tous types</option>
-          <option value="reparation">🔧 Réparation</option>
-          <option value="revente_directe">💎 Revente directe</option>
-        </select>
-        <label class="inline">Note ≥ <input id="f-score" type="number" min="0" max="10" value="0"></label>
-        <label class="inline">Prix ≤ <input id="f-price" type="number" min="0" placeholder="€"></label>
-        <label class="inline">Marge ≥ <input id="f-margin" type="number" placeholder="€"></label>
-        <select id="f-days">
-          <option value="1">24 h</option>
-          <option value="7" selected>7 jours</option>
-          <option value="30">30 jours</option>
-        </select>
-        <select id="f-sort">
-          <option value="recent">Plus récentes</option>
-          <option value="score">Meilleure note</option>
-          <option value="margin">Meilleure marge</option>
-          <option value="price">Prix croissant</option>
-        </select>
-        <label class="inline"><input id="f-notified" type="checkbox"> Notifiées</label>
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <input id="f-text" class="search" type="search" placeholder="🔍  Rechercher un modèle, une ville…">
+          <div id="f-status" class="segmented" role="group" aria-label="Annonces affichées">
+            <button data-value="analyzed" class="on">Notées</button>
+            <button data-value="rejected">Écartées</button>
+            <button data-value="">Toutes</button>
+          </div>
+          <select id="f-sort" title="Trier">
+            <option value="recent">Plus récentes</option>
+            <option value="score">Meilleure note</option>
+            <option value="margin">Meilleure marge</option>
+            <option value="price">Prix croissant</option>
+          </select>
+        </div>
+        <div class="toolbar-row">
+          <div id="f-sites" class="site-chips" aria-label="Sites"></div>
+        </div>
+        <div class="toolbar-row filters">
+          <select id="f-category"><option value="">Toutes catégories</option></select>
+          <select id="f-type">
+            <option value="">Réparation + revente</option>
+            <option value="reparation">🔧 À réparer</option>
+            <option value="revente_directe">💎 Revente directe</option>
+          </select>
+          <select id="f-score">
+            <option value="0">Toutes les notes</option>
+            <option value="5">Note ≥ 5</option>
+            <option value="7">Note ≥ 7</option>
+            <option value="8">Note ≥ 8</option>
+          </select>
+          <select id="f-ease">
+            <option value="0">Toute facilité</option>
+            <option value="5">Facilité ≥ 5</option>
+            <option value="7">Facilité ≥ 7</option>
+            <option value="9">Facilité ≥ 9</option>
+          </select>
+          <label class="field">Prix max <input id="f-price" type="number" min="0" placeholder="—"> €</label>
+          <label class="field">Marge min <input id="f-margin" type="number" placeholder="—"> €</label>
+          <select id="f-days">
+            <option value="1">24 heures</option>
+            <option value="7" selected>7 jours</option>
+            <option value="30">30 jours</option>
+          </select>
+          <button id="reset-filters" class="link">Réinitialiser</button>
+        </div>
       </div>
-      <p id="summary" class="muted"></p>
+      <div id="progress" class="progress" hidden></div>
+      <p id="summary" class="muted small"></p>
       <div id="ads" class="grid"></div>
     </section>
 
     <!-- RÉGLAGES -->
     <section id="tab-settings" hidden>
       <div id="settings-error" class="banner error" hidden></div>
-      <p class="muted">Les changements sont écrits dans <code>config.yaml</code> et s'appliquent au prochain passage.
-        Pour GitHub Actions, pensez à committer et pousser le fichier.</p>
+      <div class="settings">
+        <nav class="side-nav">
+          <button class="side on" data-panel="p-sites">🛒 Sites et recherches</button>
+          <button class="side" data-panel="p-categories">🗂️ Catégories</button>
+          <button class="side" data-panel="p-filters">🚫 Filtres</button>
+          <button class="side" data-panel="p-notifs">🔔 Notifications</button>
+          <button class="side" data-panel="p-budget">💳 Budget IA</button>
+        </nav>
 
-      <h2>Sites et recherches</h2>
-      <div id="sites"></div>
+        <div class="panels">
+          <div id="p-sites" class="panel-page">
+            <h2>Sites et recherches</h2>
+            <p class="muted small">Ce que chaque site doit chercher. Les annonces sont ensuite triées par le filtre
+              puis notées par l'IA.</p>
+            <div id="sites"></div>
+          </div>
 
-      <h2>Catégories</h2>
-      <p class="muted">Mots-clés séparés par des virgules. Une annonce dont le titre ne contient aucun mot-clé
-        de catégorie est écartée.</p>
-      <div id="categories"></div>
-      <button id="add-category">+ Ajouter une catégorie</button>
+          <div id="p-categories" class="panel-page" hidden>
+            <h2>Catégories</h2>
+            <p class="muted small">Mots-clés séparés par des virgules. Une annonce dont le titre ne contient aucun
+              mot-clé de catégorie est écartée.</p>
+            <div id="categories" class="cat-list"></div>
+            <button id="add-category" class="ghost">+ Ajouter une catégorie</button>
+          </div>
 
-      <h2>Filtres globaux</h2>
-      <div class="form">
-        <label>Mots interdits (titre + description)<textarea id="g-exclude" rows="4"></textarea></label>
-        <label>Signaux « bonne affaire »<textarea id="g-signals" rows="2"></textarea></label>
-        <label>Annonces d'acheteurs (titre)<textarea id="g-buyer" rows="2"></textarea></label>
-        <label class="inline">Prix minimum <input id="g-minprice" type="number" min="0"> €</label>
-        <label class="inline"><input id="g-france" type="checkbox"> France uniquement</label>
-        <label class="inline"><input id="g-overseas" type="checkbox"> Exclure les DOM-TOM</label>
-      </div>
+          <div id="p-filters" class="panel-page" hidden>
+            <h2>Filtres</h2>
+            <div class="panel form">
+              <label>Mots interdits (titre + description)<textarea id="g-exclude" rows="5"></textarea></label>
+              <label>Signaux « bonne affaire »<textarea id="g-signals" rows="3"></textarea></label>
+              <label>Annonces d'acheteurs (titre)<textarea id="g-buyer" rows="2"></textarea></label>
+              <div class="row">
+                <label class="field">Prix minimum <input id="g-minprice" type="number" min="0"> €</label>
+                <label class="field"><input id="g-france" type="checkbox"> France uniquement</label>
+                <label class="field"><input id="g-overseas" type="checkbox"> Exclure les DOM-TOM</label>
+              </div>
+            </div>
+          </div>
 
-      <h2>Notifications et IA</h2>
-      <div class="form">
-        <label class="inline">Bonne affaire à partir de <input id="n-min" type="number" min="1" max="10">/10</label>
-        <label class="inline">« À vérifier » à partir de <input id="n-watch" type="number" min="1" max="10">/10</label>
-        <label class="inline"><input id="n-repair" type="checkbox"> Réparation</label>
-        <label class="inline"><input id="n-direct" type="checkbox"> Revente directe</label>
-        <label class="inline">Modèle Claude <input id="a-model" type="text"></label>
-        <label class="inline">Plafond / jour <input id="a-cap" type="number" step="0.1" min="0"> $</label>
-      </div>
+          <div id="p-notifs" class="panel-page" hidden>
+            <h2>Notifications</h2>
+            <div class="panel form">
+              <div class="row">
+                <label class="field">Message pour une note ≥ <input id="n-min" type="number" min="1" max="10">/10</label>
+                <label class="field">Récap « à vérifier » dès <input id="n-watch" type="number" min="1" max="10">/10</label>
+              </div>
+              <div class="row">
+                <label class="field"><input id="n-repair" type="checkbox"> Objets à réparer</label>
+                <label class="field"><input id="n-direct" type="checkbox"> Revente directe</label>
+              </div>
+            </div>
+          </div>
 
-      <div class="savebar">
-        <button id="save" class="primary">💾 Enregistrer</button>
-        <span id="save-status" class="muted"></span>
+          <div id="p-budget" class="panel-page" hidden>
+            <h2>Budget IA</h2>
+            <div class="panel form">
+              <p id="budget-today" class="big"></p>
+              <label class="field">Limite quotidienne <input id="a-cap" type="number" step="0.05" min="0"> $</label>
+              <p class="muted small">Une fois la limite atteinte, les annonces sont mises en attente et analysées le
+                lendemain. Laissez vide pour ne fixer aucune limite.</p>
+              <label class="field">Modèle
+                <select id="a-model">
+                  <option value="claude-haiku-4-5">Claude Haiku 4.5 — environ 0,001 $ par annonce</option>
+                  <option value="claude-haiku-5-5">Claude Haiku 5.5 — environ 10 fois moins cher</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="savebar">
+            <button id="save" class="primary">Enregistrer</button>
+            <span id="save-status" class="muted small"></span>
+            <span class="muted small push">Enregistré dans <code>config.yaml</code>, appliqué au prochain passage.</span>
+          </div>
+        </div>
       </div>
     </section>
   </main>
