@@ -1,0 +1,25 @@
+# Service systemd pour faire tourner le démon 24 h/24 (Raspberry Pi / Linux).
+# Installation :
+#   sudo cp deploy/dealsniper.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now dealsniper
+#   journalctl -u dealsniper -f        # suivre les logs
+# Adaptez User et les chemins (ici : utilisateur « pi », projet dans /home/pi/DealSniper).
+[Unit]
+Description=Deal Sniper (veille de bonnes affaires)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/DealSniper
+ExecStart=/home/pi/DealSniper/.venv/bin/python -m dealsniper daemon
+Restart=on-failure
+RestartSec=60
+# Ressources modestes : un Raspberry Pi suffit largement.
+MemoryMax=300M
+CPUQuota=50%
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,7 @@
     recap [--hours 24] envoie sur Telegram les annonces analysées récemment
     reset-seen        oublie les annonces déjà vues
     dashboard         interface web locale (http://127.0.0.1:5000)
+    daemon            veille 24 h/24 (Raspberry Pi) : une boucle par source, base SQLite
 """
 
 from __future__ import annotations
@@ -111,6 +112,12 @@ def _cmd_reset_seen(args, config) -> int:
     return 0
 
 
+def _cmd_daemon(args, config) -> int:
+    from .daemon.runner import run
+
+    return run(config)
+
+
 def _cmd_dashboard(args, config) -> int:
     from .web.app import create_app
 
@@ -142,6 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_recap.set_defaults(func=_cmd_recap)
     sub.add_parser("reset-seen", help="oublie les annonces vues").set_defaults(func=_cmd_reset_seen)
     sub.add_parser("dashboard", help="interface web locale").set_defaults(func=_cmd_dashboard)
+    sub.add_parser("daemon", help="veille 24 h/24 (asyncio, SQLite)").set_defaults(func=_cmd_daemon)
     return parser
 
 

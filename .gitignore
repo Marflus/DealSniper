@@ -30,6 +30,9 @@ Thumbs.db
 # Données locales : verrou et fichiers corrompus
 # (seen_ads.json / deals.json / runs.json restent versionnables pour GitHub Actions)
 data/.run.lock
+data/*.db
+data/*.db-wal
+data/*.db-shm
 data/*.corrupt
 data/*.tmp
 *.eml

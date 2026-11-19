@@ -265,3 +265,20 @@ notifier:
 storage:
   seen_retention_days: 60     # durée de mémoire des annonces déjà vues
   max_deals_history: 2000     # annonces analysées conservées pour l'interface
+
+# -----------------------------------------------------------------------------
+#  Démon 24 h/24 (python -m dealsniper daemon) — Raspberry Pi / serveur Linux
+# -----------------------------------------------------------------------------
+daemon:
+  # Identification honnête auprès des sites (jamais déguisée en navigateur)
+  user_agent: "DealSniper/3.0 (veille personnelle non commerciale)"
+  min_host_interval: 10        # secondes minimum entre deux requêtes vers un même site
+  detail_delay: [2, 6]         # pause aléatoire avant chaque lecture de fiche (étape 2)
+  access_denied_pause_hours: 6 # un refus (401/403, robots.txt) met la source en pause
+  seen_retention_days: 90
+  connectors:
+    ebay:  {enabled: true, interval: [600, 900]}    # API officielle : ~2 000 appels/jour sur 5 000
+    email: {enabled: true, interval: [900, 1200]}
+    rss:   {enabled: true, interval: [900, 1800]}
+    # example_site:            # modèle à adapter (voir dealsniper/daemon/connectors/example_site.py)
+    #   enabled: false

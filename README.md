@@ -68,7 +68,13 @@ DealSniper/
 │   ├── analyzer.py           # notation par Claude (lots, schéma JSON, coût)
 │   ├── notifier.py           # Telegram / Discord
 │   ├── storage.py            # fichiers d'état JSON (écriture atomique)
-│   └── web/                  # interface web locale (Flask)
+│   ├── web/                  # interface web locale (Flask)
+│   └── daemon/               # veille 24 h/24 (asyncio + httpx + SQLite)
+│       ├── runner.py         # orchestrateur : une boucle par connecteur, détection en deux temps
+│       ├── http.py           # client poli : identification, délai par site, robots.txt, 429/403
+│       ├── store.py          # base SQLite (annonces vues, pauses, coûts)
+│       └── connectors/       # ebay.py, rss.py, email.py, example_site.py (modèle à adapter)
+├── deploy/dealsniper.service # service systemd pour Raspberry Pi
 ├── data/                     # état : annonces vues, historique, coûts
 ├── tests/                    # tests unitaires (pytest)
 └── .github/workflows/        # passage planifié (dealsniper.yml) et tests (tests.yml)
@@ -223,6 +229,7 @@ python -m dealsniper test-notif          # fausse annonce sur Telegram / Discord
 python -m dealsniper recap --hours 24    # annonces analysées récemment, envoyées sur Telegram
 python -m dealsniper reset-seen          # oublie l'historique des annonces vues
 python -m dealsniper dashboard           # interface web sur http://127.0.0.1:5000
+python -m dealsniper daemon              # veille 24 h/24 (Raspberry Pi, voir § 8 bis)
 python -m pytest                         # tests (pip install pytest)
 ```
 
@@ -248,6 +255,42 @@ GitHub peut retarder ou sauter des passages planifiés aux heures chargées : c'
 (les emails des 3 derniers jours sont relus). ~36 passages/jour ≈ 1 100 min/mois, sous le quota gratuit de 2 000 min.
 
 ---
+
+## 8 bis. Démon 24 h/24 sur Raspberry Pi / serveur Linux
+
+Alternative à GitHub Actions, plus réactive : `python -m dealsniper daemon` fait tourner une boucle asyncio par
+source, chacune à son rythme (eBay toutes les 10-15 min, emails toutes les 15-20 min…), avec une base SQLite locale
+(`data/dealsniper.db`). Consommation : quelques dizaines de Mo de RAM, CPU quasi nul.
+
+**Détection en deux temps** : (1) liste légère des annonces récentes ; (2) pour les seules annonces jamais vues
+**et** qui passent le pré-filtre, lecture de la fiche détaillée après une courte pause aléatoire, puis nouveau
+passage du filtre sur la description, analyse Claude et notification.
+
+**Comportement réseau responsable** (`dealsniper/daemon/http.py`) :
+- identification honnête (`daemon.user_agent`), jamais déguisée en navigateur ;
+- au moins `min_host_interval` secondes entre deux requêtes vers un même site ;
+- `robots.txt` respecté pour les connecteurs qui lisent des pages web ;
+- HTTP 429 / 5xx : attente exponentielle (Retry-After respecté) ;
+- HTTP 401 / 403 ou robots.txt : **le site refuse, la source est mise en pause** (6 h par défaut) et vous êtes
+  prévenu. Rien n'est contourné.
+
+**Ajouter une source** : créez `dealsniper/daemon/connectors/ma_source.py` (classe héritant de `Connector`, avec
+`list_recent` et éventuellement `fetch_detail`), ajoutez-la à `REGISTRY` dans `connectors/__init__.py`, puis
+activez-la dans `config.yaml > daemon.connectors`. Le modèle commenté `example_site.py` montre un connecteur web
+piloté par des sélecteurs CSS — à réserver aux sites publics qui l'autorisent.
+
+**Installation sur le Raspberry Pi** :
+```bash
+git clone https://github.com/Marflus/DealSniper.git && cd DealSniper
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env && nano .env            # secrets
+.venv/bin/python -m dealsniper daemon        # essai au premier plan (Ctrl+C pour arrêter)
+sudo cp deploy/dealsniper.service /etc/systemd/system/   # adaptez User et chemins
+sudo systemctl daemon-reload && sudo systemctl enable --now dealsniper
+journalctl -u dealsniper -f                  # logs
+```
+Si le démon tourne sur le Pi, désactivez le passage planifié GitHub (supprimez le bloc `schedule:` du workflow)
+pour ne pas analyser deux fois les mêmes annonces.
 
 ## 9. Coûts
 
