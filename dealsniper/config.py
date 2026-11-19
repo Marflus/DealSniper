@@ -55,6 +55,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "notifier": {
         "min_score": 7,
+        "watch_score": 5,
         "max_per_run": None,
         "deal_types": ["reparation", "revente_directe"],
         "health_alerts": True,

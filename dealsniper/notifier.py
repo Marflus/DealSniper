@@ -20,6 +20,7 @@ from .models import Ad
 log = logging.getLogger(__name__)
 
 TIMEOUT = 15
+MESSAGE_LIMIT = 3500  # Telegram : 4096 caractères max par message
 MAX_ATTEMPTS = 3
 DEAL_LABELS = {"reparation": "🔧 Réparation", "revente_directe": "💎 Revente directe"}
 CONFIDENCE_LABELS = {"haute": "confiance haute", "moyenne": "confiance moyenne", "faible": "⚠️ confiance faible"}
@@ -52,10 +53,8 @@ def format_telegram(ad: Ad) -> str:
     label = DEAL_LABELS.get(ad.deal_type, "")
     header = f"{_score_emoji(ad.score)} <b>{ad.score}/10</b> · {label} · {e(ad.category or '')}"
     lines = [header, f"<b>{e(ad.title)}</b>", "", f"💶 Prix : {_price_line(ad)}"]
-    if ad.location:
-        lines.append(f"📍 {e(ad.location)} · <i>{e(ad.source)}</i>")
-    else:
-        lines.append(f"🛒 <i>{e(ad.source)}</i>")
+    delivery = " · 📦 livraison possible" if ad.delivery_possible else ""
+    lines.append(f"📍 {e(ad.location or 'lieu ?')} · <i>{e(ad.source)}</i>{delivery}")
     if ad.deal_type == "reparation":
         lines.append(f"🔧 Panne probable : {e(a.get('panne_probable', '?'))}")
         part, resale = _eur(a.get("cout_piece_estime")), _eur(a.get("valeur_revente_estimee"))
@@ -97,6 +96,32 @@ def format_discord(ad: Ad) -> dict[str, Any]:
         "fields": fields,
         "footer": {"text": f"Deal Sniper · {ad.category} · {ad.source}"},
     }
+
+
+def _digest_line(ad: Ad, html_mode: bool) -> str:
+    """Une ligne de récapitulatif : note, titre cliquable, prix, lieu, marge."""
+    a = ad.analysis or {}
+    margin = _eur(a.get("marge_nette_estimee"))
+    delivery = " · 📦" if ad.delivery_possible else ""
+    details = f"{_price_line(ad)} · {ad.location or 'lieu ?'}{delivery} · marge ≈ {margin}"
+    reason = a.get("justification_courte", "")
+    if html_mode:
+        e = html.escape
+        return (f'{_score_emoji(ad.score) if ad.score >= 7 else "•"} <b>{ad.score}/10</b> '
+                f'<a href="{e(ad.url, quote=True)}">{e(ad.title[:70])}</a>\n   {e(details)}\n   <i>{e(reason)}</i>')
+    return f"• **{ad.score}/10** [{ad.title[:70]}]({ad.url})\n   {details}\n   _{reason}_"
+
+
+def _chunks(header: str, lines: list[str]) -> list[str]:
+    """Découpe un récapitulatif en messages de taille acceptable."""
+    messages, current = [], header
+    for line in lines:
+        if len(current) + len(line) + 2 > MESSAGE_LIMIT:
+            messages.append(current)
+            current = header + " (suite)"
+        current += "\n\n" + line
+    messages.append(current)
+    return messages
 
 
 def format_console(ad: Ad) -> str:
@@ -180,6 +205,23 @@ class Notifier:
             ok |= self._discord(embeds=[format_discord(ad)])
         return ok
 
+    def send_digest(self, header: str, ads: list[Ad]) -> bool:
+        """Un ou quelques messages regroupant plusieurs annonces (au lieu d'un message par annonce)."""
+        if not self.channels:
+            print(header)
+            for ad in ads:
+                print(_digest_line(ad, html_mode=False))
+            return True
+        ok = False
+        if "telegram" in self.channels:
+            for message in _chunks(f"<b>{html.escape(header)}</b>", [_digest_line(a, True) for a in ads]):
+                ok |= self._telegram(message)
+                time.sleep(0.5)
+        if "discord" in self.channels:
+            for message in _chunks(f"**{header}**", [_digest_line(a, False) for a in ads]):
+                ok |= self._discord(content=message[:2000])
+        return ok
+
     def send_text(self, text: str) -> bool:
         if not self.channels:
             print(text)
@@ -192,18 +234,29 @@ class Notifier:
         return ok
 
 
+def _rank(ads: list[Ad]) -> list[Ad]:
+    return sorted(ads, key=lambda a: (-a.score, -(a.analysis or {}).get("marge_nette_estimee", 0)))
+
+
 def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
-    """Notifie les annonces au-dessus du seuil. Renvoie celles envoyées."""
+    """Bonnes affaires (≥ min_score) : un message chacune. Annonces « à vérifier »
+    (≥ watch_score) : un seul récapitulatif. Renvoie les bonnes affaires envoyées."""
     cfg = config["notifier"]
     min_score = int(cfg["min_score"])
+    watch_score = cfg.get("watch_score")
     deal_types = set(cfg.get("deal_types") or DEAL_LABELS)
-    good = [a for a in ads if a.analysis and a.score >= min_score and a.deal_type in deal_types]
-    good.sort(key=lambda a: (-a.score, -(a.analysis or {}).get("marge_nette_estimee", 0)))
+    analyzed = [a for a in ads if a.analysis and a.deal_type in deal_types]
+    good = _rank([a for a in analyzed if a.score >= min_score])
+    watch = _rank([a for a in analyzed if watch_score is not None and int(watch_score) <= a.score < min_score])
+    notifier = Notifier()
+
+    if watch:
+        header = f"👀 À vérifier ({len(watch)} annonce(s) notée(s) {watch_score}-{min_score - 1}/10)"
+        notifier.send_digest(header, watch)
     if not good:
-        log.info("Aucune annonce ≥ %d/10 à notifier.", min_score)
+        log.info("Aucune annonce ≥ %d/10 ; %d « à vérifier ».", min_score, len(watch))
         return []
 
-    notifier = Notifier()
     sent: list[Ad] = []
     max_per_run = int(cfg.get("max_per_run") or len(good))  # None = toutes
     for ad in good[:max_per_run]:

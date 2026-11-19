@@ -166,6 +166,12 @@ Lenovo ThinkPad T480 i5 16 Go sans SSD
 🔗 Voir l'annonce
 ```
 
+**Trois types de messages** :
+- 🎯 **bonne affaire** (≥ 7/10) : un message détaillé par annonce ;
+- 👀 **à vérifier** (5-6/10) : regroupées dans un seul message par passage, avec lien, prix, ville et marge
+  (utile pour les alertes email leboncoin, qui ne donnent ni description ni état : Claude reste prudent) ;
+- 📊 **récap** à la demande : `python -m dealsniper recap` ou mode `recap` du workflow.
+
 Si une source tombe en panne (mot de passe IMAP révoqué…), un message ⚠️ vous prévient, au plus une fois par jour.
 
 ---
@@ -200,6 +206,7 @@ python -m dealsniper run --loop 30       # tourne en continu (un passage toutes 
 python -m dealsniper inspect-emails      # diagnostic : annonces extraites de chaque email de la boîte
 python -m dealsniper test-email a.eml    # diagnostic sur un email enregistré
 python -m dealsniper test-notif          # fausse annonce sur Telegram / Discord
+python -m dealsniper recap --hours 24    # annonces analysées récemment, envoyées sur Telegram
 python -m dealsniper reset-seen          # oublie l'historique des annonces vues
 python -m dealsniper dashboard           # interface web sur http://127.0.0.1:5000
 python -m pytest                         # tests (pip install pytest)
@@ -220,7 +227,8 @@ Le workflow `.github/workflows/dealsniper.yml` lance un passage **toutes les heu
    - `run` : passage complet ;
    - `dry-run` : collecte + filtre détaillé, sans IA ni sauvegarde ;
    - `inspect-emails` : ce qui est extrait de chaque email (idéal après avoir configuré une alerte) ;
-   - `test-notif` : fausse annonce envoyée sur Telegram / Discord.
+   - `test-notif` : fausse annonce envoyée sur Telegram / Discord ;
+   - `recap` : les annonces analysées ces dernières 24 h, envoyées sur Telegram.
 
 GitHub peut retarder ou sauter des passages planifiés aux heures chargées : c'est normal, le suivant rattrape
 (les emails des 3 derniers jours sont relus). ~18 passages/jour ≈ 550 min/mois, sous le quota gratuit.

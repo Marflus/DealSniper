@@ -7,6 +7,7 @@
     inspect-emails    diagnostic : annonces extraites de chaque email de la boîte
     test-email F.eml  diagnostic sur un email enregistré
     test-notif        envoie une fausse annonce sur Telegram / Discord
+    recap [--hours 24] envoie sur Telegram les annonces analysées récemment
     reset-seen        oublie les annonces déjà vues
     dashboard         interface web locale (http://127.0.0.1:5000)
 """
@@ -80,6 +81,26 @@ def _cmd_test_notif(args, config) -> int:
     return 0 if ok else 1
 
 
+def _cmd_recap(args, config) -> int:
+    from datetime import datetime, timedelta, timezone
+
+    from .models import Ad
+    from .notifier import Notifier
+    from .storage import DealsStore
+
+    since = (datetime.now(timezone.utc) - timedelta(hours=args.hours)).isoformat(timespec="seconds")
+    ads = [Ad.from_dict(d) for d in DealsStore().items if d.get("analysis") and d.get("collected_at", "") >= since]
+    ads.sort(key=lambda a: -a.score)
+    notifier = Notifier()
+    if not ads:
+        notifier.send_text(f"📊 Deal Sniper : aucune annonce analysée ces {args.hours} dernières heures.")
+        return 0
+    best = ads[0].score
+    ok = notifier.send_digest(f"📊 Récap {args.hours} h : {len(ads)} annonce(s) analysée(s), meilleure {best}/10", ads)
+    print(f"Récap envoyé ({len(ads)} annonces) : {'OK' if ok else 'ÉCHEC'}")
+    return 0 if ok else 1
+
+
 def _cmd_reset_seen(args, config) -> int:
     from .storage import SeenStore
 
@@ -116,6 +137,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_email.add_argument("file")
     p_email.set_defaults(func=_cmd_test_email)
     sub.add_parser("test-notif", help="notification de test").set_defaults(func=_cmd_test_notif)
+    p_recap = sub.add_parser("recap", help="récapitulatif des annonces analysées")
+    p_recap.add_argument("--hours", type=int, default=24)
+    p_recap.set_defaults(func=_cmd_recap)
     sub.add_parser("reset-seen", help="oublie les annonces vues").set_defaults(func=_cmd_reset_seen)
     sub.add_parser("dashboard", help="interface web locale").set_defaults(func=_cmd_dashboard)
     return parser

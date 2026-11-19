@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from typing import Any
 
@@ -47,6 +47,18 @@ class Ad:
     @property
     def deal_type(self) -> str:
         return (self.analysis or {}).get("type_affaire", "reparation")
+
+    @property
+    def delivery_possible(self) -> bool:
+        """Vrai si l'annonce indique un envoi possible (« Livraison possible » sur leboncoin)."""
+        text = self.description.lower()
+        return self.shipping is not None or "livraison possible" in text or "envoi possible" in text
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Ad:
+        """Reconstruit une annonce depuis l'historique JSON (champs inconnus ignorés)."""
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)

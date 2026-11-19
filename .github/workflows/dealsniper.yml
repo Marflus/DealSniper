@@ -18,6 +18,7 @@ on:
           - dry-run          # collecte + filtre, sans IA ni sauvegarde
           - inspect-emails   # diagnostic : annonces extraites de chaque email
           - test-notif       # fausse annonce envoyée sur Telegram / Discord
+          - recap            # annonces analysées ces dernières 24 h, envoyées sur Telegram
 
 permissions:
   contents: write

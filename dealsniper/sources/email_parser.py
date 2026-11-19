@@ -30,7 +30,7 @@ from ..location import extract_location
 from ..models import Ad
 from ..prices import detect_price_mode, extract_price, extract_shipping
 from ..text import clean_html, normalize
-from ..urls import matches_any, native_id, unwrap_tracking_url
+from ..urls import canonical_url, matches_any, native_id, unwrap_tracking_url
 
 log = logging.getLogger(__name__)
 
@@ -189,11 +189,11 @@ def extract_ads(
 
     ads: list[Ad] = []
     for group in groups.values():
-        url, stable = group["url"], group["strong"]
+        url, stable = (canonical_url(group["url"]), True) if group["strong"] else (group["url"], False)
         if not stable and resolver is not None:
             resolved = resolver(url)
             if resolved:
-                url, stable = resolved, True
+                url, stable = canonical_url(resolved), True
         block = group["block"]
         title = _pick_title(group["titles"], block)
         ads.append(

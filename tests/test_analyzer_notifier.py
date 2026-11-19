@@ -88,3 +88,27 @@ def test_notify_threshold_and_types(config):
     cfg = {**config, "notifier": {**config["notifier"], "deal_types": ["reparation"]}}
     sent = notify([make_deal("revente_directe"), make_deal("reparation"), make_deal("reparation", 5)], cfg)
     assert [a.deal_type for a in sent] == ["reparation"]
+
+
+def test_watch_digest_for_mid_scores(monkeypatch, config):
+    digests = []
+    monkeypatch.setattr("dealsniper.notifier.Notifier.send_digest",
+                        lambda self, header, ads: digests.append((header, [a.score for a in ads])) or True)
+    sent = notify([make_deal("reparation", 5), make_deal("reparation", 6), make_deal("reparation", 3)], config)
+    assert sent == [] and digests == [("👀 À vérifier (2 annonce(s) notée(s) 5-6/10)", [6, 5])]
+
+
+def test_digest_chunks_and_delivery_flag(capsys):
+    from dealsniper.notifier import Notifier, _chunks
+
+    deal = make_deal("reparation", 6)
+    deal.description = "Livraison possible"
+    assert deal.delivery_possible
+    Notifier().send_digest("Récap", [deal])
+    assert "6/10" in capsys.readouterr().out
+    assert len(_chunks("H", ["x" * 1000] * 10)) > 1
+
+
+def test_ad_roundtrip():
+    deal = make_deal("revente_directe")
+    assert Ad.from_dict({**deal.to_dict(), "notified": True}).uid == deal.uid
