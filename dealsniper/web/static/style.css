@@ -3,11 +3,16 @@
   --accent: #2563eb; --good: #16a34a; --mid: #d97706; --low: #9ca3af; --bad: #dc2626;
   --radius: 12px; --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
 }
+/* Sombre : automatique (réglage du système) sauf si le thème clair est forcé, ou forcé. */
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #0e1116; --card: #161a22; --fg: #e8eaee; --muted: #98a1b0; --line: #262c38; --soft: #1d222c;
-          --accent: #5b9bff; --shadow: none; }
+  :root:not([data-theme="light"]) { --bg: #0e1116; --card: #161a22; --fg: #e8eaee; --muted: #98a1b0; --line: #262c38;
+    --soft: #1d222c; --accent: #5b9bff; --shadow: none; color-scheme: dark; }
 }
+:root[data-theme="dark"] { --bg: #0e1116; --card: #161a22; --fg: #e8eaee; --muted: #98a1b0; --line: #262c38;
+  --soft: #1d222c; --accent: #5b9bff; --shadow: none; color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--fg); }
 button, input, select, textarea { font: inherit; color: var(--fg); }
 input, select, textarea { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
@@ -25,7 +30,7 @@ button:disabled { opacity: .55; cursor: wait; }
 .brand { display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 500; letter-spacing: -.01em; }
 .brand b { font-weight: 800; background: linear-gradient(90deg, #2563eb, #7c3aed); -webkit-background-clip: text;
   background-clip: text; color: transparent; }
-.tabs { display: flex; gap: 4px; background: var(--soft); padding: 3px; border-radius: 10px; }
+.tabs { display: flex; gap: 4px; overflow-x: auto; max-width: 100%; background: var(--soft); padding: 3px; border-radius: 10px; }
 .tab { border: 0; background: transparent; padding: 6px 14px; color: var(--muted); }
 .tab.active { background: var(--card); color: var(--fg); font-weight: 600; box-shadow: var(--shadow); }
 .top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -118,19 +123,14 @@ button.danger { color: var(--bad); border-color: transparent; background: transp
 .site-line { display: flex; align-items: center; gap: 4px; }
 .card-head strong.site-title { display: inline-flex; align-items: center; gap: 8px; text-transform: none; }
 
-/* Réglages : menu à gauche, une section à la fois */
-.settings { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: start; }
-.side-nav { position: sticky; top: 76px; display: grid; gap: 4px; background: var(--card); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 8px; box-shadow: var(--shadow); }
-.side { border: 0; background: transparent; text-align: left; padding: 9px 12px; color: var(--muted); }
-.side.on { background: var(--soft); color: var(--fg); font-weight: 600; }
-.panels h2 { margin-top: 0; }
+/* Pages de réglages */
+.page-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr)); gap: 16px; align-items: start; }
+.page-grid .panel h2, .page h2 { margin: 0; }
+.intro { margin: 0 2px 12px; }
+#settings-error { margin-top: 0; }
+@media (max-width: 520px) { .page-grid { grid-template-columns: 1fr; } }
 .big { font-size: 18px; font-weight: 600; margin: 0; }
 .push { margin-left: auto; }
-@media (max-width: 800px) {
-  .settings { grid-template-columns: 1fr; }
-  .side-nav { position: static; grid-auto-flow: column; overflow-x: auto; }
-}
 
 .ease { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 4px; white-space: nowrap; }
 .ease.pos { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
@@ -141,4 +141,4 @@ button.danger { color: var(--bad); border-color: transparent; background: transp
 .progress { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; background: var(--card);
   border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 12px 0; }
 .prog-line { padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.prog-line .spin { display: inline-block; width: 1ch; color: #2563eb; font-weight: 700; }
+.prog-line .spin { display: inline-block; width: 1ch; color: var(--accent); font-weight: 700; }

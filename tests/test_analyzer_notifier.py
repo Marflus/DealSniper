@@ -89,3 +89,15 @@ def test_sanitize_ease_score_and_schema():
     assert clean["facilite_reparation"] == 10 and clean["score_rentabilite"] == 1
     required = analyzer.RESPONSE_SCHEMA["properties"]["annonces"]["items"]["required"]
     assert "facilite_reparation" in required and "justification_courte" not in required
+
+
+def test_notify_min_margin_and_ease(monkeypatch, config):
+    monkeypatch.setattr("dealsniper.notifier.Notifier.send_ad", lambda self, ad: True)
+    monkeypatch.setattr("dealsniper.notifier.time.sleep", lambda s: None)
+    cfg = {**config, "notifier": {**config["notifier"], "watch_score": None, "min_margin": 50, "min_ease": 7}}
+    small, hard, direct = deal(8), deal(8), deal(8, "revente_directe")
+    small.analysis["marge_nette_estimee"] = 20
+    hard.analysis["facilite_reparation"] = 3
+    direct.analysis["facilite_reparation"] = 1  # la facilité ne compte pas pour la revente directe
+    sent = notify([small, hard, direct, deal(9)], cfg)
+    assert [(a.score, a.deal_type) for a in sent] == [(9, "reparation"), (8, "revente_directe")]

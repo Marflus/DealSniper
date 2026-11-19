@@ -43,14 +43,27 @@ async function api(url, options = {}) {
 }
 
 // ---------- Onglets ----------
-document.querySelectorAll(".tab").forEach((btn) =>
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
-    $("#tab-ads").hidden = btn.dataset.tab !== "ads";
-    $("#tab-settings").hidden = btn.dataset.tab !== "settings";
-    if (btn.dataset.tab === "settings" && !settings) loadSettings();
-  })
-);
+// Tous les onglets sauf « Annonces » modifient config.yaml et partagent le bouton Enregistrer.
+function showTab(tab) {
+  document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".page").forEach((p) => (p.hidden = p.id !== `tab-${tab}`));
+  $("#savebar").hidden = tab === "ads";
+  if (tab !== "ads" && !settings) loadSettings();
+  try { localStorage.setItem("dealsniper-tab", tab); } catch (e) { /* stockage indisponible */ }
+}
+document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
+
+// ---------- Thème clair / sombre ----------
+function setTheme(theme) {
+  if (theme) document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+  document.querySelectorAll("#theme-choice button").forEach((b) => b.classList.toggle("on", b.dataset.value === theme));
+  try { theme ? localStorage.setItem("dealsniper-theme", theme) : localStorage.removeItem("dealsniper-theme"); } catch (e) { /* idem */ }
+}
+const isDark = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
+$("#theme").addEventListener("click", () => setTheme(isDark() ? "light" : "dark"));
+document.querySelectorAll("#theme-choice button").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.value)));
+setTheme(document.documentElement.dataset.theme || "");
 
 // ---------- Filtres (mémorisés dans le navigateur) ----------
 function saveFilters() {
@@ -257,16 +270,10 @@ $("#run").addEventListener("click", async () => {
 
 $("#test-notif").addEventListener("click", async () => {
   const data = await api("/api/test-notif", { method: "POST" }).catch(() => ({ ok: false }));
-  toast(data.ok ? "Notification envoyée ✅" : "Échec : vérifiez .env ❌");
+  toast(data.ok ? "Notification envoyée ✅" : "Échec : vérifiez TELEGRAM_* / DISCORD_* dans .env ❌");
 });
 
 // ---------- Réglages ----------
-document.querySelectorAll(".side").forEach((btn) =>
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".side").forEach((b) => b.classList.toggle("on", b === btn));
-    document.querySelectorAll(".panel-page").forEach((p) => (p.hidden = p.id !== btn.dataset.panel));
-  })
-);
 
 const words = (list) => (list || []).join(", ");
 
@@ -287,13 +294,13 @@ function searchRow(siteName, row) {
 function renderSites() {
   $("#sites").innerHTML = Object.entries(settings.sites).map(([name, site]) => {
     const fields = SEARCH_FIELDS[name] || SEARCH_FIELDS.default;
-    const interval = site.interval || ["", ""];
+    const minutes = (site.interval || ["", ""]).map((v) => (v === "" ? "" : Math.round(v / 60)));
     return `<div class="card" data-site="${esc(name)}">
       <div class="card-head">
         <strong class="site-title">${siteLogo(name, 20)} ${esc(siteName(name))}</strong>
         <label class="field"><input type="checkbox" data-enabled ${site.enabled !== false ? "checked" : ""}> activé</label>
-        <label class="field">Vérifier toutes les <input type="number" data-interval="0" value="${esc(interval[0])}"> à
-          <input type="number" data-interval="1" value="${esc(interval[1])}"> secondes</label>
+        <label class="field">En surveillance continue, toutes les <input type="number" min="1" data-interval="0" value="${esc(minutes[0])}"> à
+          <input type="number" min="1" data-interval="1" value="${esc(minutes[1])}"> minutes</label>
       </div>
       <table><thead><tr>${fields.map((f) => `<th>${FIELD_LABELS[f] || f}</th>`).join("")}<th></th></tr></thead>
         <tbody>${(site.searches || []).map((r) => searchRow(name, r)).join("")}</tbody></table>
@@ -336,8 +343,16 @@ async function loadSettings() {
   $("#g-minprice").value = f.min_price ?? "";
   $("#g-france").checked = l.france_only !== false;
   $("#g-overseas").checked = l.exclude_overseas !== false;
+  $("#g-uncat").checked = f.drop_uncategorized !== false;
+  $("#g-noprice").checked = f.keep_unknown_price !== false;
+  $("#n-margin").value = n.min_margin ?? "";
+  $("#n-ease").value = n.min_ease ?? "";
+  $("#a-batch").value = a.batch_size ?? 20;
+  $("#a-desc").value = a.max_description_chars ?? 400;
+  $("#s-retention").value = (settings.storage || {}).seen_retention_days ?? 90;
+  $("#s-pause").value = (settings.network || {}).access_denied_pause_hours ?? 6;
   $("#n-min").value = n.min_score ?? 7;
-  $("#n-watch").value = n.watch_score ?? 5;
+  $("#n-watch").value = n.watch_score ?? "";
   const types = n.deal_types || ["reparation", "revente_directe"];
   $("#n-repair").checked = types.includes("reparation");
   $("#n-direct").checked = types.includes("revente_directe");
@@ -365,7 +380,7 @@ function collectSettings() {
   document.querySelectorAll("#sites [data-site]").forEach((card) => {
     sites[card.dataset.site] = {
       enabled: card.querySelector("[data-enabled]").checked,
-      interval: [...card.querySelectorAll("[data-interval]")].map((i) => i.value).filter((v) => v !== ""),
+      interval: [...card.querySelectorAll("[data-interval]")].map((i) => i.value).filter((v) => v !== "").map((m) => m * 60),
       searches: [...card.querySelectorAll("tbody tr")].map((tr) =>
         Object.fromEntries([...tr.querySelectorAll("[data-field]")].map((i) => [i.dataset.field, i.value]))),
     };
@@ -384,10 +399,15 @@ function collectSettings() {
   return {
     sites, categories,
     filters: { global_exclude_keywords: $("#g-exclude").value, deal_signals: $("#g-signals").value,
-               buyer_ad_keywords: $("#g-buyer").value, min_price: $("#g-minprice").value },
+               buyer_ad_keywords: $("#g-buyer").value, min_price: $("#g-minprice").value,
+               drop_uncategorized: $("#g-uncat").checked, keep_unknown_price: $("#g-noprice").checked },
     location: { france_only: $("#g-france").checked, exclude_overseas: $("#g-overseas").checked },
-    notifier: { min_score: $("#n-min").value, watch_score: $("#n-watch").value, deal_types: dealTypes },
-    analyzer: { model: $("#a-model").value, max_daily_cost_usd: $("#a-cap").value },
+    notifier: { min_score: $("#n-min").value, watch_score: $("#n-watch").value, deal_types: dealTypes,
+                min_margin: $("#n-margin").value, min_ease: $("#n-ease").value },
+    analyzer: { model: $("#a-model").value, max_daily_cost_usd: $("#a-cap").value,
+                batch_size: $("#a-batch").value, max_description_chars: $("#a-desc").value },
+    storage: { seen_retention_days: $("#s-retention").value },
+    network: { access_denied_pause_hours: $("#s-pause").value },
   };
 }
 
@@ -404,5 +424,6 @@ $("#save").addEventListener("click", async () => {
 });
 
 restoreFilters();
+try { showTab(localStorage.getItem("dealsniper-tab") || "ads"); } catch (e) { showTab("ads"); }
 loadAds();
 setInterval(loadAds, 60000);

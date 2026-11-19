@@ -204,7 +204,20 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
     min_score = int(cfg["min_score"])
     watch_score = cfg.get("watch_score")
     deal_types = set(cfg.get("deal_types") or ("reparation", "revente_directe"))
-    analyzed = [a for a in ads if a.analysis and a.deal_type in deal_types]
+    min_margin, min_ease = cfg.get("min_margin"), cfg.get("min_ease")
+
+    def wanted(ad: Ad) -> bool:
+        if not ad.analysis or ad.deal_type not in deal_types:
+            return False
+        margin = ad.analysis.get("marge_nette_estimee")
+        if min_margin is not None and (margin is None or margin < float(min_margin)):
+            return False
+        ease = ad.analysis.get("facilite_reparation")  # ne concerne que les objets à réparer
+        if min_ease is not None and ad.deal_type == "reparation" and (ease or 0) < int(min_ease):
+            return False
+        return True
+
+    analyzed = [a for a in ads if wanted(a)]
     good = _rank([a for a in analyzed if a.score >= min_score])
     watch = _rank([a for a in analyzed if watch_score is not None and int(watch_score) <= a.score < min_score])
     notifier = Notifier()

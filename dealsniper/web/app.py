@@ -1,7 +1,8 @@
 """Interface web locale : `python -m dealsniper ui` puis http://127.0.0.1:5000.
 
 Onglet « Annonces » : toutes les annonces vues, filtrables.
-Onglet « Recherches & filtres » : édition de config.yaml (les commentaires sont conservés).
+Onglets « Recherches », « Catégories », « Filtres », « Réglages » : édition de config.yaml
+(les commentaires sont conservés).
 """
 
 from __future__ import annotations
@@ -96,8 +97,23 @@ def read_settings() -> dict[str, Any]:
         "filters": _plain(doc.get("filters") or {}),
         "location": _plain(doc.get("location") or {}),
         "notifier": _plain(doc.get("notifier") or {}),
-        "analyzer": {k: _plain((doc.get("analyzer") or {}).get(k)) for k in ("model", "max_daily_cost_usd")},
+        "analyzer": {k: _plain((doc.get("analyzer") or {}).get(k))
+                     for k in ("model", "max_daily_cost_usd", "batch_size", "max_description_chars")},
+        "storage": _plain(doc.get("storage") or {}),
+        "network": _plain(doc.get("network") or {}),
     }
+
+
+def _set_numbers(doc: CommentedMap, section: str, values: dict[str, Any], keys: tuple[str, ...],
+                 nullable: tuple[str, ...] = ()) -> None:
+    """Copie les nombres reçus dans `doc[section]` (vide = null pour les clés `nullable`, sinon ignoré)."""
+    target = doc.setdefault(section, CommentedMap())
+    for key in keys:
+        if key not in values:
+            continue
+        number = _number(values[key])
+        if number is not None or key in nullable:
+            target[key] = number
 
 
 def write_settings(new: dict[str, Any]) -> None:
@@ -150,6 +166,9 @@ def write_settings(new: dict[str, Any]) -> None:
             filters[field] = _seq(filters.get(field), _words(new["filters"][field]))
     if "min_price" in (new.get("filters") or {}):
         filters["min_price"] = _number(new["filters"]["min_price"]) or 0
+    for key in ("drop_uncategorized", "keep_unknown_price"):
+        if key in (new.get("filters") or {}):
+            filters[key] = bool(new["filters"][key])
 
     for section, keys in (("location", ("france_only", "exclude_overseas")),):
         for key in keys:
@@ -158,9 +177,8 @@ def write_settings(new: dict[str, Any]) -> None:
 
     notifier = new.get("notifier") or {}
     target = doc.setdefault("notifier", CommentedMap())
-    for key in ("min_score", "watch_score"):
-        if key in notifier:
-            target[key] = _number(notifier[key])
+    _set_numbers(doc, "notifier", notifier, ("min_score", "watch_score", "min_margin", "min_ease"),
+                 nullable=("watch_score", "min_margin", "min_ease"))
     if "deal_types" in notifier:
         target["deal_types"] = _seq(target.get("deal_types"), list(notifier["deal_types"]), flow=True)
 
@@ -171,6 +189,9 @@ def write_settings(new: dict[str, Any]) -> None:
     if "max_daily_cost_usd" in analyzer:
         cap = analyzer["max_daily_cost_usd"]
         target["max_daily_cost_usd"] = None if cap in (None, "") else float(str(cap).replace(",", "."))
+    _set_numbers(doc, "analyzer", analyzer, ("batch_size", "max_description_chars"))
+    _set_numbers(doc, "storage", new.get("storage") or {}, ("seen_retention_days",))
+    _set_numbers(doc, "network", new.get("network") or {}, ("access_denied_pause_hours",))
 
     buffer = io.StringIO()
     yaml.dump(doc, buffer)

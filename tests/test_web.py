@@ -59,6 +59,25 @@ def test_settings_roundtrip_keeps_comments(client):
     assert "# ---" in path.read_text(encoding="utf-8")  # commentaires conservés
 
 
+def test_new_settings_are_saved(client):
+    c, path = client
+    settings = c.get("/api/settings").get_json()
+    settings["notifier"].update(min_margin="40", min_ease="", watch_score="")
+    settings["filters"]["keep_unknown_price"] = False
+    settings["analyzer"].update(batch_size="25", max_description_chars="300")
+    settings["storage"] = {"seen_retention_days": "30"}
+    settings["network"] = {"access_denied_pause_hours": "12"}
+    assert c.put("/api/settings", json=settings).get_json() == {"ok": True}
+
+    cfg = load_config(path)
+    assert cfg["notifier"]["min_margin"] == 40 and cfg["notifier"]["min_ease"] is None
+    assert cfg["notifier"]["watch_score"] is None
+    assert cfg["filters"]["keep_unknown_price"] is False
+    assert (cfg["analyzer"]["batch_size"], cfg["analyzer"]["max_description_chars"]) == (25, 300)
+    assert cfg["storage"]["seen_retention_days"] == 30
+    assert cfg["network"]["access_denied_pause_hours"] == 12
+
+
 def test_invalid_config_is_reported(client):
     c, path = client
     path.write_text("sites:\n  ebay:\n    enabled: true\n      searches: x\n", encoding="utf-8")
