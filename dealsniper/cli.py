@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+
+import yaml
 
 from .config import data_dir, load_config, load_env, setup_logging
 
@@ -88,7 +91,19 @@ def main(argv: list[str] | None = None) -> int:
         args.func = cmd_run
     setup_logging(args.verbose)
     load_env()
+    if args.config:
+        os.environ["DEALSNIPER_CONFIG"] = args.config
     try:
-        return args.func(args, load_config(args.config))
+        if args.func is cmd_ui:  # l'interface démarre même avec un config.yaml invalide (elle affiche l'erreur)
+            return cmd_ui(args, None)
+        try:
+            config = load_config(args.config)
+        except yaml.YAMLError as exc:
+            mark = getattr(exc, "problem_mark", None)
+            where = f" (ligne {mark.line + 1}, colonne {mark.column + 1})" if mark else ""
+            print(f"config.yaml invalide{where} : {getattr(exc, 'problem', None) or exc}", file=sys.stderr)
+            print("Vérifiez l'indentation autour de cette ligne (espaces, pas de tabulations).", file=sys.stderr)
+            return 2
+        return args.func(args, config)
     except KeyboardInterrupt:
         return 130
