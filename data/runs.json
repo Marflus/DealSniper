@@ -1,5 +1,27 @@
 [
  {
+  "analyzed": 9,
+  "collected": 49,
+  "cost_usd": 0.00801,
+  "duration_s": 21.1,
+  "enrich_blocked": null,
+  "enriched": 0,
+  "failed": 0,
+  "health_alert_sent": false,
+  "input_tokens": 1894,
+  "kept": 9,
+  "model": "claude-haiku-4-5",
+  "notified": 0,
+  "output_tokens": 1224,
+  "rejected": 40,
+  "sources": {
+   "ebay-api": "ok",
+   "emails": "ok"
+  },
+  "started_at": "2026-11-19T10:09:37+00:00",
+  "status": "ok"
+ },
+ {
   "analyzed": 0,
   "collected": 0,
   "cost_usd": 0.0,
