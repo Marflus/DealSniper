@@ -216,7 +216,7 @@ python -m pytest                         # tests (pip install pytest)
 
 ## 8. Automatisation GitHub Actions
 
-Le workflow `.github/workflows/dealsniper.yml` lance un passage **toutes les heures de 6 h à 23 h** et recommite
+Le workflow `.github/workflows/dealsniper.yml` lance un passage **toutes les 30 minutes de 6 h à 23 h** et recommite
 `data/*.json` pour mémoriser l'état.
 
 1. **Settings → Secrets and variables → Actions** : `ANTHROPIC_API_KEY`, `IMAP_SERVER`, `IMAP_EMAIL`,
@@ -231,7 +231,7 @@ Le workflow `.github/workflows/dealsniper.yml` lance un passage **toutes les heu
    - `recap` : les annonces analysées ces dernières 24 h, envoyées sur Telegram.
 
 GitHub peut retarder ou sauter des passages planifiés aux heures chargées : c'est normal, le suivant rattrape
-(les emails des 3 derniers jours sont relus). ~18 passages/jour ≈ 550 min/mois, sous le quota gratuit.
+(les emails des 3 derniers jours sont relus). ~36 passages/jour ≈ 1 100 min/mois, sous le quota gratuit de 2 000 min.
 
 ---
 

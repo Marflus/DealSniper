@@ -1,12 +1,14 @@
 # Exécution automatique de Deal Sniper sur GitHub Actions.
-#  * planifié : toutes les heures de 6 h à 23 h (heure de Paris en hiver, UTC+1) ;
+#  * planifié : toutes les 30 minutes de 6 h à 23 h (heure de Paris en hiver, UTC+1) ;
 #  * manuel : onglet Actions > Deal Sniper > Run workflow, en choisissant le mode.
 # Après un passage « run », data/*.json est recommité pour mémoriser l'état.
 name: Deal Sniper
 
 on:
   schedule:
-    - cron: "17 5-22 * * *"   # GitHub peut retarder ou sauter des passages planifiés
+    # Toutes les 30 min (à :07 et :37) : GitHub saute souvent des passages planifiés aux heures
+    # chargées, un rythme plus serré compense. ~36 passages/jour ≈ 1 100 min/mois (quota gratuit : 2 000).
+    - cron: "7,37 5-22 * * *"
   workflow_dispatch:
     inputs:
       mode:

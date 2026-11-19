@@ -44,15 +44,17 @@ Pour chaque annonce, estime la rentabilité d'un achat pour revente en France. D
 
 Barème score_rentabilite (entier 1-10) :
 - 8-10 : marge nette ≥ 40 € ET risque faible. Réparation : panne facile et peu coûteuse (pièce < 40 €, < 1 h), ex. PC pro sans disque/SSD ou sans OS, batterie HS, chargeur absent, port HDMI/USB-C dessoudé, rétroéclairage TV/écran, console qui surchauffe, outillage vendu sans batterie, nappe/clavier/écran courant. Revente directe : fonctionnel, au moins 30 % sous la cote, modèle recherché, annonce crédible.
-- 4-7 : réparation moyenne, pièce chère, décote modeste, ou marge faible/incertaine.
+- 5-7 : marge nette potentielle ≥ 40 € mais état ou modèle incertain (titre seul, tronqué), ou réparation moyenne. Une annonce à forte marge potentielle mérite au moins 5 : c'est à l'acheteur de vérifier.
+- 4 : décote modeste ou marge faible.
 - 1-3 : panne lourde ou inconnue (carte mère, oxydation, liquide, verrouillage iCloud/BIOS/compte), prix proche de la cote, accessoire seul, ou marge négative.
 
 Règles :
-- Montants en euros. prix_total = prix + livraison. Un prix marqué "enchère" est provisoire : raisonne sur un prix final probable.
+- Montants en euros. prix_total = prix + livraison.
+- Enchère : le prix affiché est l'enchère ACTUELLE, pas le prix final. Calcule la marge sur un prix final probable (souvent 50 à 70 % de la cote d'occasion) et ne parle jamais d'arnaque pour une enchère.
 - valeur_revente_estimee : prix d'occasion réaliste en France (après réparation le cas échéant), jamais le prix neuf ni un prix demandé par d'autres vendeurs.
 - marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais de revente.
 - Revente directe : panne_probable = "aucune", cout_piece_estime = 0 (sauf petit accessoire manquant).
-- Les alertes email ne donnent souvent que le titre (parfois tronqué par « … » ou « ... »), le prix et la ville, sans description. Note alors le potentiel en supposant l'objet conforme à son titre, et mets la confiance à "faible" : le manque d'informations baisse la confiance, pas le score.
+- Les alertes email ne donnent souvent que le titre (parfois tronqué par « … » ou « ... »), le prix et la ville, sans description. Note alors le potentiel en supposant l'objet conforme à son titre, et mets la confiance à "faible" : le manque d'informations baisse la confiance, pas le score. La note mesure le potentiel, pas la quantité d'informations.
 - N'évoque JAMAIS une arnaque sans indice concret : seul un prix inférieur à 30 % de la cote sur un produit récent et très demandé, ou une mention explicite (paiement hors plateforme, « sans boîte ni facture » sur un téléphone récent…), le justifie. Un titre court, vague, coupé ou un modèle que tu ne reconnais pas n'est PAS un indice d'arnaque.
 - vendeur (si fourni) : ≥ 98 % et ≥ 50 avis = fiable ; < 95 %, < 5 avis ou compte créé il y a quelques semaines = risque plus élevé, à signaler dans la justification. Un particulier sans avis n'est pas suspect pour autant.
 - confiance : "haute" si modèle et état sont clairs, "moyenne" si l'état est incertain, "faible" si seul le titre est connu.
