@@ -57,13 +57,13 @@ sites:
     limit: 25
     searches:
       # Catégories LBC : 15=Informatique, 16=Image&Son, 43=Consoles, 21=Bricolage
-      - {query: "thinkpad", category: "15", max_price: 150}
-      - {query: "dell latitude", category: "15", max_price: 120}
-      - {query: "macbook hs", category: "15", max_price: 180}
-      - {query: "ps5 hs", category: "43", max_price: 180}
-      - {query: "nintendo switch", category: "43", max_price: 160}
-      - {query: "tv led panne", category: "16", max_price: 100}
-      - {query: "makita sans batterie", category: "21", max_price: 80}
+      - {query: "thinkpad", category: '15', max_price: 150}
+      - {query: "dell latitude", category: '15', max_price: 120}
+      - {query: "macbook hs", category: '15', max_price: 180}
+      - {query: "ps5 hs", category: '43', max_price: 180}
+      - {query: "nintendo switch", category: '43', max_price: 160}
+      - {query: "tv led panne", category: '16', max_price: 100}
+      - {query: "makita sans batterie", category: '21', max_price: 80}
 
   facebook:
     enabled: true
@@ -196,29 +196,22 @@ filters:
 # -----------------------------------------------------------------------------
 categories:
   - name: "PC portables pros"
-    keywords: ["thinkpad", "latitude", "elitebook", "probook", "zbook", "dell precision", "macbook pro",
-               "macbook air", "dell xps", "surface pro", "surface laptop", "travelmate", "lifebook", "dynabook"]
+    keywords: ["thinkpad", "latitude", "elitebook", "probook", "zbook", "dell precision", "macbook pro", "macbook air", "dell xps", "surface pro", "surface laptop", "travelmate", "lifebook", "dynabook"]
     max_budget: 180
     exclude_keywords: ["coque seule", "clavier seul", "chargeur seul", "nappe seule"]
-    include_keywords: ["sans disque", "sans ssd", "sans disque dur", "sans hdd", "sans os", "sans windows",
-                       "sans chargeur", "batterie hs", "batterie morte", "batterie a changer",
-                       "ecran a changer", "clavier hs", "charniere", "ne charge plus", "port usb-c", "dc jack"]
+    include_keywords: ["sans disque", "sans ssd", "sans disque dur", "sans hdd", "sans os", "sans windows", "sans chargeur", "batterie hs", "batterie morte", "batterie a changer", "ecran a changer", "clavier hs", "charniere", "ne charge plus", "port usb-c", "dc jack"]
     require_include: false
 
   - name: "Mini-PC"
-    keywords: ["mini pc", "mini-pc", "nuc", "optiplex micro", "thinkcentre tiny", "thinkcentre m7", "elitedesk mini",
-               "prodesk mini", "mac mini"]
+    keywords: ["mini pc", "mini-pc", "nuc", "optiplex micro", "thinkcentre tiny", "thinkcentre m7", "elitedesk mini", "prodesk mini", "mac mini"]
     max_budget: 120
-    include_keywords: ["sans disque", "sans ssd", "sans ram", "sans memoire", "sans os", "sans alimentation",
-                       "sans chargeur"]
+    include_keywords: ["sans disque", "sans ssd", "sans ram", "sans memoire", "sans os", "sans alimentation", "sans chargeur"]
 
   - name: "PC portables grand public"
-    keywords: ["pc portable", "ordinateur portable", "laptop", "ideapad", "vivobook", "zenbook", "aspire",
-               "pavilion", "inspiron", "omen", "rog", "tuf gaming", "legion", "predator", "nitro", "chromebook"]
+    keywords: ["pc portable", "ordinateur portable", "laptop", "ideapad", "vivobook", "zenbook", "aspire", "pavilion", "inspiron", "omen", "rog", "tuf gaming", "legion", "predator", "nitro", "chromebook"]
     max_budget: 150
     exclude_keywords: ["coque seule", "clavier seul", "chargeur seul"]
-    include_keywords: ["sans disque", "sans ssd", "sans os", "sans windows", "sans chargeur", "batterie hs",
-                       "ecran a changer", "charniere", "ne charge plus", "lent", "a reinstaller"]
+    include_keywords: ["sans disque", "sans ssd", "sans os", "sans windows", "sans chargeur", "batterie hs", "ecran a changer", "charniere", "ne charge plus", "lent", "a reinstaller"]
 
   - name: "Raspberry Pi & micro-ordinateurs"
     keywords: ["raspberry", "raspberry pi"]
@@ -228,18 +221,14 @@ categories:
   - name: "Consoles"
     keywords: ["ps5", "ps4", "playstation", "xbox", "switch", "steam deck", "nintendo"]
     max_budget: 200
-    exclude_keywords: ["jeu seul", "manette seule", "boite seule", "jeux uniquement", "puce", "hackee", "ban",
-                       "switch reseau", "gigabit", "ethernet"]
-    include_keywords: ["surchauffe", "bruyante", "ventilateur", "hdmi", "port hdmi", "lecteur hs",
-                       "ne lit plus", "joycon", "drift", "s'eteint", "ecran bleu", "carte sd"]
+    exclude_keywords: ["jeu seul", "manette seule", "boite seule", "jeux uniquement", "puce", "hackee", "ban", "switch reseau", "gigabit", "ethernet"]
+    include_keywords: ["surchauffe", "bruyante", "ventilateur", "hdmi", "port hdmi", "lecteur hs", "ne lit plus", "joycon", "drift", "s'eteint", "ecran bleu", "carte sd"]
 
   - name: "Écrans & TV"
     keywords: ["ecran", "moniteur", "tv", "televiseur", "television", "oled", "qled"]
     max_budget: 150
-    exclude_keywords: ["dalle cassee", "dalle fissuree", "ecran fissure", "fissure", "impact", "pied seul",
-                       "telecommande seule"]
-    include_keywords: ["retroeclairage", "backlight", "ecran noir avec son", "son mais pas d'image",
-                       "pas d'image", "led", "alimentation", "ne s'allume plus", "clignote"]
+    exclude_keywords: ["dalle cassee", "dalle fissuree", "ecran fissure", "fissure", "impact", "pied seul", "telecommande seule"]
+    include_keywords: ["retroeclairage", "backlight", "ecran noir avec son", "son mais pas d'image", "pas d'image", "led", "alimentation", "ne s'allume plus", "clignote"]
 
   - name: "Outillage sans fil"
     keywords: ["makita", "dewalt", "milwaukee", "bosch pro", "hikoki", "metabo", "festool", "ryobi"]
@@ -259,7 +248,7 @@ analyzer:
   batch_size: 20              # annonces par appel API (le prompt système est payé une fois par lot)
   max_description_chars: 400  # description tronquée avant envoi à l'IA
   max_tokens: 4096            # plafond de la réponse (le lot est coupé en deux s'il est atteint)
-  max_daily_cost_usd: 1.00    # sécurité anti-facture : ~1 000 annonces/jour avec haiku-4-5 (null = aucun plafond)
+  max_daily_cost_usd: 1.5     # sécurité anti-facture : ~1 000 annonces/jour avec haiku-4-5 (null = aucun plafond)
   max_retries: 4              # retries automatiques (429, 5xx, surcharge, réseau)
   timeout_seconds: 90
   structured_output: true     # réponse JSON garantie par schéma
@@ -268,8 +257,8 @@ analyzer:
 #  Notifications
 # -----------------------------------------------------------------------------
 notifier:
-  min_score: 7                # bonne affaire : un message Telegram par annonce
-  watch_score: 5              # « à vérifier » (5-6/10) : regroupées dans un seul message par passage (null = désactivé)
+  min_score: 8                # bonne affaire : un message Telegram par annonce
+  watch_score: 6              # « à vérifier » (5-6/10) : regroupées dans un seul message par passage (null = désactivé)
   # types d'affaires à notifier : reparation (objet en panne) / revente_directe (fonctionnel sous la cote)
   deal_types: ["reparation", "revente_directe"]
   min_margin: null            # marge nette minimale (€) pour être notifié (null = pas de minimum)
