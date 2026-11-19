@@ -72,3 +72,11 @@ def test_not_configured_is_silently_skipped(monkeypatch):
     monkeypatch.delenv("EBAY_CLIENT_ID", raising=False)
     ads, report = ebay_api.collect({"searches": [{"query": "x"}]})
     assert ads == [] and report.ok
+
+
+def test_seller_reputation_is_kept():
+    ad = ebay_api.item_to_ad({**ITEM, "seller": {"username": "x", "feedbackPercentage": "99.2", "feedbackScore": 1534}}, "q")
+    assert ad.seller == {"positive_pct": 99.2, "reviews": 1534}
+    assert ad.seller_summary == "99,2 % positifs · 1 534 avis"
+    from dealsniper.analyzer import format_ad
+    assert "vendeur: 99,2 % positifs" in format_ad(1, ad, 600)

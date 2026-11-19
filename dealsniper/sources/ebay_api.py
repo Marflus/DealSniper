@@ -60,6 +60,20 @@ def _money(obj: dict[str, Any] | None) -> float | None:
         return None
 
 
+def _seller(info: dict[str, Any]) -> dict[str, Any] | None:
+    """Réputation eBay du vendeur : % d'avis positifs et nombre d'avis."""
+    pct, score = info.get("feedbackPercentage"), info.get("feedbackScore")
+    if pct is None and score is None:
+        return None
+    try:
+        return {
+            "positive_pct": float(pct) if pct is not None else None,
+            "reviews": int(score) if score is not None else None,
+        }
+    except (TypeError, ValueError):
+        return None
+
+
 def item_to_ad(item: dict[str, Any], search_name: str) -> Ad | None:
     url = item.get("itemWebUrl")
     title = item.get("title")
@@ -81,9 +95,10 @@ def item_to_ad(item: dict[str, Any], search_name: str) -> Ad | None:
         f"Pays : {location.get('country')}" if location.get("country") else "",
         f"recherche eBay « {search_name} »",
     ) if p)
+    seller = _seller(item.get("seller") or {})
     return Ad(
         title=title[:200], url=url.split("?")[0], source="ebay", price=price, shipping=shipping,
-        description=description, location=place, price_mode="enchere" if auction else "fixe",
+        description=description, location=place, price_mode="enchere" if auction else "fixe", seller=seller,
     )
 
 

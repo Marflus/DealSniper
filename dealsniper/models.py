@@ -24,6 +24,7 @@ class Ad:
     location: str | None = None         # « Lyon 69003 » si connu
     price_mode: str = "fixe"            # "fixe" ou "enchere" (prix provisoire)
     url_is_stable: bool = True          # False si le lien est un lien de suivi opaque
+    seller: dict[str, Any] | None = None  # réputation du vendeur si la source la fournit (eBay)
     category: str | None = None         # renseigné par filters.py
     signals: list[str] = field(default_factory=list)  # mots-clés positifs (filters.py)
     collected_at: str = field(default_factory=_now_iso)
@@ -47,6 +48,18 @@ class Ad:
     @property
     def deal_type(self) -> str:
         return (self.analysis or {}).get("type_affaire", "reparation")
+
+    @property
+    def seller_summary(self) -> str:
+        """« 99,2 % positifs · 1 534 avis » (vide si inconnu)."""
+        if not self.seller:
+            return ""
+        parts = []
+        if self.seller.get("positive_pct") is not None:
+            parts.append(f"{float(self.seller['positive_pct']):.1f} % positifs".replace(".", ","))
+        if self.seller.get("reviews") is not None:
+            parts.append(f"{int(self.seller['reviews']):,} avis".replace(",", " "))
+        return " · ".join(parts)
 
     @property
     def delivery_possible(self) -> bool:

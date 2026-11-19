@@ -112,3 +112,8 @@ def test_digest_chunks_and_delivery_flag(capsys):
 def test_ad_roundtrip():
     deal = make_deal("revente_directe")
     assert Ad.from_dict({**deal.to_dict(), "notified": True}).uid == deal.uid
+
+
+def test_prompt_forbids_scam_claims_without_evidence():
+    assert "JAMAIS une arnaque sans indice concret" in analyzer.SYSTEM_PROMPT
+    assert "pas le score" in analyzer.SYSTEM_PROMPT

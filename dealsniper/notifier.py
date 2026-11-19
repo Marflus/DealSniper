@@ -55,6 +55,8 @@ def format_telegram(ad: Ad) -> str:
     lines = [header, f"<b>{e(ad.title)}</b>", "", f"💶 Prix : {_price_line(ad)}"]
     delivery = " · 📦 livraison possible" if ad.delivery_possible else ""
     lines.append(f"📍 {e(ad.location or 'lieu ?')} · <i>{e(ad.source)}</i>{delivery}")
+    if ad.seller:
+        lines.append(f"👤 Vendeur : {e(ad.seller_summary)}")
     if ad.deal_type == "reparation":
         lines.append(f"🔧 Panne probable : {e(a.get('panne_probable', '?'))}")
         part, resale = _eur(a.get("cout_piece_estime")), _eur(a.get("valeur_revente_estimee"))
@@ -86,6 +88,8 @@ def format_discord(ad: Ad) -> dict[str, Any]:
             {"name": "🧩 Pièce", "value": _eur(a.get("cout_piece_estime")), "inline": True},
         ]
     fields.append({"name": "📍 Lieu", "value": (ad.location or "?")[:100], "inline": True})
+    if ad.seller:
+        fields.append({"name": "👤 Vendeur", "value": ad.seller_summary[:100], "inline": True})
     if a.get("question_vendeur"):
         fields.append({"name": "❓ À demander", "value": a["question_vendeur"][:200], "inline": False})
     return {
@@ -103,7 +107,8 @@ def _digest_line(ad: Ad, html_mode: bool) -> str:
     a = ad.analysis or {}
     margin = _eur(a.get("marge_nette_estimee"))
     delivery = " · 📦" if ad.delivery_possible else ""
-    details = f"{_price_line(ad)} · {ad.location or 'lieu ?'}{delivery} · marge ≈ {margin}"
+    seller = f" · 👤 {ad.seller_summary}" if ad.seller else ""
+    details = f"{_price_line(ad)} · {ad.location or 'lieu ?'}{delivery}{seller} · marge ≈ {margin}"
     reason = a.get("justification_courte", "")
     if html_mode:
         e = html.escape

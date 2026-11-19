@@ -45,15 +45,17 @@ Pour chaque annonce, estime la rentabilité d'un achat pour revente en France. D
 Barème score_rentabilite (entier 1-10) :
 - 8-10 : marge nette ≥ 40 € ET risque faible. Réparation : panne facile et peu coûteuse (pièce < 40 €, < 1 h), ex. PC pro sans disque/SSD ou sans OS, batterie HS, chargeur absent, port HDMI/USB-C dessoudé, rétroéclairage TV/écran, console qui surchauffe, outillage vendu sans batterie, nappe/clavier/écran courant. Revente directe : fonctionnel, au moins 30 % sous la cote, modèle recherché, annonce crédible.
 - 4-7 : réparation moyenne, pièce chère, décote modeste, ou marge faible/incertaine.
-- 1-3 : panne lourde ou inconnue (carte mère, oxydation, liquide, verrouillage iCloud/BIOS/compte), annonce trop vague, prix proche de la cote, accessoire seul, ou prix anormalement bas sur un produit récent et recherché (arnaque probable).
+- 1-3 : panne lourde ou inconnue (carte mère, oxydation, liquide, verrouillage iCloud/BIOS/compte), prix proche de la cote, accessoire seul, ou marge négative.
 
 Règles :
 - Montants en euros. prix_total = prix + livraison. Un prix marqué "enchère" est provisoire : raisonne sur un prix final probable.
 - valeur_revente_estimee : prix d'occasion réaliste en France (après réparation le cas échéant), jamais le prix neuf ni un prix demandé par d'autres vendeurs.
 - marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais de revente.
 - Revente directe : panne_probable = "aucune", cout_piece_estime = 0 (sauf petit accessoire manquant).
-- Les alertes email ne donnent souvent que le titre (parfois tronqué par « … » ou « ... »), le prix et la ville : ce manque d'informations n'est pas en soi un signe d'arnaque. Juge alors sur le modèle et le prix, avec une confiance "faible".
-- confiance : "haute" si modèle et état sont clairs, "faible" si l'annonce est vague. Dans le doute, baisse le score.
+- Les alertes email ne donnent souvent que le titre (parfois tronqué par « … » ou « ... »), le prix et la ville, sans description. Note alors le potentiel en supposant l'objet conforme à son titre, et mets la confiance à "faible" : le manque d'informations baisse la confiance, pas le score.
+- N'évoque JAMAIS une arnaque sans indice concret : seul un prix inférieur à 30 % de la cote sur un produit récent et très demandé, ou une mention explicite (paiement hors plateforme, « sans boîte ni facture » sur un téléphone récent…), le justifie. Un titre court, vague, coupé ou un modèle que tu ne reconnais pas n'est PAS un indice d'arnaque.
+- vendeur (si fourni, eBay) : ≥ 98 % et ≥ 50 avis = fiable ; < 95 % ou < 5 avis = risque plus élevé, à signaler dans la justification.
+- confiance : "haute" si modèle et état sont clairs, "moyenne" si l'état est incertain, "faible" si seul le titre est connu.
 - question_vendeur : la question la plus utile à poser au vendeur avant d'acheter.
 - panne_probable : 8 mots max. justification_courte : 20 mots max. question_vendeur : 15 mots max.
 - Renvoie une entrée par annonce, avec son id."""
@@ -121,6 +123,8 @@ def format_ad(idx: int, ad: Ad, max_chars: int) -> str:
     parts = [f"#{idx} [{ad.category or '?'}] {ad.title}", price]
     if ad.signals:
         parts.append("signaux: " + ", ".join(ad.signals))
+    if ad.seller:
+        parts.append(f"vendeur: {ad.seller_summary}")
     description = truncate(ad.description.replace(ad.title, "").strip(), max_chars)
     if description:
         parts.append(description)
