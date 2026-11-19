@@ -11,7 +11,7 @@ sources:
   # Emails d'alerte (IMAP) : complément pour leboncoin / Vinted, qui n'ont aucune API publique.
   # Source pauvre (titre, prix, ville). Mettez enabled: false pour n'utiliser que l'API eBay.
   email:
-    enabled: true
+    enabled: false
     folder: INBOX
     lookback_days: 3          # on relit les emails des 3 derniers jours (le dédoublonnage évite les doublons)
     max_emails: null          # null = tous les emails de la période
@@ -278,7 +278,7 @@ daemon:
   seen_retention_days: 90
   connectors:
     ebay:  {enabled: true, interval: [600, 900]}    # API officielle : ~2 000 appels/jour sur 5 000
-    email: {enabled: true, interval: [900, 1200]}
+    email: {enabled: false, interval: [900, 1200]}
     rss:   {enabled: true, interval: [900, 1800]}
     # example_site:            # modèle à adapter (voir dealsniper/daemon/connectors/example_site.py)
     #   enabled: false
