@@ -6,8 +6,9 @@ import re
 
 from .text import normalize
 
-# Un montant : "1 234,56" / "1.234,56" / "45.00" / "45"
-_AMOUNT = r"(\d{1,3}(?:[   .]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)"
+# Un montant : "1 234,56" / "1.234,56" / "45.00" / "45". Il ne doit pas commencer au milieu
+# d'un mot ou d'un nombre : sinon « MacBook 2020 255 € » donnerait « 20 255 € ».
+_AMOUNT = r"(?<![\w.,])(\d{1,3}(?:[   .]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)"
 _EURO = r"(?:€|eur\b|euros?\b)"
 
 _PRICE_RES = (

@@ -132,7 +132,9 @@ def _pick_title(titles: list[str], block: str) -> str:
     good = [t for t in titles if len(t) >= 6 and not _GENERIC_TITLES.match(normalize(t))]
     title = max(good, key=len) if good else block[:90]
     # retire un prix collé en fin de titre : "ThinkPad T480 95 €"
-    stripped = re.sub(r"\s*\d[\d\s.,]*\s*(€|eur\b).*$", "", title, flags=re.IGNORECASE).strip()
+    stripped = re.sub(
+        r"\s+(?:\d{1,3}(?:[ \u00a0\u202f.]\d{3})+|\d+)(?:[.,]\d{1,2})?\s*(?:€|eur\b).*$", "", title, flags=re.IGNORECASE
+    ).strip()
     return (stripped or title)[:200]
 
 

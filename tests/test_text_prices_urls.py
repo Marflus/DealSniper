@@ -47,3 +47,10 @@ def test_urls():
     a = ad_uid("https://t.example.com/abc", "ThinkPad", 90, url_is_stable=False)
     b = ad_uid("https://t.example.com/xyz", "ThinkPad", 90, url_is_stable=False)
     assert a == b
+
+
+def test_numbers_in_titles_are_not_glued_to_prices():
+    # Cas réels relevés dans des emails leboncoin
+    assert extract_price("MacBook Air Retina 13 2020 255 € Cahors 46000") == 255.0
+    assert extract_price("Lenovo thinkpad x396 150 € Le Breuil 71670") == 150.0
+    assert extract_price("Vend pc Lenovo Carbon X 1 100 € Wingles 62410") == 1100.0

@@ -77,3 +77,12 @@ def test_detect_source_and_broken_html():
     assert detect_source("alertes@ebay.fr", "", "", SENDERS) == "ebay"
     assert detect_source("x@y.fr", "", "rien", SENDERS) is None
     assert extract_ads("<a href='http://x", "x", PATTERNS) == []
+
+
+def test_real_leboncoin_card_layout():
+    # Mise en page des récapitulatifs leboncoin : toute la carte est cliquable (titre + prix + ville).
+    html = """<table><tr><td><a href="https://www.leboncoin.fr/vi/3312499020.htm#at_medium=email">
+      <img src="m.jpg"><div>MacBook Air Retina 13 2020</div><div>255 €</div><div>Cahors 46000</div></a></td></tr></table>"""
+    (ad,) = extract_ads(html, "leboncoin", PATTERNS)
+    assert ad.title == "MacBook Air Retina 13 2020" and ad.price == 255.0
+    assert ad.location == "Cahors 46000" and ad.uid == "lbc:3312499020"
