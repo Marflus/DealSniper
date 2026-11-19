@@ -65,9 +65,15 @@ def deal(score=8, deal_type="reparation"):
               analysis={**item(1, score), "type_affaire": deal_type})
 
 
-def test_telegram_format():
-    txt = format_telegram(deal(deal_type="revente_directe"))
-    assert "Revente directe" in txt and "Lyon 69003" in txt and "99,2 % positifs · 1 534 avis" in txt
+def test_telegram_format_is_short():
+    txt = format_telegram(deal(deal_type="reparation"))
+    assert txt.splitlines() == [
+        "<b>PS5 Slim</b>",
+        "💶 Achat : 250 €",
+        "📈 Revente : 200 € (marge +90 €)",
+        "🔧 Panne : SSD absent",
+        '🔗 <a href="https://www.ebay.fr/itm/123456789012">Voir l\'annonce</a>',
+    ]
 
 
 def test_notify_good_and_watch_digest(monkeypatch, config):
