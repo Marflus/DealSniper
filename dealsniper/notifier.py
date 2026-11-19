@@ -1,9 +1,4 @@
-"""Notifications Telegram et/ou Discord des bonnes affaires (score ≥ seuil).
-
-Chaque canal s'active dès que ses variables d'environnement sont renseignées ;
-sans canal, les messages s'affichent dans la console. Rate-limit (HTTP 429)
-respecté, 3 tentatives par message, et une erreur d'envoi n'interrompt rien.
-"""
+"""Notifications Telegram et Discord (console si aucun canal n'est configuré)."""
 
 from __future__ import annotations
 
@@ -26,9 +21,6 @@ DEAL_LABELS = {"reparation": "🔧 Réparation", "revente_directe": "💎 Revent
 CONFIDENCE_LABELS = {"haute": "confiance haute", "moyenne": "confiance moyenne", "faible": "⚠️ confiance faible"}
 
 
-# --------------------------------------------------------------------------- #
-#  Mise en forme
-# --------------------------------------------------------------------------- #
 def _eur(value: float | None) -> str:
     if value is None:
         return "?"
@@ -138,9 +130,6 @@ def format_console(ad: Ad) -> str:
     )
 
 
-# --------------------------------------------------------------------------- #
-#  Envoi
-# --------------------------------------------------------------------------- #
 def _post(url: str, payload: dict[str, Any], channel: str) -> bool:
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:

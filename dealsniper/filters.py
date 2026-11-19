@@ -1,13 +1,7 @@
-"""Pré-filtre en Python pur : aucune annonce rejetée ici ne coûte de token.
+"""Filtre gratuit (aucun appel à Claude).
 
-Règles appliquées dans l'ordre (la première qui échoue rejette l'annonce) :
-  1. catégorie : première catégorie dont un mot-clé est dans le titre (puis la description) ;
-  2. localisation : France uniquement (pays étranger explicite, devise étrangère, DOM-TOM) ;
-  3. annonces d'acheteurs (« recherche », « achète »…) dans le titre ;
-  4. mots-clés rédhibitoires (globaux + catégorie) dans titre et description ;
-  5. budget : prix + livraison ≤ `max_budget`, et prix ≥ `min_price` (faux prix à 1 €) ;
-  6. signaux positifs (`include_keywords` de la catégorie + `deal_signals` globaux),
-     obligatoires si la catégorie a `require_include: true`.
+Rejette, dans l'ordre : hors catégorie, hors de France, annonce d'acheteur,
+mot-clé exclu, hors budget ou prix suspect, absence de signal si exigé.
 """
 
 from __future__ import annotations

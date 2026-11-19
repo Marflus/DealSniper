@@ -39,7 +39,7 @@ DealSniper/
 │   │   ├── base.py           interface commune (list_recent / fetch_detail)
 │   │   ├── ebay.py           eBay, API officielle
 │   │   ├── _template.py      modèle à copier pour ajouter un site
-│   │   └── __init__.py       liste des sites (SITES)
+│   │   └── __init__.py       liste des sites (SITE_MODULES)
 │   ├── filters.py            filtre gratuit
 │   ├── analyzer.py           notation par Claude
 │   ├── notifier.py           Telegram / Discord
@@ -57,7 +57,7 @@ DealSniper/
 1. `cp dealsniper/sites/_template.py dealsniper/sites/mon_site.py`
 2. Dans ce fichier : changez `name = "mon_site"`, écrivez `list_recent` (la liste des annonces : titre, prix,
    URL) et, si utile, `fetch_detail` (la description d'une annonce).
-3. Ajoutez la classe dans `SITES` (`dealsniper/sites/__init__.py`).
+3. Ajoutez-le dans `SITE_MODULES` (`dealsniper/sites/__init__.py`).
 4. Ajoutez un bloc `mon_site:` sous `sites:` dans `config.yaml`.
 
 Tout le reste (déjà vu, filtres, Claude, notifications, pauses) est automatique. Préférez une API ou un flux RSS

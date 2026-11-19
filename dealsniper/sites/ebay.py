@@ -1,9 +1,4 @@
-"""eBay — API officielle et gratuite (Browse API), objets situés en France.
-
-Secrets : EBAY_CLIENT_ID et EBAY_CLIENT_SECRET (https://developer.ebay.com).
-Réglages : config.yaml > sites > ebay > searches (query, condition, max_price).
-Quota gratuit : 5 000 appels/jour (16 recherches toutes les 10-15 min ≈ 2 000).
-"""
+"""eBay via l'API officielle Browse (secrets EBAY_CLIENT_ID et EBAY_CLIENT_SECRET)."""
 
 from __future__ import annotations
 
@@ -24,7 +19,6 @@ ITEM_URL = "https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id"
 CONDITIONS = {"parts": "7000", "used": "3000|4000|5000|6000"}  # pour pièces / occasion
 
 
-# --- Conversion des réponses eBay en annonces (fonctions simples, testables) ---
 def build_filter(search: dict[str, Any], country: str = "FR") -> str:
     """Filtre eBay : pays de l'objet, prix max, état."""
     parts = [f"itemLocationCountry:{country}", "priceCurrency:EUR"]
@@ -61,7 +55,8 @@ def item_to_ad(item: dict[str, Any]) -> Ad | None:
     """Une entrée de résultat de recherche eBay → Ad."""
     if not (item.get("itemWebUrl") and item.get("title")):
         return None
-    auction = item.get("buyingOptions") == ["AUCTION"]
+    options = item.get("buyingOptions") or []
+    auction = "AUCTION" in options and "FIXED_PRICE" not in options
     price = _euros(item.get("currentBidPrice") if auction else item.get("price")) or _euros(item.get("price"))
     shipping = [_euros(o.get("shippingCost")) for o in item.get("shippingOptions") or []]
     shipping_costs = [c for c in shipping if c is not None]
@@ -114,7 +109,10 @@ class EbaySite(Site):
 
     async def fetch_detail(self, http: PoliteClient, ad: Ad) -> Ad:
         """ÉTAPE 2 : fiche complète (description du vendeur, état détaillé, ville, réputation)."""
-        item_id = (native_id(ad.url) or ":").split(":", 1)[1]
+        nid = native_id(ad.url)
+        if not nid:
+            return ad
+        item_id = nid.split(":", 1)[1]
         resp = await http.get(ITEM_URL, headers=await self._headers(http), params={"legacy_item_id": item_id})
         resp.raise_for_status()
         item = resp.json()

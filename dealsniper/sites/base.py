@@ -1,15 +1,7 @@
-"""Interface commune à tous les sites.
+"""Interface d'un site.
 
-Un site = un fichier dans `dealsniper/sites/` avec une classe qui hérite de `Site`
-et implémente :
-  * `list_recent(http)`  — ÉTAPE 1 (obligatoire) : liste légère des annonces
-    récentes (titre, prix, URL au minimum ; l'URL sert d'identifiant unique) ;
-  * `fetch_detail(http, ad)` — ÉTAPE 2 (facultative) : compléter description,
-    état, vendeur. Appelée UNIQUEMENT pour une annonce jamais vue qui a passé
-    le filtre.
-
-Tout le reste (déjà vu ?, filtres, analyse Claude, notifications, pauses) est
-fait par `engine.py`, de la même façon pour tous les sites.
+`list_recent` renvoie les annonces récentes (titre, prix, URL au minimum).
+`fetch_detail`, facultatif, complète une annonce nouvelle qui a passé le filtre.
 """
 
 from __future__ import annotations

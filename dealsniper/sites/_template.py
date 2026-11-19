@@ -3,7 +3,7 @@
 Ensuite :
   1. renommez la classe et `name` (ex. "mon_site") ;
   2. écrivez `list_recent` (étape 1) et, si utile, `fetch_detail` (étape 2) ;
-  3. ajoutez la classe dans SITES (sites/__init__.py) ;
+  3. ajoutez-le dans SITE_MODULES (sites/__init__.py) ;
   4. ajoutez dans config.yaml :
 
         sites:

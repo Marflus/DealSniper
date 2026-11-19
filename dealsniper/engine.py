@@ -1,18 +1,7 @@
-"""Moteur commun : le même traitement pour tous les sites.
+"""Moteur commun à tous les sites.
 
-Pour chaque passage d'un site :
-  1. `list_recent`              → annonces récentes (liste légère)
-  2. base SQLite                → on ne garde que les annonces jamais vues
-  3. filtre gratuit             → catégorie, budget, France, mots interdits
-  4. `fetch_detail`             → fiche complète, seulement pour les nouvelles retenues
-  5. filtre à nouveau           → la description peut révéler un « oxydé », un « iCloud »…
-  6. analyse Claude par lots    → note, marge, confiance, question au vendeur
-  7. notifications              → Telegram / Discord
-  8. base SQLite                → tout est mémorisé (sauf ce que l'IA n'a pas pu noter : retenté plus tard)
-
-Deux façons de lancer :
-  * `run_once`  : un passage de chaque site puis fin (GitHub Actions, cron) ;
-  * `watch`     : une boucle par site, en continu (Raspberry Pi / serveur).
+Par passage : liste → nouvelles annonces → filtre → fiche détaillée → filtre → Claude → notification.
+`run_once` fait un passage par site ; `watch` boucle en continu, chaque site à son rythme.
 """
 
 from __future__ import annotations
@@ -51,23 +40,23 @@ class Engine:
 
     async def process(self, site: Site) -> dict[str, int]:
         """Un passage complet pour un site. Renvoie des compteurs pour les logs."""
-        listed = await site.list_recent(self.http)                                    # 1
-        new_uids = await self.db.unseen([ad.uid for ad in listed])                    # 2
+        listed = await site.list_recent(self.http)
+        new_uids = await self.db.unseen([ad.uid for ad in listed])
         new_ads = list({ad.uid: ad for ad in listed if ad.uid in new_uids}.values())
 
         candidates = []
         for ad in new_ads:
-            if filters.check(ad, self.config):                                        # 3
+            if filters.check(ad, self.config):
                 await self.db.remember(ad, "rejected")
                 continue
             await self.sleep(random.uniform(*self.network["detail_delay"]))
             try:
-                ad = await site.fetch_detail(self.http, ad)                           # 4
+                ad = await site.fetch_detail(self.http, ad)
             except AccessDenied:
                 raise
             except Exception as exc:  # fiche illisible : on garde les infos de la liste
                 log.debug("%s : fiche non lue (%s)", site.name, exc)
-            if filters.check(ad, self.config):                                        # 5
+            if filters.check(ad, self.config):
                 await self.db.remember(ad, "rejected")
             else:
                 candidates.append(ad)
@@ -80,11 +69,11 @@ class Engine:
         async with self._ai_lock:
             cap = self.config["analyzer"]["max_daily_cost_usd"]
             budget = None if cap is None else max(0.0, cap - await self.db.cost_today())
-            result = await asyncio.to_thread(analyzer.analyze, candidates, self.config, budget)    # 6
+            result = await asyncio.to_thread(analyzer.analyze, candidates, self.config, budget)
             await self.db.add_cost(result.cost_usd)
-            sent = await asyncio.to_thread(notifier.notify, result.analyzed, self.config)          # 7
+            sent = await asyncio.to_thread(notifier.notify, result.analyzed, self.config)
         sent_uids = {ad.uid for ad in sent}
-        for ad in result.analyzed:                                                                  # 8
+        for ad in result.analyzed:
             await self.db.remember(ad, "analyzed", notified=ad.uid in sent_uids)
         stats.update(analysées=len(result.analyzed), notifiées=len(sent))
         return stats

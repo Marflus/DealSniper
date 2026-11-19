@@ -122,3 +122,13 @@ def test_daily_cost_tracking():
         return total
 
     assert round(asyncio.run(go()), 3) == 0.03
+
+
+def test_missing_dependency_does_not_block_other_sites(monkeypatch, config):
+    from dealsniper import sites
+
+    monkeypatch.setitem(sites.SITE_MODULES, "absent", "module_inexistant:Classe")
+    monkeypatch.setenv("EBAY_CLIENT_ID", "id")
+    monkeypatch.setenv("EBAY_CLIENT_SECRET", "secret")
+    cfg = {**config, "sites": {"absent": {"enabled": True}, "ebay": config["sites"]["ebay"]}}
+    assert [s.name for s in sites.load_sites(cfg)] == ["ebay"]

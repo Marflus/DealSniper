@@ -1,11 +1,4 @@
-"""Ligne de commande : `python -m dealsniper <commande>`.
-
-    run          un passage de chaque site puis fin (commande par défaut ; GitHub Actions)
-    watch        surveillance continue, une boucle par site (Raspberry Pi / serveur)
-    test-notif   envoie une fausse annonce sur Telegram / Discord
-    recap        envoie les annonces notées ces dernières 24 h (--hours N)
-    reset        oublie les annonces déjà vues
-"""
+"""Ligne de commande : python -m dealsniper [run|watch|test-notif|recap|reset]."""
 
 from __future__ import annotations
 

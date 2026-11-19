@@ -1,12 +1,4 @@
-"""Base SQLite locale (`data/dealsniper.db`).
-
-  * seen  : annonces déjà traitées (pour ne jamais les traiter ni notifier deux fois) ;
-  * sites : pause d'un site après un refus d'accès ;
-  * costs : dépense API Claude par jour (plafond journalier).
-
-Une seule connexion, protégée par un verrou ; les méthodes `async` passent par
-`asyncio.to_thread` pour ne pas bloquer la boucle asyncio.
-"""
+"""Base SQLite locale : annonces déjà vues, pauses des sites, coût du jour."""
 
 from __future__ import annotations
 
@@ -57,7 +49,6 @@ class Database:
     def close(self) -> None:
         self._conn.close()
 
-    # --- annonces ---------------------------------------------------------
     async def unseen(self, uids: list[str]) -> set[str]:
         """Parmi `uids`, ceux qui ne sont pas encore en base."""
         if not uids:
@@ -85,7 +76,6 @@ class Database:
     def reset(self) -> None:
         self._sql("DELETE FROM seen")
 
-    # --- pauses des sites ---------------------------------------------------
     async def paused_until(self, site: str) -> datetime | None:
         rows = await self._asql("SELECT paused_until FROM sites WHERE name = ?", (site,))
         if rows and rows[0][0] and datetime.fromisoformat(rows[0][0]) > _now():
@@ -98,7 +88,6 @@ class Database:
                          (site, until.isoformat(timespec="seconds"), reason))
         return until
 
-    # --- coûts --------------------------------------------------------------
     async def add_cost(self, usd: float) -> None:
         await self._asql("INSERT INTO costs (day, usd) VALUES (?, ?) "
                          "ON CONFLICT(day) DO UPDATE SET usd = usd + excluded.usd", (_now().date().isoformat(), usd))

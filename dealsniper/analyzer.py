@@ -1,18 +1,4 @@
-"""Évaluation des annonces pré-filtrées par Claude (API Anthropic).
-
-Coût minimal :
-  * modèle économique (`claude-haiku-4-5` par défaut, réglable dans config.yaml) ;
-  * annonces envoyées par lots (un seul prompt système pour N annonces) ;
-  * une ligne compacte par annonce, description tronquée (600 caractères) ;
-  * réponse contrainte par un schéma JSON (structured outputs) ;
-  * coût calculé à partir de `response.usage` et plafond de dépense journalier.
-
-Robustesse :
-  * erreurs temporaires (429, 5xx, réseau) réessayées par le SDK (`max_retries`) ;
-  * lot en échec → annonces renvoyées dans `failed`, retentées au passage suivant ;
-  * réponse tronquée (`max_tokens`) → lot coupé en deux ;
-  * clé refusée / crédit épuisé → arrêt propre, les lots déjà analysés sont gardés.
-"""
+"""Notation des annonces par Claude, par lots, avec réponse JSON imposée et suivi du coût."""
 
 from __future__ import annotations
 
@@ -106,9 +92,6 @@ class AnalysisResult:
     api_calls: int = 0
 
 
-# --------------------------------------------------------------------------- #
-#  Prompt
-# --------------------------------------------------------------------------- #
 def _money(value: float | None) -> str:
     if value is None:
         return "?"
@@ -137,9 +120,6 @@ def build_user_prompt(ads: list[Ad], max_chars: int) -> str:
     return "Annonces :\n" + "\n".join(format_ad(i, ad, max_chars) for i, ad in enumerate(ads, 1))
 
 
-# --------------------------------------------------------------------------- #
-#  Réponse
-# --------------------------------------------------------------------------- #
 def _parse_json(text: str) -> dict[str, Any]:
     """Parse la réponse ; tolère du texte autour du JSON (mode sans schéma)."""
     try:
@@ -181,9 +161,6 @@ def sanitize_analysis(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# --------------------------------------------------------------------------- #
-#  Analyse
-# --------------------------------------------------------------------------- #
 class Analyzer:
     def __init__(self, config: dict[str, Any]):
         import anthropic

@@ -61,3 +61,17 @@ def test_site_two_steps(monkeypatch, config):
 
 def test_not_configured_without_keys(config):
     assert not ebay.EbaySite(config["sites"]["ebay"], config).is_configured()
+
+
+def test_auction_with_best_offer_and_missing_id(config):
+    ad = ebay.item_to_ad({**ITEM, "buyingOptions": ["AUCTION", "BEST_OFFER"],
+                          "currentBidPrice": {"value": "20", "currency": "EUR"}})
+    assert ad.price_mode == "enchere" and ad.price == 20.0
+
+    async def go():
+        async with PoliteClient("t", 0, transport=httpx.MockTransport(lambda r: httpx.Response(500))) as http:
+            site = ebay.EbaySite(config["sites"]["ebay"], config)
+            no_id = ebay.item_to_ad({**ITEM, "itemWebUrl": "https://exemple.fr/annonce"})
+            return await site.fetch_detail(http, no_id)
+
+    assert asyncio.run(go()).url == "https://exemple.fr/annonce"  # aucune requête envoyée

@@ -1,13 +1,7 @@
-"""Client HTTP asynchrone « poli » partagé par tous les connecteurs.
+"""Client HTTP asynchrone partagé.
 
-Règles appliquées à chaque requête :
-  * identification honnête (User-Agent configurable, jamais déguisé en navigateur) ;
-  * délai minimum entre deux requêtes vers un même site (`min_host_interval`) ;
-  * robots.txt respecté pour les connecteurs qui lisent des pages web ;
-  * HTTP 429 (trop de requêtes) et erreurs 5xx / réseau : attente exponentielle,
-    en respectant l'en-tête Retry-After, puis abandon après `max_retries` ;
-  * HTTP 401 / 403 : le site refuse l'accès → `AccessDenied` immédiatement, sans
-    nouvelle tentative. Le connecteur est alors mis en pause plusieurs heures.
+Délai minimum par site, robots.txt sur demande, nouvel essai sur 429/5xx,
+et `AccessDenied` immédiat sur 401/403 (le site est alors mis en pause).
 """
 
 from __future__ import annotations
@@ -62,7 +56,6 @@ class PoliteClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    # ------------------------------------------------------------------ #
     async def _wait_turn(self, host: str) -> None:
         """Espace les requêtes vers un même site (avec un peu d'aléa pour étaler la charge)."""
         elapsed = time.monotonic() - self._last_request.get(host, 0.0)
