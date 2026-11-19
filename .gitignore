@@ -27,11 +27,5 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Données locales (base SQLite)
-data/.run.lock
-data/*.db
-data/*.db-wal
-data/*.db-shm
-data/*.corrupt
-data/*.tmp
-*.eml
+# Base SQLite locale
+data/

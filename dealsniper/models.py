@@ -17,7 +17,7 @@ def _now_iso() -> str:
 class Ad:
     title: str
     url: str
-    source: str                         # nom du site : "ebay", nom du flux RSS…
+    source: str                         # nom du site : "ebay", …
     price: float | None = None          # prix affiché (€), None si inconnu
     shipping: float | None = None       # frais de livraison (€), None si non précisés
     description: str = ""               # texte court, sans HTML
@@ -64,9 +64,8 @@ class Ad:
 
     @property
     def delivery_possible(self) -> bool:
-        """Vrai si l'annonce indique un envoi possible (« Livraison possible » sur leboncoin)."""
-        text = self.description.lower()
-        return self.shipping is not None or "livraison possible" in text or "envoi possible" in text
+        """Vrai si l'annonce propose un envoi (frais de port connus)."""
+        return self.shipping is not None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Ad:

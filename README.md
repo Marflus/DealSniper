@@ -3,15 +3,15 @@
 Veille automatique de **bonnes affaires électroniques en France** : objets **à réparer** (PC sans SSD, console qui
 surchauffe, TV au rétroéclairage HS…) ou **sous leur cote** (revente directe).
 
-Deal Sniper interroge des sites (un fichier par site), écarte gratuitement ce qui ne vous intéresse pas, fait noter
+Deal Sniper interroge des sites (un fichier par site ; aujourd'hui l'API officielle eBay), écarte gratuitement ce qui ne vous intéresse pas, fait noter
 le reste par **Claude** et vous prévient sur **Telegram / Discord**.
 
 ## Comment ça marche
 
 ```
  sites/ebay.py ─┐
- sites/rss.py  ─┼─► engine.py ─► filtre ─► fiche détaillée ─► filtre ─► Claude ─► Telegram / Discord
- sites/…       ─┘   (commun)    (gratuit)   (si nouvelle)              (note /10)
+ sites/…       ─┼─► engine.py ─► filtre ─► fiche détaillée ─► filtre ─► Claude ─► Telegram / Discord
+                ─┘   (commun)    (gratuit)   (si nouvelle)              (note /10)
                          └──────────── data/dealsniper.db (annonces déjà vues, coûts, pauses) ───┘
 ```
 
@@ -32,14 +32,12 @@ contourné. Les requêtes sont espacées et identifiées honnêtement (`DealSnip
 DealSniper/
 ├── config.yaml               ← tous les réglages (sites, recherches, budgets, mots-clés, seuils)
 ├── .env.example              ← modèle des secrets (à copier en .env)
-├── main.py                   raccourci : python main.py = python -m dealsniper
 ├── dealsniper/
 │   ├── cli.py                commandes : run, watch, test-notif, recap, reset
 │   ├── engine.py             moteur commun (les 6 étapes ci-dessus)
 │   ├── sites/                ← UN FICHIER PAR SITE
 │   │   ├── base.py           interface commune (list_recent / fetch_detail)
 │   │   ├── ebay.py           eBay, API officielle
-│   │   ├── rss.py            flux RSS / Atom
 │   │   ├── _template.py      modèle à copier pour ajouter un site
 │   │   └── __init__.py       liste des sites (SITES)
 │   ├── filters.py            filtre gratuit
@@ -116,7 +114,7 @@ Dans ce cas, supprimez le bloc `schedule:` du workflow GitHub pour ne pas analys
 
 | Section | Rôle |
 |---|---|
-| `sites` | un bloc par site : `enabled`, `interval`, et ses réglages (recherches eBay, flux RSS…) |
+| `sites` | un bloc par site : `enabled`, `interval`, et ses réglages (recherches eBay…) |
 | `network` | identification, délai entre requêtes, pause après un refus |
 | `location` | France uniquement, DOM-TOM exclus |
 | `filters`, `categories` | mots interdits, budgets par catégorie, signaux positifs |

@@ -18,7 +18,6 @@ DEFAULTS: dict[str, Any] = {
     "sites": {
         "ebay": {"enabled": True, "interval": [600, 900], "marketplace": "EBAY_FR", "country": "FR",
                  "limit": 100, "searches": []},
-        "rss": {"enabled": True, "interval": [900, 1800], "feeds": []},
     },
     # Comportement réseau, commun à tous les sites.
     "network": {

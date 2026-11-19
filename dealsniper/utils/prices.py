@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import re
 
-from .text import normalize
-
 # Un montant : "1 234,56" / "1.234,56" / "45.00" / "45". Il ne doit pas commencer au milieu
 # d'un mot ou d'un nombre : sinon « MacBook 2020 255 € » donnerait « 20 255 € ».
 _AMOUNT = r"(?<![\w.,])(\d{1,3}(?:[   .]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)"
@@ -24,11 +22,7 @@ _SHIPPING_RES = (
     # "4,99 € de livraison" (mais pas "40 € Livraison 5 €")
     re.compile(_AMOUNT + r"\s*(?:€|eur)\s*de\s+(?:livraison|frais de port|port)\b", re.IGNORECASE),
 )
-_FREE_SHIPPING_RE = re.compile(
-    r"(livraison|frais de port|port|shipping|envoi)\s*(gratuite?|offerte?|free|inclus)", re.IGNORECASE
-)
 _FOREIGN_CURRENCY_RE = re.compile(r"(£|us\s?\$|\$\s?\d|\d\s?\$|\busd\b|\bgbp\b|\bchf\b|\bcad\b)", re.IGNORECASE)
-_AUCTION_WORDS = ("enchere", "encheres", "offre actuelle", "mise a prix", "derniere offre", "bid", "bids")
 
 
 def parse_amount(raw: str) -> float | None:
@@ -47,19 +41,6 @@ def parse_amount(raw: str) -> float | None:
     except ValueError:
         return None
     return value if 0 <= value < 1_000_000 else None
-
-
-def extract_shipping(text: str) -> float | None:
-    """Frais de livraison mentionnés (0.0 si gratuite, None si absents)."""
-    if not text:
-        return None
-    if _FREE_SHIPPING_RE.search(text):
-        return 0.0
-    for rx in _SHIPPING_RES:
-        m = rx.search(text)
-        if m:
-            return parse_amount(m.group(1))
-    return None
 
 
 def extract_price(text: str) -> float | None:
@@ -82,9 +63,3 @@ def extract_price(text: str) -> float | None:
 def has_foreign_currency(text: str) -> bool:
     """Vrai si le texte affiche un prix en devise étrangère et aucun prix en euros."""
     return bool(text) and _FOREIGN_CURRENCY_RE.search(text) is not None and extract_price(text) is None
-
-
-def detect_price_mode(text: str) -> str:
-    """"enchere" si le prix est une enchère en cours (donc provisoire), sinon "fixe"."""
-    text_n = normalize(text)
-    return "enchere" if any(re.search(r"\b" + w + r"\b", text_n) for w in _AUCTION_WORDS) else "fixe"

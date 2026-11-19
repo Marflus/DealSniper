@@ -1,7 +1,6 @@
 anthropic>=2.0,<3        # API Claude
 httpx>=0.27              # client HTTP asynchrone (sites)
 requests>=2.31           # Telegram / Discord
-feedparser>=6.0          # flux RSS / Atom
 beautifulsoup4>=4.12     # nettoyage HTML (descriptions, modèle de site HTML)
 PyYAML>=6.0              # config.yaml
 python-dotenv>=1.0       # lecture du fichier .env

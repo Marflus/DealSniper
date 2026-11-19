@@ -37,12 +37,6 @@ sites:
       - {query: "makita sans batterie", condition: any, max_price: 80}
       - {query: "dewalt machine nue", condition: any, max_price: 80}
 
-  # Flux RSS / Atom de n'importe quel site qui en publie un.
-  rss:
-    enabled: true
-    interval: [900, 1800]
-    feeds: []
-    #  - {name: mon-flux, url: "https://exemple.fr/annonces.rss"}
 
   # Vos propres sites : copiez dealsniper/sites/_template.py, puis ajoutez un bloc ici.
   # mon_site:

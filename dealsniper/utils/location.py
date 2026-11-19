@@ -1,4 +1,4 @@
-"""Localisation : extraction « Ville 69003 » et détection des annonces hors de France.
+"""Localisation : détection des annonces hors de France.
 
 Deal Sniper ne garde que les annonces situées en France (métropole par défaut) :
   * une localisation étrangère explicite (« Provenance : Chine », « Lieu où se
@@ -42,13 +42,6 @@ _FOREIGN_RE = re.compile(
     + r")(?![a-z])"
 )
 _OVERSEAS_POSTCODE_RE = re.compile(r"(?<![\d.,])(97[1-6]\d{2}|98[6-9]\d{2})(?![\d.,]|\s*(?:€|eur))")
-_CITY_POSTCODE_RE = re.compile(r"([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'\-]+(?: [A-ZÀ-Ÿa-zà-ÿ'\-]+){0,3}) (\d{5})(?![\d.,]|\s*(?:€|eur))")
-
-
-def extract_location(text: str) -> str | None:
-    """« Lyon 69003 » si le texte contient une ville suivie d'un code postal."""
-    m = _CITY_POSTCODE_RE.search(text or "")
-    return f"{m.group(1)} {m.group(2)}" if m else None
 
 
 def foreign_country(text: str) -> str | None:

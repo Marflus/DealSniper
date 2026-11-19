@@ -11,9 +11,8 @@ from typing import Any
 
 from .base import Site
 from .ebay import EbaySite
-from .rss import RssSite
 
-SITES: list[type[Site]] = [EbaySite, RssSite]
+SITES: list[type[Site]] = [EbaySite]
 
 
 def load_sites(config: dict[str, Any]) -> list[Site]:

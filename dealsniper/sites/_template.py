@@ -12,7 +12,7 @@ Ensuite :
             interval: [1800, 3600]     # pause entre deux passages (secondes)
             list_url: "https://exemple.fr/annonces?tri=recent"
 
-Si le site a une API ou un flux RSS, utilisez-les (voir ebay.py, rss.py) : c'est
+Si le site a une API ou un flux RSS, utilisez-les (voir ebay.py) : c'est
 plus fiable et plus léger que lire des pages HTML.
 
 Pour une page HTML, `http.get(url, check_robots=True)` vérifie robots.txt.
