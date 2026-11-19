@@ -1,4 +1,4 @@
-"""Sources d'annonces : emails d'alerte (IMAP) et flux RSS.
+"""Sources d'annonces : API officielle eBay, emails d'alerte (IMAP) et flux RSS.
 
 Chaque source renvoie des `Ad` et un `SourceReport` (santé de la source),
 sans jamais lever d'exception : une source en panne n'arrête pas les autres.
@@ -26,13 +26,17 @@ class SourceReport:
 
 def collect_all(config: dict[str, Any], seen) -> tuple[list[Ad], list[SourceReport]]:
     """Interroge toutes les sources actives et retire doublons et annonces déjà vues."""
-    from . import email_alerts, rss
+    from . import ebay_api, email_alerts, rss
 
     sources_cfg = config["sources"]
     ads: list[Ad] = []
     reports: list[SourceReport] = []
     if sources_cfg["email"].get("enabled", True):
         found, report = email_alerts.collect(sources_cfg["email"])
+        ads += found
+        reports.append(report)
+    if sources_cfg["ebay_api"].get("enabled", True) and sources_cfg["ebay_api"].get("searches"):
+        found, report = ebay_api.collect(sources_cfg["ebay_api"])
         ads += found
         reports.append(report)
     if sources_cfg["rss"].get("enabled", True) and sources_cfg["rss"].get("feeds"):

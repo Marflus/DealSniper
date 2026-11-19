@@ -5,7 +5,8 @@ Chasseur automatique de **bonnes affaires électroniques en France** :
 - 🔧 **à réparer** : PC portables sans SSD, consoles qui surchauffent, TV au rétroéclairage HS, outillage vendu sans batterie… ;
 - 💎 **en revente directe** : appareils **fonctionnels** vendus nettement sous leur cote (vente urgente, déménagement…).
 
-Deal Sniper lit vos **alertes email** (leboncoin, eBay, Vinted, Agorastore…) et des **flux RSS**, élimine
+Deal Sniper interroge l'**API officielle eBay** (recherches en direct, sans limite pratique), lit vos **alertes
+email** (leboncoin, Vinted, Agorastore…) et des **flux RSS**, élimine
 gratuitement les annonces sans intérêt ou hors de France, fait noter les autres par **Claude** et vous envoie
 sur **Telegram / Discord** uniquement les affaires notées **≥ 7/10**, avec la marge estimée, un niveau de
 confiance et la question à poser au vendeur.
@@ -55,6 +56,7 @@ DealSniper/
 │   ├── config.py             # lecture de config.yaml / .env, valeurs par défaut
 │   ├── models.py             # Ad : une annonce normalisée
 │   ├── sources/
+│   │   ├── ebay_api.py       # API officielle eBay (recherches en direct, France)
 │   │   ├── email_alerts.py   # lecture IMAP de la boîte dédiée + diagnostic
 │   │   ├── email_parser.py   # email d'alerte → annonces (emails transférés compris)
 │   │   └── rss.py            # flux RSS / Atom
@@ -93,7 +95,23 @@ Remplissez `.env` (jamais commité : il est exclu par `.gitignore`).
 
 ---
 
-## 3. Boîte mail dédiée
+## 3. API eBay (recommandé)
+
+C'est la source la plus riche : jusqu'à 200 annonces récentes par recherche, filtrées par eBay (objets **situés en
+France**, prix max, état « pour pièces » ou « occasion »), 5 000 appels gratuits par jour. Aucun email nécessaire.
+
+1. Créez un compte sur [developer.ebay.com](https://developer.ebay.com) (gratuit ; validation sous ~1 jour).
+2. **Application Keys** → créez un jeu de clés **Production** : récupérez l'**App ID (Client ID)** et le
+   **Cert ID (Client Secret)**.
+3. eBay demande de déclarer un point de notification « suppression de compte » : comme Deal Sniper ne stocke aucune
+   donnée d'utilisateur eBay, choisissez l'**exemption** (*Alerts & Notifications → Marketplace account deletion →
+   Not persisting eBay data*).
+4. Ajoutez les secrets `EBAY_CLIENT_ID` et `EBAY_CLIENT_SECRET` (GitHub et/ou `.env`).
+5. Adaptez les recherches dans `config.yaml` → `sources.ebay_api.searches` (`query`, `condition`, `max_price`).
+
+Sans ces clés, la source est simplement ignorée.
+
+## 3 bis. Boîte mail dédiée
 
 Utilisez une **adresse Gmail créée pour les alertes** :
 1. Activez la **validation en deux étapes** du compte Google.
@@ -111,8 +129,8 @@ les alertes vers la boîte dédiée. Les emails **transférés ou redirigés** s
 - **leboncoin** : recherche → *Sauvegarder la recherche* → dans *Favoris → Recherches*, activez l'**enveloppe ✉️**
   (alerte email). La cloche 🔔 ne concerne que le téléphone. Si votre compte est sur votre boîte perso, créez une
   règle qui redirige les emails de leboncoin vers la boîte dédiée.
-- **eBay** : compte avec la boîte dédiée → recherche avec filtre **« Articles en France »** et prix max →
-  *Enregistrer cette recherche* → notifications **par email** (menu ⋮ des recherches favorites).
+- **eBay** : inutile avec l'API (§ 3) ; sinon, recherche avec filtre « Articles en France » → *Enregistrer cette
+  recherche* → notifications par email.
 - **Vinted** : compte avec la boîte dédiée → recherche (mots-clés + prix max) → *Sauvegarder la recherche* →
   *Paramètres → Notifications* : activez les **emails** pour les recherches sauvegardées (si l'option n'apparaît pas,
   Vinted ne notifie que dans l'application et rien n'arrivera dans la boîte). Les liens `vinted.fr/items/…` sont reconnus.
@@ -195,7 +213,8 @@ Le workflow `.github/workflows/dealsniper.yml` lance un passage **toutes les heu
 `data/*.json` pour mémoriser l'état.
 
 1. **Settings → Secrets and variables → Actions** : `ANTHROPIC_API_KEY`, `IMAP_SERVER`, `IMAP_EMAIL`,
-   `IMAP_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (et `DISCORD_WEBHOOK_URL` si besoin).
+   `IMAP_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, et si besoin `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`,
+   `DISCORD_WEBHOOK_URL`.
 2. **Settings → Actions → General → Workflow permissions** : *Read and write permissions*.
 3. **Actions → Deal Sniper → Run workflow**, puis choisissez le **mode** :
    - `run` : passage complet ;
@@ -237,8 +256,10 @@ facture imprévue ; mettez `null` pour le supprimer.
 
 ### Sources non prises en charge
 
-**Facebook Marketplace** n'a ni API ni flux RSS : les projets qui s'y connectent pilotent un vrai navigateur avec
-votre compte Facebook connecté. C'est contraire aux conditions de Facebook, impossible sur GitHub Actions, et ça
-expose votre compte à un blocage : Deal Sniper ne le fait pas.
+**Facebook Marketplace, et la lecture directe de leboncoin ou Vinted** : aucune API publique. Les projets qui s'y
+connectent (fbm-sniper, zorojuro12/deal-sniper…) contournent les protections anti-robots (navigateur « stealth »,
+jetons internes, rotation de cookies et d'IP). C'est contraire aux conditions de ces sites, cela casse à chaque
+changement de leur côté (le `STATUS.md` de fbm-sniper-community indique toutes ses sources hors service en mai 2026)
+et expose votre compte et votre IP à un blocage : Deal Sniper ne le fait pas.
 
 Vérifiez toujours une annonce et le vendeur avant d'acheter : les estimations de l'IA sont indicatives.

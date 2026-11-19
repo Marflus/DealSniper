@@ -33,6 +33,35 @@ sources:
     # uniquement) pour retrouver l'URL réelle de l'annonce.
     resolve_tracking_links: true
 
+  # API officielle eBay (gratuite) : recherches en direct, objets situés en France uniquement.
+  # Nécessite EBAY_CLIENT_ID et EBAY_CLIENT_SECRET (voir README § eBay). Sans eux, source ignorée.
+  #   condition : parts (pour pièces / ne fonctionne pas), used (occasion), any (tout)
+  #   max_price : prix maximum filtré par eBay ; limit : annonces récentes par recherche (max 200)
+  ebay_api:
+    enabled: true
+    marketplace: EBAY_FR
+    country: FR
+    limit: 100
+    searches:
+      # --- À réparer ---
+      - {query: "thinkpad", condition: parts, max_price: 120}
+      - {query: "dell latitude", condition: parts, max_price: 120}
+      - {query: "hp elitebook", condition: parts, max_price: 120}
+      - {query: "macbook", condition: parts, max_price: 180}
+      - {query: "ps5", condition: parts, max_price: 180}
+      - {query: "ps4", condition: parts, max_price: 80}
+      - {query: "xbox series", condition: parts, max_price: 150}
+      - {query: "nintendo switch", condition: parts, max_price: 100}
+      - {query: "steam deck", condition: parts, max_price: 200}
+      - {query: "tv led", condition: parts, max_price: 100}
+      - {query: "ecran pc", condition: parts, max_price: 60}
+      # --- Revente directe (occasion fonctionnelle, prix bas) ---
+      - {query: "thinkpad t480", condition: used, max_price: 150}
+      - {query: "ps5", condition: used, max_price: 250}
+      - {query: "nintendo switch oled", condition: used, max_price: 160}
+      - {query: "makita sans batterie", condition: any, max_price: 80}
+      - {query: "dewalt machine nue", condition: any, max_price: 80}
+
   rss:
     enabled: true
     timeout: 20

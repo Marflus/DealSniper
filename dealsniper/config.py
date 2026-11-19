@@ -26,6 +26,8 @@ DEFAULTS: dict[str, Any] = {
             "ad_url_patterns": [],
             "resolve_tracking_links": True,
         },
+        "ebay_api": {"enabled": True, "marketplace": "EBAY_FR", "country": "FR", "limit": 100, "timeout": 20,
+                     "searches": []},
         "rss": {"enabled": True, "timeout": 20, "feeds": []},
     },
     "location": {"france_only": True, "exclude_overseas": True},
