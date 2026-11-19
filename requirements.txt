@@ -4,3 +4,5 @@ requests>=2.31           # Telegram / Discord
 beautifulsoup4>=4.12     # nettoyage HTML (descriptions, modèle de site HTML)
 PyYAML>=6.0              # config.yaml
 python-dotenv>=1.0       # lecture du fichier .env
+curl_cffi>=0.7.0         # empreinte TLS Chrome (Vinted, leboncoin)
+playwright>=1.48.0       # navigateur persistant (Facebook Marketplace)

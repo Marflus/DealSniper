@@ -11,8 +11,16 @@ from typing import Any
 
 from .base import Site
 from .ebay import EbaySite
+from .facebook import FacebookMarketplaceSite
+from .leboncoin import LeboncoinSite
+from .vinted import VintedSite
 
-SITES: list[type[Site]] = [EbaySite]
+SITES: list[type[Site]] = [
+    EbaySite,
+    VintedSite,
+    LeboncoinSite,
+    FacebookMarketplaceSite,
+]
 
 
 def load_sites(config: dict[str, Any]) -> list[Site]:

@@ -37,6 +37,44 @@ sites:
       - {query: "makita sans batterie", condition: any, max_price: 80}
       - {query: "dewalt machine nue", condition: any, max_price: 80}
 
+  vinted:
+    enabled: true
+    interval: [300, 600]
+    limit: 25
+    searches:
+      - {query: "thinkpad", max_price: 150}
+      - {query: "macbook hs", max_price: 180}
+      - {query: "ps5 hs", max_price: 180}
+      - {query: "ps4 hs", max_price: 80}
+      - {query: "nintendo switch hs", max_price: 100}
+      - {query: "steam deck", max_price: 200}
+      - {query: "makita sans batterie", max_price: 80}
+
+  leboncoin:
+    enabled: true
+    headless: false
+    interval: [300, 600]
+    limit: 25
+    searches:
+      # Catégories LBC : 15=Informatique, 16=Image&Son, 43=Consoles, 21=Bricolage
+      - {query: "thinkpad", category: "15", max_price: 150}
+      - {query: "dell latitude", category: "15", max_price: 120}
+      - {query: "macbook hs", category: "15", max_price: 180}
+      - {query: "ps5 hs", category: "43", max_price: 180}
+      - {query: "nintendo switch", category: "43", max_price: 160}
+      - {query: "tv led panne", category: "16", max_price: 100}
+      - {query: "makita sans batterie", category: "21", max_price: 80}
+
+facebook:
+  enabled: true
+  interval: [600, 900]
+  city: "paris"      # ou ta ville
+  limit: 20
+  headless: false
+    searches:
+      - {query: "ps5 hs", max_price: 180}
+      - {query: "thinkpad", max_price: 150}
+      - {query: "nintendo switch", max_price: 150}
 
   # Vos propres sites : copiez dealsniper/sites/_template.py, puis ajoutez un bloc ici.
   # mon_site:
@@ -50,7 +88,7 @@ sites:
 network:
   user_agent: "DealSniper/3.0 (veille personnelle non commerciale)"  # identification honnête
   min_host_interval: 10        # secondes minimum entre deux requêtes vers un même site
-  detail_delay: [2, 6]         # pause avant chaque lecture de fiche détaillée
+  detail_delay: [0, 1]         # pause avant chaque lecture de fiche détaillée
   access_denied_pause_hours: 6 # un refus (401/403, robots.txt) met le site en pause
 
 # -----------------------------------------------------------------------------
