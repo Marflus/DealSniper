@@ -81,7 +81,7 @@ class RedirectResolver:
     un nombre de liens limité par passage et un cache.
     """
 
-    def __init__(self, patterns: list[re.Pattern], max_links: int = 60, timeout: float = 6.0):
+    def __init__(self, patterns: list[re.Pattern], max_links: int = 500, timeout: float = 6.0):
         self.patterns = patterns
         self.max_links = max_links
         self.timeout = timeout

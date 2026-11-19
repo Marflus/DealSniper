@@ -14,7 +14,7 @@ sources:
     enabled: true
     folder: INBOX
     lookback_days: 3          # on relit les emails des 3 derniers jours (le dédoublonnage évite les doublons)
-    max_emails: 100
+    max_emails: null          # null = tous les emails de la période
     mark_as_read: false       # true = marque les alertes comme lues après lecture
     # nom de la source -> morceau de l'adresse/nom d'expéditeur à reconnaître
     # (laisser vide {} pour accepter TOUS les expéditeurs)
@@ -28,7 +28,7 @@ sources:
       - 'leboncoin\.fr/(?:ad|vi|[a-z_]+)/.*\d{6,}'
       - 'agorastore\.fr/.+'
       - 'ebay\.[a-z.]+/itm/'
-      - 'vinted\.fr/items/'
+      - 'vinted\.fr/items/\d+'
     # Les liens « de suivi » opaques des emails sont suivis (en-têtes de redirection
     # uniquement) pour retrouver l'URL réelle de l'annonce.
     resolve_tracking_links: true
@@ -205,8 +205,8 @@ analyzer:
   batch_size: 10              # annonces par appel API
   max_description_chars: 600  # troncature des descriptions envoyées
   max_tokens: 4096            # plafond de la réponse (le lot est coupé en deux s'il est atteint)
-  max_ads_per_run: 60         # garde-fou : au-delà, report au passage suivant
-  max_daily_cost_usd: 0.10    # plafond de dépense journalier estimé (null = pas de plafond)
+  max_ads_per_run: null       # null = aucune limite (sinon : au-delà, report au passage suivant)
+  max_daily_cost_usd: 1.00    # sécurité anti-facture : ~1 000 annonces/jour avec haiku-4-5 (null = aucun plafond)
   max_retries: 4              # retries automatiques (429, 5xx, surcharge, réseau)
   timeout_seconds: 90
   structured_output: true     # réponse JSON garantie par schéma
@@ -218,11 +218,11 @@ notifier:
   min_score: 7                # seuil de notification (score_rentabilite >= min_score)
   # types d'affaires à notifier : reparation (objet en panne) / revente_directe (fonctionnel sous la cote)
   deal_types: ["reparation", "revente_directe"]
-  max_per_run: 15             # au-delà, un simple résumé est envoyé
+  max_per_run: null           # null = toutes les bonnes affaires sont envoyées
 
 # -----------------------------------------------------------------------------
 #  Stockage local (dossier data/)
 # -----------------------------------------------------------------------------
 storage:
   seen_retention_days: 60     # durée de mémoire des annonces déjà vues
-  max_deals_history: 500      # nombre d'annonces analysées conservées pour l'interface
+  max_deals_history: 2000     # annonces analysées conservées pour l'interface

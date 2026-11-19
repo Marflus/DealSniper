@@ -205,7 +205,7 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
 
     notifier = Notifier()
     sent: list[Ad] = []
-    max_per_run = int(cfg["max_per_run"])
+    max_per_run = int(cfg.get("max_per_run") or len(good))  # None = toutes
     for ad in good[:max_per_run]:
         try:
             if notifier.send_ad(ad):

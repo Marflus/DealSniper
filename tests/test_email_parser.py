@@ -86,3 +86,14 @@ def test_real_leboncoin_card_layout():
     (ad,) = extract_ads(html, "leboncoin", PATTERNS)
     assert ad.title == "MacBook Air Retina 13 2020" and ad.price == 255.0
     assert ad.location == "Cahors 46000" and ad.uid == "lbc:3312499020"
+
+
+def test_vinted_alert_email():
+    patterns = [re.compile(r"vinted\.fr/items/\d+", re.I)]
+    html = """<table><tr><td><a href="https://www.vinted.fr/items/5123456789-ps4-pro-hs?referrer=email">
+      <img src="v.jpg"></a><a href="https://www.vinted.fr/items/5123456789-ps4-pro-hs">PS4 Pro ne s'allume plus</a>
+      <p>35,00 €</p></td></tr></table>"""
+    msg = _msg("Vinted <no-reply@vinted.fr>", "Nouveaux articles pour « ps4 hs »", html)
+    parsed = parse_email(msg, {"vinted": "vinted"}, patterns)
+    (ad,) = parsed.ads
+    assert parsed.source == "vinted" and ad.price == 35.0 and ad.uid == "vinted:5123456789"

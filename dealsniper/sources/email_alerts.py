@@ -48,7 +48,9 @@ def iter_messages(cfg: dict[str, Any], report: SourceReport) -> Iterator[Message
         status, data = conn.search(None, "SINCE", since)
         if status != "OK":
             raise imaplib.IMAP4.error(f"recherche IMAP refusée ({status})")
-        ids = data[0].split()[-int(cfg.get("max_emails", 100)):]
+        ids = data[0].split()
+        if cfg.get("max_emails"):
+            ids = ids[-int(cfg["max_emails"]):]
         log.info("IMAP : %d email(s) depuis le %s", len(ids), since)
         for msg_id in reversed(ids):
             try:

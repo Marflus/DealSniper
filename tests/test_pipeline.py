@@ -55,3 +55,12 @@ def test_health_alert_once_per_day(monkeypatch, config):
     pipeline.run(config, "run")
     pipeline.run(config, "run")
     assert len(sent) == 1 and "IMAP" in sent[0]
+
+
+def test_no_count_limits_by_default(monkeypatch, config):
+    many = [Ad(title=f"ThinkPad T480 sans SSD n°{i}", url=f"https://www.leboncoin.fr/ad/ordinateurs/26000{i:05d}",
+               source="leboncoin", price=90) for i in range(80)]
+    monkeypatch.setattr(pipeline, "collect_all", lambda *a: (many, []))
+    monkeypatch.setattr(pipeline.analyzer, "analyze", fake_analyze)
+    summary = pipeline.run(config, "run")
+    assert summary["analyzed"] == 80 and summary["notified"] == 80

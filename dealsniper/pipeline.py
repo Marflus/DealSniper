@@ -99,10 +99,10 @@ def run(config: dict[str, Any], mode: str = "run") -> dict[str, Any]:
             return summary
 
         seen.add_many(ad.uid for ad, _ in rejected)
-        max_ads = int(config["analyzer"]["max_ads_per_run"])
-        to_analyze = kept[:max_ads]
-        if len(kept) > max_ads:
-            log.warning("%d annonce(s) au-delà de max_ads_per_run, reportée(s).", len(kept) - max_ads)
+        max_ads = config["analyzer"].get("max_ads_per_run")  # None = aucune limite
+        to_analyze = kept[: int(max_ads)] if max_ads else kept
+        if len(kept) > len(to_analyze):
+            log.warning("%d annonce(s) au-delà de max_ads_per_run, reportée(s).", len(kept) - len(to_analyze))
 
         runs = RunLog()
         if mode == "no-ai":

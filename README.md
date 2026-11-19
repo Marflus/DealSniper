@@ -113,7 +113,15 @@ les alertes vers la boîte dédiée. Les emails **transférés ou redirigés** s
   règle qui redirige les emails de leboncoin vers la boîte dédiée.
 - **eBay** : compte avec la boîte dédiée → recherche avec filtre **« Articles en France »** et prix max →
   *Enregistrer cette recherche* → notifications **par email** (menu ⋮ des recherches favorites).
-- **Vinted, Agorastore** : même principe ; ajoutez l'expéditeur dans `sources.email.senders` si besoin.
+- **Vinted** : compte avec la boîte dédiée → recherche (mots-clés + prix max) → *Sauvegarder la recherche* →
+  *Paramètres → Notifications* : activez les **emails** pour les recherches sauvegardées (si l'option n'apparaît pas,
+  Vinted ne notifie que dans l'application et rien n'arrivera dans la boîte). Les liens `vinted.fr/items/…` sont reconnus.
+- **Agorastore** et autres : même principe ; ajoutez l'expéditeur dans `sources.email.senders` si besoin.
+
+> **Combien d'annonces ?** Deal Sniper n'a **aucune limite de nombre** : il lit tous les emails des 3 derniers jours,
+> analyse toutes les annonces retenues et envoie toutes les bonnes affaires. La seule limite est celle des sites :
+> un récapitulatif leboncoin ne montre qu'environ **5 annonces**, même s'il en annonce 745. Pour tout voir, créez
+> plusieurs recherches **précises avec prix max** qui produisent chacune moins de 5 nouvelles annonces par jour.
 
 Exemples de recherches efficaces (avec prix max) : `thinkpad sans ssd`, `latitude sans disque`, `ps4 surchauffe`,
 `tv retroeclairage`, `makita sans batterie`, et pour la revente directe un modèle précis à prix bas (`ps5` ≤ 250 €).
@@ -154,8 +162,8 @@ Tout est commenté dans `config.yaml`. L'essentiel :
 | `location` | `france_only` (rejette « Provenance : Chine », prix en £/$…) et `exclude_overseas` (DOM-TOM) |
 | `filters` | mots-clés rédhibitoires, annonces d'acheteurs, signaux « bonne affaire », prix minimum |
 | `categories` | mots-clés de reconnaissance, `max_budget` (prix + port), exclusions et signaux par catégorie |
-| `analyzer` | modèle, taille des lots, troncature, plafond de dépense journalier |
-| `notifier` | seuil de score, types d'affaires notifiés, nombre max de messages par passage |
+| `analyzer` | modèle, taille des lots, troncature, plafond de dépense journalier (1 $ par défaut, `null` = aucun) |
+| `notifier` | seuil de score, types d'affaires notifiés |
 
 - Mots-clés **insensibles à la casse et aux accents**, cherchés en **mots entiers**, accords tolérés
   (`oxyde` attrape « oxydée »).
@@ -210,7 +218,8 @@ Un lot de 10 annonces ≈ 2 500 tokens en entrée et 1 000 en sortie :
 | `claude-haiku-5-5` | 0,10 $ / 0,50 $ | ≈ 0,004 $ / jour |
 
 Le coût réel de chaque passage est enregistré dans `data/runs.json` et affiché dans l'interface ;
-`max_daily_cost_usd` (0,10 $ par défaut) stoppe l'analyse si le plafond est atteint.
+`max_daily_cost_usd` (1 $ par défaut, soit ~1 000 annonces analysées par jour) est une simple sécurité contre une
+facture imprévue ; mettez `null` pour le supprimer.
 
 ---
 

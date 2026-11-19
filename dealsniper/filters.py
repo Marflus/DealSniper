@@ -96,7 +96,7 @@ def apply_filters(ads: list[Ad], config: dict[str, Any]) -> tuple[list[Ad], list
     """Sépare annonces retenues et rejetées (avec raison).
 
     Les retenues sont triées (signaux d'abord, puis prix croissant) pour que
-    `max_ads_per_run` garde les plus prometteuses.
+    un éventuel `max_ads_per_run` garde les plus prometteuses.
     """
     kept: list[Ad] = []
     rejected: list[tuple[Ad, str]] = []
