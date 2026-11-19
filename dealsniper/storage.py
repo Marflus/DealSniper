@@ -1,11 +1,9 @@
 """
-storage.py — Persistance légère en JSON (pas de base de données à installer).
+Persistance légère en JSON (pas de base de données à installer).
 
-  * `SeenStore`  : `data/seen_ads.json`  — identifiants déjà traités + date,
-                   purgés automatiquement après N jours.
-  * `DealsStore` : `data/deals.json`     — historique des annonces analysées
-                   par l'IA (alimente l'interface web et évite de perdre les
-                   résultats si une notification échoue).
+  * `SeenStore`  : `data/seen_ads.json` — annonces déjà traitées (purgées après N jours) ;
+  * `DealsStore` : `data/deals.json`    — historique des annonces analysées (interface web) ;
+  * `RunLog`     : `data/runs.json`     — statistiques et coût de chaque passage.
 
 Le format JSON est volontaire : les fichiers restent lisibles et produisent
 des diffs propres quand GitHub Actions les recommite dans le dépôt.
@@ -23,9 +21,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from core import DATA_DIR
+from .config import data_dir
 
-log = logging.getLogger("dealsniper.storage")
+log = logging.getLogger(__name__)
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -67,7 +65,7 @@ class SeenStore:
     """Ensemble persistant des annonces déjà traitées (uid -> date ISO)."""
 
     def __init__(self, path: Path | None = None, retention_days: int = 60):
-        self.path = path or DATA_DIR / "seen_ads.json"
+        self.path = path or data_dir() / "seen_ads.json"
         self.retention = timedelta(days=retention_days)
         self._data: dict[str, str] = _read_json(self.path, {})
         self._dirty = False
@@ -117,7 +115,7 @@ class DealsStore:
     """Historique des annonces analysées (les plus récentes en premier)."""
 
     def __init__(self, path: Path | None = None, max_items: int = 500):
-        self.path = path or DATA_DIR / "deals.json"
+        self.path = path or data_dir() / "deals.json"
         self.max_items = max_items
         self._items: list[dict[str, Any]] = _read_json(self.path, [])
 
@@ -144,7 +142,7 @@ class RunLog:
     """Statistiques des dernières exécutions (coût API, compteurs) — `data/runs.json`."""
 
     def __init__(self, path: Path | None = None, max_items: int = 200):
-        self.path = path or DATA_DIR / "runs.json"
+        self.path = path or data_dir() / "runs.json"
         self.max_items = max_items
         self._items: list[dict[str, Any]] = _read_json(self.path, [])
 
@@ -155,6 +153,16 @@ class RunLog:
     def append(self, entry: dict[str, Any]) -> None:
         self._items = ([entry] + self._items)[: self.max_items]
         _write_json_atomic(self.path, self._items)
+
+    def last_health_alert(self) -> datetime | None:
+        """Date de la dernière alerte « source en panne » envoyée (pour ne pas spammer)."""
+        for run in self._items:
+            if run.get("health_alert_sent"):
+                try:
+                    return datetime.fromisoformat(run["started_at"])
+                except (KeyError, ValueError):
+                    return None
+        return None
 
     def cost_today(self) -> float:
         today = _now().date().isoformat()

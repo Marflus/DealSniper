@@ -4,4 +4,4 @@ beautifulsoup4>=4.12     # nettoyage HTML des emails
 PyYAML>=6.0              # config.yaml
 python-dotenv>=1.0       # lecture du fichier .env
 requests>=2.31           # Telegram / Discord / téléchargement RSS
-flask>=3.0               # interface web (dashboard.py) — optionnel
+flask>=3.0               # interface web (python -m dealsniper dashboard)

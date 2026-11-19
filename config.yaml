@@ -8,7 +8,9 @@
 #  Sources d'annonces
 # -----------------------------------------------------------------------------
 sources:
-  imap:
+  # Emails d'alerte lus dans la boîte dédiée (IMAP). Les emails transférés ou
+  # redirigés depuis votre boîte perso sont reconnus aussi.
+  email:
     enabled: true
     folder: INBOX
     lookback_days: 3          # on relit les emails des 3 derniers jours (le dédoublonnage évite les doublons)
@@ -27,6 +29,9 @@ sources:
       - 'agorastore\.fr/.+'
       - 'ebay\.[a-z.]+/itm/'
       - 'vinted\.fr/items/'
+    # Les liens « de suivi » opaques des emails sont suivis (en-têtes de redirection
+    # uniquement) pour retrouver l'URL réelle de l'annonce.
+    resolve_tracking_links: true
 
   rss:
     enabled: true
@@ -37,6 +42,13 @@ sources:
     #    url: "https://www.ebay.fr/sch/i.html?_nkw=thinkpad+sans+ssd&_rss=1"
     #  - name: rssbridge-lbc
     #    url: "https://rss-bridge.example.org/?action=display&bridge=...&format=Atom"
+
+# -----------------------------------------------------------------------------
+#  Localisation : uniquement les annonces situées en France
+# -----------------------------------------------------------------------------
+location:
+  france_only: true           # rejette « Provenance : Chine », « Lieu : Allemagne », prix en £ / $…
+  exclude_overseas: true      # rejette aussi les DOM-TOM (codes postaux 971-976, 986-989)
 
 # -----------------------------------------------------------------------------
 #  Pré-filtre (Python pur, 0 token)
@@ -106,6 +118,15 @@ filters:
     - "boite vide"
     - "photo seulement"
     - "lot de pieces"
+    # Accessoires vendus seuls
+    - "coque seule"
+    - "housse seule"
+    - "boite seule"
+    - "chargeur seul"
+    - "manette seule"
+    - "telecommande seule"
+    - "pied seul"
+    - "notice seule"
 
 # -----------------------------------------------------------------------------
 #  Catégories (la première dont un mot-clé est dans le titre l'emporte)
@@ -121,7 +142,7 @@ filters:
 # -----------------------------------------------------------------------------
 categories:
   - name: "PC portables pros"
-    keywords: ["thinkpad", "latitude", "elitebook", "probook", "zbook", "precision", "macbook pro",
+    keywords: ["thinkpad", "latitude", "elitebook", "probook", "zbook", "dell precision", "macbook pro",
                "macbook air", "dell xps", "surface pro", "surface laptop", "travelmate", "lifebook", "dynabook"]
     max_budget: 180
     exclude_keywords: ["coque seule", "clavier seul", "chargeur seul", "nappe seule"]
@@ -132,10 +153,23 @@ categories:
 
   - name: "Mini-PC"
     keywords: ["mini pc", "mini-pc", "nuc", "optiplex micro", "thinkcentre tiny", "thinkcentre m7", "elitedesk mini",
-               "prodesk mini", "mac mini", "tiny"]
+               "prodesk mini", "mac mini"]
     max_budget: 120
     include_keywords: ["sans disque", "sans ssd", "sans ram", "sans memoire", "sans os", "sans alimentation",
                        "sans chargeur"]
+
+  - name: "PC portables grand public"
+    keywords: ["pc portable", "ordinateur portable", "laptop", "ideapad", "vivobook", "zenbook", "aspire",
+               "pavilion", "inspiron", "omen", "rog", "tuf gaming", "legion", "predator", "nitro", "chromebook"]
+    max_budget: 150
+    exclude_keywords: ["coque seule", "clavier seul", "chargeur seul"]
+    include_keywords: ["sans disque", "sans ssd", "sans os", "sans windows", "sans chargeur", "batterie hs",
+                       "ecran a changer", "charniere", "ne charge plus", "lent", "a reinstaller"]
+
+  - name: "Raspberry Pi & micro-ordinateurs"
+    keywords: ["raspberry", "raspberry pi"]
+    max_budget: 40
+    exclude_keywords: ["boitier seul", "alimentation seule"]
 
   - name: "Consoles"
     keywords: ["ps5", "ps4", "playstation", "xbox", "switch", "steam deck", "nintendo"]

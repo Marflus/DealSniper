@@ -1,99 +1,4 @@
-"""
-dashboard.py — Petite interface web locale pour Deal Sniper.
-
-    python dashboard.py            # puis ouvrir http://127.0.0.1:5000
-
-Fonctions :
-  * tableau des annonces analysées (tri par score, filtres catégorie / type d'affaire / score / texte) ;
-  * statistiques : coût API du jour et du mois, nombre d'annonces, bonnes affaires ;
-  * bouton « Lancer un passage » (exécute main.run en arrière-plan) ;
-  * bouton « Tester les notifications ».
-
-L'interface n'écoute que sur 127.0.0.1 par défaut (aucune authentification :
-ne l'exposez pas sur Internet). Variable DASHBOARD_HOST pour changer l'adresse.
-"""
-
-from __future__ import annotations
-
-import logging
-import threading
-from datetime import datetime, timezone
-
-from flask import Flask, jsonify, render_template_string, request
-
-import main as pipeline
-from core import env, load_config, load_env, setup_logging
-from storage import DealsStore, RunLog
-
-app = Flask(__name__)
-log = logging.getLogger("dealsniper.dashboard")
-
-_state = {"running": False, "last": None, "error": None}
-_state_lock = threading.Lock()
-
-
-def _background_run(no_ai: bool) -> None:
-    try:
-        _state["last"] = pipeline.run(no_ai=no_ai)
-        _state["error"] = None
-    except Exception as exc:  # affiché dans l'interface
-        log.exception("Échec du passage")
-        _state["error"] = str(exc)
-    finally:
-        with _state_lock:
-            _state["running"] = False
-
-
-@app.get("/")
-def index():
-    config = load_config()
-    deals = DealsStore().items
-    runs = RunLog().items
-    now = datetime.now(timezone.utc)
-    today, month = now.date().isoformat(), now.strftime("%Y-%m")
-    min_score = int(config["notifier"].get("min_score", 7))
-    stats = {
-        "total": len(deals),
-        "good": sum(1 for d in deals if (d.get("analysis") or {}).get("score_rentabilite", 0) >= min_score),
-    "direct": sum(
-        1 for d in deals
-        if (d.get("analysis") or {}).get("score_rentabilite", 0) >= min_score
-        and (d.get("analysis") or {}).get("type_affaire") == "revente_directe"
-    ),
-        "cost_today": sum(r.get("cost_usd", 0) for r in runs if str(r.get("started_at", "")).startswith(today)),
-        "cost_month": sum(r.get("cost_usd", 0) for r in runs if str(r.get("started_at", "")).startswith(month)),
-        "last_run": runs[0] if runs else None,
-    }
-    categories = sorted({d.get("category") or "?" for d in deals})
-    return render_template_string(
-        TEMPLATE, deals=deals, stats=stats, categories=categories, min_score=min_score,
-        model=config["analyzer"]["model"], state=_state,
-    )
-
-
-@app.post("/run")
-def run_now():
-    no_ai = request.args.get("no_ai") == "1"
-    with _state_lock:
-        if _state["running"]:
-            return jsonify(ok=False, message="Un passage est déjà en cours."), 409
-        _state["running"] = True
-    threading.Thread(target=_background_run, args=(no_ai,), daemon=True).start()
-    return jsonify(ok=True, message="Passage lancé…")
-
-
-@app.get("/status")
-def status():
-    return jsonify(running=_state["running"], last=_state["last"], error=_state["error"])
-
-
-@app.post("/test-notif")
-def test_notif():
-    code = pipeline.test_notifications()
-    return jsonify(ok=code == 0, message="Notification envoyée ✅" if code == 0 else "Échec : vérifiez .env ❌")
-
-
-TEMPLATE = r"""<!doctype html>
+<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -178,8 +83,11 @@ TEMPLATE = r"""<!doctype html>
         <td data-v="{{ s }}"><span class="score {{ 's-good' if s >= min_score else ('s-mid' if s >= 5 else 's-bad') }}">{{ s }}</span></td>
         <td data-v="{{ d.title }}"><a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.title }}</a>
           <div class="muted"><span class="tag {{ 'tag-direct' if t == 'revente_directe' else '' }}">{{ '💎 revente directe' if t == 'revente_directe' else '🔧 réparation' }}</span><span class="tag">{{ d.category }}</span><span class="tag">{{ d.source }}</span>
+          {% if d.get('location') %}<span class="tag">📍 {{ d.location }}</span>{% endif %}
+          {% if a.get('confiance') %}<span class="tag">confiance {{ a.confiance }}</span>{% endif %}
           {% if d.get('notified') %}<span class="tag">🔔 notifiée</span>{% endif %}
-          {{ a.get('justification_courte','') }}</div></td>
+          {{ a.get('justification_courte','') }}
+          {% if a.get('question_vendeur') %}<div>❓ {{ a.question_vendeur }}</div>{% endif %}</div></td>
         <td class="num" data-v="{{ d.total_price if d.total_price is not none else 99999 }}">
           {{ ('%.0f €'|format(d.total_price)) if d.total_price is not none else '?' }}
           {% if d.shipping %}<div class="muted">dont {{ '%.0f'|format(d.shipping) }} € port</div>{% endif %}</td>
@@ -223,17 +131,7 @@ async function runNow(noAi){
 }
 async function testNotif(){ const j=await (await fetch('/test-notif',{method:'POST'})).json(); toast(j.message); }
 applyFilters();
-{% if state.running %}runNow.poll=setInterval(async()=>{const s=await (await fetch('/status')).json(); if(!s.running) location.reload();},2000);{% endif %}
+{% if state.running %}setInterval(async()=>{const s=await (await fetch('/status')).json(); if(!s.running) location.reload();},2000);{% endif %}
 </script>
 </body>
 </html>
-"""
-
-
-if __name__ == "__main__":
-    load_env()
-    setup_logging()
-    host = env("DASHBOARD_HOST", "127.0.0.1")
-    port = int(env("DASHBOARD_PORT", "5000"))
-    print(f"Deal Sniper : interface sur http://{host}:{port}")
-    app.run(host=host, port=port, debug=False)
