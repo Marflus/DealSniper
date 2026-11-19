@@ -19,4 +19,6 @@ def isolated_env(tmp_path, monkeypatch):
 
 @pytest.fixture
 def config():
-    return load_config()
+    cfg = load_config()
+    cfg["enrich"]["enabled"] = False  # aucun accès réseau pendant les tests
+    return cfg

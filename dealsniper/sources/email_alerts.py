@@ -102,7 +102,9 @@ def inspect(cfg: dict[str, Any]) -> int:
     de l'expéditeur), pour pouvoir partager la sortie sans risque.
     """
     report = SourceReport(name="emails")
+    first_urls: list[str] = []
     for parsed in _parse_all(cfg, report):
+        first_urls += [ad.url for ad in parsed.ads if ad.url_is_stable and ad.source in ("leboncoin", "vinted")]
         domain = parsed.sender.split("@")[-1] if parsed.sender else "?"
         flag = " (transféré)" if parsed.forwarded else ""
         print(f"\n✉️  [{domain}] {parsed.subject[:90]}")
@@ -118,5 +120,11 @@ def inspect(cfg: dict[str, Any]) -> int:
             where = f" | {ad.location}" if ad.location else ""
             link = "ok" if ad.url_is_stable else "lien de suivi"
             print(f"      • {price}{ship} | {ad.title[:70]}{where} | {ad.url[:70]} ({link})")
+    if first_urls and cfg.get("preview_pages", True):
+        from ..enrich import preview
+
+        print("\nTest de lecture des pages d'annonce (description / vendeur) :")
+        for url in first_urls[:3]:
+            print(f"  {url[:70]}\n    → {preview(url)}")
     print(f"\nBilan : {report.items} email(s) lus" + ("" if report.ok else f" — ERREUR : {report.error}"))
     return 0 if report.ok else 1

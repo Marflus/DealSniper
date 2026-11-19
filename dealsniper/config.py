@@ -31,6 +31,7 @@ DEFAULTS: dict[str, Any] = {
         "rss": {"enabled": True, "timeout": 20, "feeds": []},
     },
     "location": {"france_only": True, "exclude_overseas": True},
+    "enrich": {"enabled": True, "sources": ["leboncoin", "vinted"], "delay_seconds": 2, "timeout": 15},
     "filters": {
         "drop_uncategorized": True,
         "keep_unknown_price": True,

@@ -54,7 +54,7 @@ Règles :
 - Revente directe : panne_probable = "aucune", cout_piece_estime = 0 (sauf petit accessoire manquant).
 - Les alertes email ne donnent souvent que le titre (parfois tronqué par « … » ou « ... »), le prix et la ville, sans description. Note alors le potentiel en supposant l'objet conforme à son titre, et mets la confiance à "faible" : le manque d'informations baisse la confiance, pas le score.
 - N'évoque JAMAIS une arnaque sans indice concret : seul un prix inférieur à 30 % de la cote sur un produit récent et très demandé, ou une mention explicite (paiement hors plateforme, « sans boîte ni facture » sur un téléphone récent…), le justifie. Un titre court, vague, coupé ou un modèle que tu ne reconnais pas n'est PAS un indice d'arnaque.
-- vendeur (si fourni, eBay) : ≥ 98 % et ≥ 50 avis = fiable ; < 95 % ou < 5 avis = risque plus élevé, à signaler dans la justification.
+- vendeur (si fourni) : ≥ 98 % et ≥ 50 avis = fiable ; < 95 %, < 5 avis ou compte créé il y a quelques semaines = risque plus élevé, à signaler dans la justification. Un particulier sans avis n'est pas suspect pour autant.
 - confiance : "haute" si modèle et état sont clairs, "moyenne" si l'état est incertain, "faible" si seul le titre est connu.
 - question_vendeur : la question la plus utile à poser au vendeur avant d'acheter.
 - panne_probable : 8 mots max. justification_courte : 20 mots max. question_vendeur : 15 mots max.

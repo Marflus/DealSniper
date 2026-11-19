@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from . import analyzer, filters, notifier
+from . import analyzer, enrich, filters, notifier
 from .config import data_dir
 from .models import Ad
 from .sources import SourceReport, collect_all
@@ -86,9 +86,16 @@ def run(config: dict[str, Any], mode: str = "run") -> dict[str, Any]:
 
         ads, reports = collect_all(config, seen)
         kept, rejected = filters.apply_filters(ads, config)
+        # Description et vendeur depuis la page de l'annonce, puis nouveau passage du
+        # filtre : une exclusion présente seulement dans la description est écartée.
+        enrich_stats = enrich.enrich(kept, config["enrich"])
+        if enrich_stats["enriched"]:
+            kept, rejected_after = filters.apply_filters(kept, config)
+            rejected += rejected_after
         summary.update(
             collected=len(ads), kept=len(kept), rejected=len(rejected),
             sources={r.name: ("ok" if r.ok else r.error) for r in reports},
+            enriched=enrich_stats["enriched"], enrich_blocked=enrich_stats["blocked"] or None,
         )
 
         if mode == "dry-run":

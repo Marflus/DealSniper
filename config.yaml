@@ -73,6 +73,15 @@ sources:
     #    url: "https://rss-bridge.example.org/?action=display&bridge=...&format=Atom"
 
 # -----------------------------------------------------------------------------
+#  Enrichissement : description, état et vendeur lus sur la page de l'annonce
+#  (une requête simple par annonce retenue ; si le site refuse, on n'insiste pas)
+# -----------------------------------------------------------------------------
+enrich:
+  enabled: true
+  sources: [leboncoin, vinted]
+  delay_seconds: 2
+
+# -----------------------------------------------------------------------------
 #  Localisation : uniquement les annonces situées en France
 # -----------------------------------------------------------------------------
 location:
