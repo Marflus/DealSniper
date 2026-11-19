@@ -26,3 +26,19 @@ def test_budget_exclusions_and_france(config):
 def test_sorting_prioritizes_signals(config):
     kept, _ = apply_filters([ad("Dell Latitude 5490", 60), ad("Dell Latitude 5490 batterie HS", 80)], config)
     assert kept[0].title.endswith("batterie HS")
+
+
+def test_sold_or_reserved_ads_are_rejected(config):
+    from dealsniper.filters import sold_problem
+
+    f = config["filters"]
+    def ad(title, description="", available=True):
+        return Ad(title=title, url="https://e.x/1", source="t", price=50, description=description, available=available)
+
+    assert sold_problem(ad("PS5 Slim - VENDUE"), f)
+    assert sold_problem(ad("RÉSERVÉ iPhone 12"), f)
+    assert sold_problem(ad("ThinkPad T480", "Déjà vendu, désolé"), f)
+    assert sold_problem(ad("MacBook Air", "Vente en cours avec un acheteur"), f)
+    assert sold_problem(ad("Switch", available=False), f)
+    assert not sold_problem(ad("iPhone 11 vendu pour pièces"), f)
+    assert not sold_problem(ad("Écran soldé", "vendu avec son câble"), f)

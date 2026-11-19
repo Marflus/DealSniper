@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from ..config import env
@@ -54,6 +55,20 @@ def _place(location: dict[str, Any]) -> str | None:
 def _image(item: dict[str, Any]) -> str | None:
     images = [item.get("image") or {}, *(item.get("thumbnailImages") or [])]
     return next((i["imageUrl"] for i in images if i.get("imageUrl")), None)
+
+
+def is_available(item: dict[str, Any]) -> bool:
+    """False si l'objet est épuisé ou si la vente est terminée."""
+    statuses = {a.get("estimatedAvailabilityStatus") for a in item.get("estimatedAvailabilities") or []}
+    if statuses and statuses <= {"OUT_OF_STOCK"}:
+        return False
+    end = item.get("itemEndDate")
+    if end:
+        try:
+            return datetime.fromisoformat(end.replace("Z", "+00:00")) > datetime.now(timezone.utc)
+        except ValueError:
+            pass
+    return True
 
 
 def item_to_ad(item: dict[str, Any]) -> Ad | None:
@@ -130,4 +145,5 @@ class EbaySite(Site):
         ad.location = ad.location or _place(item.get("itemLocation") or {})
         ad.seller = _seller(item.get("seller") or {}) or ad.seller
         ad.image = _image(item) or ad.image
+        ad.available = is_available(item)
         return ad

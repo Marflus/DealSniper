@@ -24,6 +24,7 @@ class Ad:
     location: str | None = None         # « Lyon 69003 » si connu
     price_mode: str = "fixe"            # "fixe" ou "enchere" (prix provisoire)
     image: str | None = None            # URL de la photo principale
+    available: bool = True              # False si le site l'indique vendue, réservée ou en cours d'achat
     seller: dict[str, Any] | None = None  # réputation du vendeur si la source la fournit (eBay)
     category: str | None = None         # renseigné par filters.py
     signals: list[str] = field(default_factory=list)  # mots-clés positifs (filters.py)

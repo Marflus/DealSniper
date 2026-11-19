@@ -340,6 +340,8 @@ async function loadSettings() {
   $("#g-exclude").value = words(f.global_exclude_keywords);
   $("#g-signals").value = words(f.deal_signals);
   $("#g-buyer").value = words(f.buyer_ad_keywords);
+  $("#g-sold-title").value = words(f.sold_title_keywords);
+  $("#g-sold-desc").value = words(f.sold_phrases);
   $("#g-minprice").value = f.min_price ?? "";
   $("#g-france").checked = l.france_only !== false;
   $("#g-overseas").checked = l.exclude_overseas !== false;
@@ -400,6 +402,7 @@ function collectSettings() {
     sites, categories,
     filters: { global_exclude_keywords: $("#g-exclude").value, deal_signals: $("#g-signals").value,
                buyer_ad_keywords: $("#g-buyer").value, min_price: $("#g-minprice").value,
+               sold_title_keywords: $("#g-sold-title").value, sold_phrases: $("#g-sold-desc").value,
                drop_uncategorized: $("#g-uncat").checked, keep_unknown_price: $("#g-noprice").checked },
     location: { france_only: $("#g-france").checked, exclude_overseas: $("#g-overseas").checked },
     notifier: { min_score: $("#n-min").value, watch_score: $("#n-watch").value, deal_types: dealTypes,

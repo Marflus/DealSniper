@@ -106,6 +106,12 @@ filters:
   keep_unknown_price: true    # garde les annonces dont le prix n'a pas pu être lu
   min_price: 5                # en dessous : souvent un faux prix (« 1 € à débattre »)
 
+  # Annonces déjà vendues, réservées ou en cours d'achat : rejetées avant tout appel à l'IA.
+  # Mots en DÉBUT ou FIN de titre (« PS5 - VENDUE », « RÉSERVÉ iPhone 12 », mais pas « vendu pour pièces »)
+  # et phrases n'importe où dans la DESCRIPTION.
+  sold_title_keywords: ["vendu", "reserve"]
+  sold_phrases: ["deja vendu", "plus disponible", "n'est plus a vendre", "est reserve", "en cours de vente", "en cours d'achat", "vente en cours", "transaction en cours"]
+
   # Signaux « bonne affaire » (titre + description), valables pour toutes les catégories.
   # Ils aident à repérer les objets FONCTIONNELS vendus sous leur cote (revente directe) :
   # ces annonces sont priorisées et le signal est transmis à Claude.

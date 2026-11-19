@@ -164,6 +164,9 @@ def write_settings(new: dict[str, Any]) -> None:
     for field in ("global_exclude_keywords", "deal_signals", "buyer_ad_keywords"):
         if field in (new.get("filters") or {}):
             filters[field] = _seq(filters.get(field), _words(new["filters"][field]))
+    for field in ("sold_title_keywords", "sold_phrases"):  # listes courtes : sur une ligne
+        if field in (new.get("filters") or {}):
+            filters[field] = _seq(filters.get(field), _words(new["filters"][field]), flow=True)
     if "min_price" in (new.get("filters") or {}):
         filters["min_price"] = _number(new["filters"]["min_price"]) or 0
     for key in ("drop_uncategorized", "keep_unknown_price"):

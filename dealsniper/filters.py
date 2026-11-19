@@ -1,12 +1,13 @@
 """Filtre gratuit (aucun appel à Claude).
 
-Rejette, dans l'ordre : hors catégorie, hors de France, annonce d'acheteur,
+Rejette, dans l'ordre : déjà vendue / réservée, hors catégorie, hors de France, annonce d'acheteur,
 mot-clé exclu, hors budget ou prix suspect, absence de signal si exigé.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from collections import Counter
 from typing import Any
 
@@ -42,9 +43,27 @@ def location_problem(ad: Ad, location_cfg: dict[str, Any]) -> str | None:
     return None
 
 
+def sold_problem(ad: Ad, filters: dict[str, Any]) -> str | None:
+    """Annonce déjà vendue, réservée ou en cours d'achat (indiqué par le site, le titre ou la description)."""
+    if not ad.available:
+        return "déjà vendue ou réservée"
+    title = re.sub(r"[^a-z0-9' ]+", " ", normalize(ad.title)).split()
+    edges = " ".join(title[:1] + title[-1:])  # « vendu pour pièces » ne doit pas compter
+    kw = first_keyword(edges, filters.get("sold_title_keywords"))
+    if kw:
+        return f"déjà vendue ou réservée ({kw})"
+    kw = first_keyword(normalize(ad.description), filters.get("sold_phrases"))
+    if kw:
+        return f"déjà vendue ou réservée ({kw})"
+    return None
+
+
 def check(ad: Ad, config: dict[str, Any]) -> str | None:
     """Raison du rejet, ou None si l'annonce passe. Renseigne `ad.category` et `ad.signals`."""
     filters = config["filters"]
+    reason = sold_problem(ad, filters)
+    if reason:
+        return reason
     cat = categorize(ad, config["categories"])
     if cat is None:
         if filters.get("drop_uncategorized", True):
