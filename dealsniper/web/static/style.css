@@ -22,7 +22,9 @@ button:disabled { opacity: .55; cursor: wait; }
 /* Barre du haut */
 .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 10px 24px;
   background: var(--card); border-bottom: 1px solid var(--line); }
-.brand { font-weight: 700; font-size: 17px; }
+.brand { display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 500; letter-spacing: -.01em; }
+.brand b { font-weight: 800; background: linear-gradient(90deg, #2563eb, #7c3aed); -webkit-background-clip: text;
+  background-clip: text; color: transparent; }
 .tabs { display: flex; gap: 4px; background: var(--soft); padding: 3px; border-radius: 10px; }
 .tab { border: 0; background: transparent; padding: 6px 14px; color: var(--muted); }
 .tab.active { background: var(--card); color: var(--fg); font-weight: 600; box-shadow: var(--shadow); }
@@ -129,3 +131,14 @@ button.danger { color: var(--bad); border-color: transparent; background: transp
   .settings { grid-template-columns: 1fr; }
   .side-nav { position: static; grid-auto-flow: column; overflow-x: auto; }
 }
+
+.ease { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 4px; white-space: nowrap; }
+.ease.pos { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+.ease.mid { background: color-mix(in srgb, var(--mid) 15%, transparent); color: var(--mid); }
+.ease.neg { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+
+/* Progression d'un passage */
+.progress { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 12px 0; }
+.prog-line { padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prog-line .spin { display: inline-block; width: 1ch; color: #2563eb; font-weight: 700; }

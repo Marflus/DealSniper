@@ -3,7 +3,7 @@
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const euros = (v) => (v == null ? "?" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`);
-const FILTER_IDS = ["f-text", "f-category", "f-type", "f-score", "f-price", "f-margin", "f-days", "f-sort"];
+const FILTER_IDS = ["f-text", "f-category", "f-type", "f-score", "f-ease", "f-price", "f-margin", "f-days", "f-sort"];
 const SEARCH_FIELDS = { ebay: ["query", "condition", "max_price"], default: ["query", "category", "max_price"] };
 const FIELD_LABELS = { query: "Recherche", condition: "État", max_price: "Prix max (€)", category: "Catégorie (n°)" };
 const CONDITIONS = { any: "Tous états", parts: "Pour pièces / HS", used: "Occasion" };
@@ -112,6 +112,22 @@ $("#f-sites").addEventListener("click", (e) => {
   renderAds();
 });
 
+// ---------- Progression d'un passage ----------
+const SPINNER = "|/-\\";
+let progressLines = [], spin = 0;
+function renderProgress(lines) {
+  progressLines = lines;
+  const box = $("#progress");
+  box.hidden = !lines.length;
+  box.innerHTML = lines.map((l) =>
+    `<div class="prog-line"><b>${esc(l.site)}</b> : ${esc(l.text)} <span class="spin">${l.done ? "✓" : SPINNER[spin]}</span></div>`).join("");
+}
+setInterval(() => {  // « buffering » : le caractère tourne entre deux rafraîchissements
+  if (!progressLines.length) return;
+  spin = (spin + 1) % SPINNER.length;
+  renderProgress(progressLines);
+}, 150);
+
 // ---------- Annonces ----------
 async function loadAds() {
   try {
@@ -121,6 +137,7 @@ async function loadAds() {
     $("#run").disabled = data.running;
     $("#run").textContent = data.running ? "⏳ Passage en cours…" : "▶ Lancer un passage";
     if (data.error) toast("Dernier passage en erreur : " + data.error);
+    renderProgress(data.running ? data.progress || [] : []);
     renderSiteChips(new Set(allAds.map((a) => a.source).filter(Boolean)));
     fillSelect("#f-category", new Set(allAds.map((a) => a.category).filter(Boolean)));
     renderAds();
@@ -133,6 +150,7 @@ function filteredAds() {
   const text = $("#f-text").value.trim().toLowerCase();
   const category = $("#f-category").value, type = $("#f-type").value;
   const minScore = Number($("#f-score").value || 0);
+  const minEase = Number($("#f-ease").value || 0);
   const maxPrice = $("#f-price").value === "" ? null : Number($("#f-price").value);
   const minMargin = $("#f-margin").value === "" ? null : Number($("#f-margin").value);
 
@@ -143,6 +161,7 @@ function filteredAds() {
     if (category && ad.category !== category) return false;
     if (type && a.type_affaire !== type) return false;
     if (minScore && (ad.score ?? 0) < minScore) return false;
+    if (minEase && (a.facilite_reparation ?? 0) < minEase) return false;
     if (maxPrice != null && (ad.total_price ?? Infinity) > maxPrice) return false;
     if (minMargin != null && (a.marge_nette_estimee ?? -Infinity) < minMargin) return false;
     return true;
@@ -156,6 +175,13 @@ function filteredAds() {
     price: (x, y) => (x.total_price ?? 1e9) - (y.total_price ?? 1e9),
   };
   return ads.sort(sorters[$("#f-sort").value] || sorters.recent);
+}
+
+function easeBadge(a) {
+  const ease = a.facilite_reparation;
+  if (ease == null || a.type_affaire === "revente_directe") return "";
+  const level = ease >= 7 ? "pos" : ease >= 4 ? "mid" : "neg";
+  return ` <span class="ease ${level}" title="Facilité de réparation">facilité ${ease}/10</span>`;
 }
 
 // « Laon 02000 02000 » → « Laon 02000 »
@@ -185,7 +211,7 @@ function adCard(ad) {
         <div><span>Revente</span><b>${a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "—"}</b></div>
         <div class="${marginClass}"><span>Marge</span><b>${margin}</b></div>
       </div>
-      ${fault ? `<div class="fault">🔧 ${esc(fault)}</div>` : ""}
+      ${fault ? `<div class="fault">🔧 ${esc(fault)}${easeBadge(a)}</div>` : ""}
       ${ad.reason ? `<div class="reason">✗ ${esc(ad.reason)}</div>` : ""}
       <div class="meta">
         <div>${place ? `📍 ${esc(place)} · ` : ""}${saleType}</div>
@@ -225,7 +251,7 @@ $("#run").addEventListener("click", async () => {
     const poll = setInterval(async () => {
       await loadAds();
       if (!$("#run").disabled) { clearInterval(poll); toast("Passage terminé"); }
-    }, 5000);
+    }, 1500);
   } catch (e) { toast(e.message); }
 });
 

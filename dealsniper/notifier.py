@@ -34,11 +34,13 @@ def _summary(ad: Ad) -> dict[str, str]:
     margin = a.get("marge_nette_estimee")
     margin_txt = f"{'+' if (margin or 0) >= 0 else ''}{_eur(margin)}" if margin is not None else "?"
     fault = a.get("panne_probable") or "?"
+    ease = a.get("facilite_reparation")
     return {
         "title": ad.title,
         "buy": buy,
         "resale": f"{_eur(a.get('valeur_revente_estimee'))} (marge {margin_txt})",
-        "fault": "aucune (revente en l'état)" if fault.lower() == "aucune" else fault,
+        "fault": "aucune (revente en l'état)" if fault.lower() == "aucune"
+        else f"{fault} (facilité {ease}/10)" if ease else fault,
         "url": ad.url,
     }
 
@@ -233,10 +235,8 @@ def demo_ad() -> Ad:
         url="https://example.com/annonce-de-test",
         source="test", price=85.0, shipping=6.5, category="PC portables pros", location="Lyon 69003",
         analysis={
-            "type_affaire": "reparation", "score_rentabilite": 8, "confiance": "haute",
+            "type_affaire": "reparation", "score_rentabilite": 8, "facilite_reparation": 9,
             "panne_probable": "SSD manquant", "cout_piece_estime": 25, "valeur_revente_estimee": 220,
             "marge_nette_estimee": 82,
-            "justification_courte": "Message de test : si vous le lisez, les notifications fonctionnent !",
-            "question_vendeur": "Le chargeur d'origine est-il fourni ?",
         },
     )

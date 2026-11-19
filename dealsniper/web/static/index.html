@@ -4,11 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Deal Sniper</title>
+  <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">🎯 Deal Sniper</div>
+    <div class="brand"><img src="/static/logo.svg" alt="" width="30" height="30"><span>Deal<b>Sniper</b></span></div>
     <nav class="tabs">
       <button class="tab active" data-tab="ads">Annonces</button>
       <button class="tab" data-tab="settings">Réglages</button>
@@ -57,6 +58,12 @@
             <option value="7">Note ≥ 7</option>
             <option value="8">Note ≥ 8</option>
           </select>
+          <select id="f-ease">
+            <option value="0">Toute facilité</option>
+            <option value="5">Facilité ≥ 5</option>
+            <option value="7">Facilité ≥ 7</option>
+            <option value="9">Facilité ≥ 9</option>
+          </select>
           <label class="field">Prix max <input id="f-price" type="number" min="0" placeholder="—"> €</label>
           <label class="field">Marge min <input id="f-margin" type="number" placeholder="—"> €</label>
           <select id="f-days">
@@ -67,6 +74,7 @@
           <button id="reset-filters" class="link">Réinitialiser</button>
         </div>
       </div>
+      <div id="progress" class="progress" hidden></div>
       <p id="summary" class="muted small"></p>
       <div id="ads" class="grid"></div>
     </section>

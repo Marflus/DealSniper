@@ -14,6 +14,7 @@ from ..models import Ad
 
 class Site:
     name = "site"                 # clé du site dans config.yaml > sites
+    label = ""                    # nom affiché (par défaut : name avec une majuscule)
     reads_web_pages = False       # True pour un site lu en HTML : robots.txt sera vérifié
 
     def __init__(self, cfg: dict[str, Any], config: dict[str, Any]):
@@ -21,6 +22,13 @@ class Site:
         self.config = config      # toute la configuration
         low, high = cfg.get("interval", [600, 900])
         self.interval = (float(low), float(high))
+        self.label = self.label or self.name.capitalize()
+        self.on_progress = None   # branché par le moteur
+
+    def report(self, query: str, found: int) -> None:
+        """À appeler dans list_recent après chaque recherche : affiche « Recherche "x" — n annonces »."""
+        if self.on_progress:
+            self.on_progress(query, found)
 
     def is_configured(self) -> bool:
         """False si un secret ou un réglage manque : le site est alors ignoré."""

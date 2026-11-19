@@ -17,6 +17,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
+from .. import progress
 from ..config import PROJECT_DIR, data_dir, load_config
 from ..db import Database
 
@@ -209,7 +210,7 @@ def create_app() -> Flask:
         except Exception:  # config.yaml invalide : le plafond n'est simplement pas affiché
             cap = None
         return jsonify(ads=items, cost_today=round(cost, 4), cost_cap=cap, running=state["running"],
-                       error=state["error"])
+                       error=state["error"], progress=progress.current.snapshot() if state["running"] else [])
 
     @app.get("/api/settings")
     def get_settings():

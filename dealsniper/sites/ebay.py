@@ -81,6 +81,7 @@ def item_to_ad(item: dict[str, Any]) -> Ad | None:
 
 class EbaySite(Site):
     name = "ebay"
+    label = "eBay"
 
     def __init__(self, cfg: dict[str, Any], config: dict[str, Any]):
         super().__init__(cfg, config)
@@ -111,6 +112,7 @@ class EbaySite(Site):
             resp = await http.get(SEARCH_URL, headers=headers, params=params)
             resp.raise_for_status()
             ads += [ad for ad in map(item_to_ad, resp.json().get("itemSummaries") or []) if ad]
+            self.report(search["query"], len(ads))
         return ads
 
     async def fetch_detail(self, http: PoliteClient, ad: Ad) -> Ad:

@@ -208,8 +208,8 @@ analyzer:
   # réduire encore le coût (et ajoutez alors  effort: low  ci-dessous).
   model: "claude-haiku-4-5"
   # effort: low               # uniquement pour les modèles qui le supportent (pas haiku-4-5)
-  batch_size: 10              # annonces par appel API
-  max_description_chars: 600  # troncature des descriptions envoyées
+  batch_size: 20
+  max_description_chars: 400
   max_tokens: 4096            # plafond de la réponse (le lot est coupé en deux s'il est atteint)
   max_daily_cost_usd: 1.00    # sécurité anti-facture : ~1 000 annonces/jour avec haiku-4-5 (null = aucun plafond)
   max_retries: 4              # retries automatiques (429, 5xx, surcharge, réseau)

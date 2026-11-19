@@ -14,14 +14,14 @@ from .config import data_dir, load_config, load_env, setup_logging
 def cmd_run(args, config) -> int:
     from .engine import run_once
 
-    run_once(config)
+    run_once(config, live=not args.verbose)
     return 0
 
 
 def cmd_watch(args, config) -> int:
     from .engine import watch
 
-    watch(config)
+    watch(config, live=not args.verbose)
     return 0
 
 

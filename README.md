@@ -119,8 +119,19 @@ python -m dealsniper ui             # interface web locale
 python -m dealsniper test-notif     # fausse annonce sur Telegram / Discord
 python -m dealsniper recap          # annonces notées ces 24 dernières heures (--hours N)
 python -m dealsniper reset          # oublie les annonces déjà vues
-python -m dealsniper -v run         # logs détaillés
+python -m dealsniper -v run         # logs détaillés (au lieu des lignes de progression)
 ```
+
+Pendant un passage, le terminal (et l'interface web) affiche une ligne par site, mise à jour en direct :
+
+```
+eBay : Recherche "thinkpad" — 25 annonces /
+Leboncoin : 50 annonces · 6 nouvelles · 2 analysées · 0 notifiées
+```
+
+Un connecteur alimente cette ligne en appelant `self.report(requete, nb_annonces)` après chaque recherche.
+Chaque annonce notée reçoit aussi une **facilité de réparation** de 1 à 10 (10 = aucune réparation ou pièce
+qui se change sans outil, 1 = soudure ou panne inconnue), visible dans l'interface et sur Telegram.
 
 ## Où le faire tourner
 
