@@ -1,330 +1,133 @@
 # 🎯 Deal Sniper
 
-Chasseur automatique de **bonnes affaires électroniques en France** :
+Veille automatique de **bonnes affaires électroniques en France** : objets **à réparer** (PC sans SSD, console qui
+surchauffe, TV au rétroéclairage HS…) ou **sous leur cote** (revente directe).
 
-- 🔧 **à réparer** : PC portables sans SSD, consoles qui surchauffent, TV au rétroéclairage HS, outillage vendu sans batterie… ;
-- 💎 **en revente directe** : appareils **fonctionnels** vendus nettement sous leur cote (vente urgente, déménagement…).
+Deal Sniper interroge des sites (un fichier par site), écarte gratuitement ce qui ne vous intéresse pas, fait noter
+le reste par **Claude** et vous prévient sur **Telegram / Discord**.
 
-Deal Sniper interroge l'**API officielle eBay** (recherches en direct, sans limite pratique), lit vos **alertes
-email** (leboncoin, Vinted, Agorastore…) et des **flux RSS**, élimine
-gratuitement les annonces sans intérêt ou hors de France, fait noter les autres par **Claude** et vous envoie
-sur **Telegram / Discord** uniquement les affaires notées **≥ 7/10**, avec la marge estimée, un niveau de
-confiance et la question à poser au vendeur.
+## Comment ça marche
 
 ```
- Boîte mail (IMAP) ─┐
-                    ├─► sources ─► filters ─► analyzer ─► notifier ─► Telegram / Discord
- Flux RSS ──────────┘   (extraction)  (0 token,   (Claude,    (score ≥ 7)
-                                       France)     par lots)
-                              data/seen_ads.json · data/deals.json · data/runs.json ─► interface web
+ sites/ebay.py ─┐
+ sites/rss.py  ─┼─► engine.py ─► filtre ─► fiche détaillée ─► filtre ─► Claude ─► Telegram / Discord
+ sites/…       ─┘   (commun)    (gratuit)   (si nouvelle)              (note /10)
+                         └──────────── data/dealsniper.db (annonces déjà vues, coûts, pauses) ───┘
 ```
 
-**Principes**
-- **Pas de navigateur ni de scraping** : uniquement vos emails d'alerte et des flux publics. Pas de risque de blocage de compte.
-- **Coût minimal** : le pré-filtre Python élimine la majorité des annonces sans appel API ; les autres partent par lots
-  de 10 avec descriptions tronquées à 600 caractères ; plafond de dépense journalier.
-- **Robuste** : un email mal formé, une source en panne ou une erreur API temporaire n'arrêtent rien ; les annonces non
-  analysées sont retentées au passage suivant ; une alerte Telegram prévient si une source tombe en panne.
-- **Décision humaine** : Deal Sniper prévient, vous contactez le vendeur. Rien n'est acheté ni envoyé automatiquement.
+Pour chaque site, à chaque passage :
+1. **liste** des annonces récentes ;
+2. on garde les **nouvelles** (jamais vues) ;
+3. **filtre gratuit** : catégorie, budget, France uniquement, mots interdits (« oxydé », « iCloud »…) ;
+4. **fiche détaillée**, seulement pour les nouvelles retenues, puis nouveau filtre sur la description ;
+5. **Claude** note de 1 à 10, estime la marge, donne une question à poser au vendeur ;
+6. **notification** : 🎯 un message par annonce ≥ 7/10, 👀 un récapitulatif pour celles à 5-6/10.
 
----
+Un site qui refuse l'accès (HTTP 401/403, robots.txt) est mis en pause 6 h et vous êtes prévenu : rien n'est
+contourné. Les requêtes sont espacées et identifiées honnêtement (`DealSniper/3.0`).
 
-## Sommaire
-1. [Structure du projet](#1-structure-du-projet)
-2. [Installation](#2-installation)
-3. [Boîte mail dédiée](#3-boîte-mail-dédiée)
-4. [Alertes sur les sites](#4-alertes-sur-les-sites)
-5. [Notifications](#5-notifications)
-6. [Configuration](#6-configuration)
-7. [Commandes](#7-commandes)
-8. [Automatisation GitHub Actions](#8-automatisation-github-actions)
-9. [Coûts](#9-coûts)
-10. [Dépannage](#10-dépannage)
-
----
-
-## 1. Structure du projet
+## Arborescence
 
 ```
 DealSniper/
-├── config.yaml               # catégories, budgets, mots-clés, réglages (à adapter)
-├── .env.example              # modèle des secrets (à copier en .env)
-├── main.py                   # raccourci : python main.py = python -m dealsniper
+├── config.yaml               ← tous les réglages (sites, recherches, budgets, mots-clés, seuils)
+├── .env.example              ← modèle des secrets (à copier en .env)
+├── main.py                   raccourci : python main.py = python -m dealsniper
 ├── dealsniper/
-│   ├── cli.py                # commandes (run, inspect-emails, test-notif, dashboard…)
-│   ├── pipeline.py           # un passage : sources → filtres → IA → notifications
-│   ├── config.py             # lecture de config.yaml / .env, valeurs par défaut
-│   ├── models.py             # Ad : une annonce normalisée
-│   ├── sources/
-│   │   ├── ebay_api.py       # API officielle eBay (recherches en direct, France)
-│   │   ├── email_alerts.py   # lecture IMAP de la boîte dédiée + diagnostic
-│   │   ├── email_parser.py   # email d'alerte → annonces (emails transférés compris)
-│   │   └── rss.py            # flux RSS / Atom
-│   ├── filters.py            # pré-filtre gratuit (catégorie, France, budget, exclusions)
-│   ├── location.py           # ville / code postal, détection étranger et DOM-TOM
-│   ├── prices.py             # prix, livraison, enchères, devises
-│   ├── urls.py               # liens de suivi, URL canonique, identifiant d'annonce
-│   ├── text.py               # nettoyage HTML, mots-clés sans accents
-│   ├── analyzer.py           # notation par Claude (lots, schéma JSON, coût)
-│   ├── notifier.py           # Telegram / Discord
-│   ├── storage.py            # fichiers d'état JSON (écriture atomique)
-│   ├── web/                  # interface web locale (Flask)
-│   └── daemon/               # veille 24 h/24 (asyncio + httpx + SQLite)
-│       ├── runner.py         # orchestrateur : une boucle par connecteur, détection en deux temps
-│       ├── http.py           # client poli : identification, délai par site, robots.txt, 429/403
-│       ├── store.py          # base SQLite (annonces vues, pauses, coûts)
-│       └── connectors/       # ebay.py, rss.py, email.py, example_site.py (modèle à adapter)
-├── deploy/dealsniper.service # service systemd pour Raspberry Pi
-├── data/                     # état : annonces vues, historique, coûts
-├── tests/                    # tests unitaires (pytest)
-└── .github/workflows/        # passage planifié (dealsniper.yml) et tests (tests.yml)
+│   ├── cli.py                commandes : run, watch, test-notif, recap, reset
+│   ├── engine.py             moteur commun (les 6 étapes ci-dessus)
+│   ├── sites/                ← UN FICHIER PAR SITE
+│   │   ├── base.py           interface commune (list_recent / fetch_detail)
+│   │   ├── ebay.py           eBay, API officielle
+│   │   ├── rss.py            flux RSS / Atom
+│   │   ├── _template.py      modèle à copier pour ajouter un site
+│   │   └── __init__.py       liste des sites (SITES)
+│   ├── filters.py            filtre gratuit
+│   ├── analyzer.py           notation par Claude
+│   ├── notifier.py           Telegram / Discord
+│   ├── db.py                 base SQLite
+│   ├── http.py               client HTTP (délais, robots.txt, 429, 403)
+│   ├── config.py, models.py
+│   └── utils/                prix, texte, URL, localisation
+├── tests/                    python -m pytest
+├── deploy/dealsniper.service service systemd (Raspberry Pi)
+└── .github/workflows/        passage planifié sur GitHub (sans serveur) + tests
 ```
 
----
+## Ajouter un site
 
-## 2. Installation
+1. `cp dealsniper/sites/_template.py dealsniper/sites/mon_site.py`
+2. Dans ce fichier : changez `name = "mon_site"`, écrivez `list_recent` (la liste des annonces : titre, prix,
+   URL) et, si utile, `fetch_detail` (la description d'une annonce).
+3. Ajoutez la classe dans `SITES` (`dealsniper/sites/__init__.py`).
+4. Ajoutez un bloc `mon_site:` sous `sites:` dans `config.yaml`.
 
-Prérequis : **Python 3.10+** et une **clé API Anthropic** ([console.anthropic.com](https://console.anthropic.com/settings/keys)).
+Tout le reste (déjà vu, filtres, Claude, notifications, pauses) est automatique. Préférez une API ou un flux RSS
+quand le site en propose un ; pour une page HTML, utilisez `http.get(url, check_robots=True)`.
+
+## Installation
 
 ```bash
-git clone https://github.com/Marflus/DealSniper.git
-cd DealSniper
-python -m venv .venv
-source .venv/bin/activate          # Windows : .venv\Scripts\Activate.ps1
+git clone https://github.com/Marflus/DealSniper.git && cd DealSniper
+python3 -m venv .venv && source .venv/bin/activate      # Windows : .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-cp .env.example .env               # Windows : copy .env.example .env
+cp .env.example .env                                     # puis remplissez les secrets
+python -m dealsniper test-notif                          # vérifie Telegram / Discord
+python -m dealsniper run                                 # un passage
 ```
 
-Remplissez `.env` (jamais commité : il est exclu par `.gitignore`).
+**Secrets** (`.env`, ou *Settings → Secrets and variables → Actions* sur GitHub) :
+`ANTHROPIC_API_KEY`, `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+(et/ou `DISCORD_WEBHOOK_URL`).
 
-> Pour un usage 100 % GitHub Actions, l'installation locale est facultative : voir § 8.
-
----
-
-## Sources disponibles
-
-| Plateforme | API publique gratuite ? | Ce que Deal Sniper utilise | Infos obtenues |
-|---|---|---|---|
-| **eBay** | ✅ Browse API | API officielle | titre complet, prix, port, état, **description complète**, ville, **note du vendeur** |
-| leboncoin | ❌ (API réservée aux pros pour publier) | emails d'alerte | titre (souvent coupé), prix, ville |
-| Vinted | ❌ | emails d'alerte | titre, prix |
-| Facebook Marketplace | ❌ | — | — |
-
-Les plateformes sans API ne sont pas lues directement : cela demanderait de contourner leurs protections
-anti-robots, ce que Deal Sniper ne fait pas.
-
-## 3. API eBay (recommandé)
-
-C'est la source principale : jusqu'à 200 annonces récentes par recherche, filtrées par eBay (objets **situés en
-France**, prix max, état « pour pièces » ou « occasion »), 5 000 appels gratuits par jour. Pour chaque annonce
-retenue par le filtre, la **fiche complète** est lue (description du vendeur, état détaillé, ville, réputation),
-puis le filtre repasse sur la description. Aucun email nécessaire.
-
-1. Créez un compte sur [developer.ebay.com](https://developer.ebay.com) (gratuit ; validation sous ~1 jour).
-2. **Application Keys** → créez un jeu de clés **Production** : récupérez l'**App ID (Client ID)** et le
-   **Cert ID (Client Secret)**.
-3. eBay demande de déclarer un point de notification « suppression de compte » : comme Deal Sniper ne stocke aucune
-   donnée d'utilisateur eBay, choisissez l'**exemption** (*Alerts & Notifications → Marketplace account deletion →
-   Not persisting eBay data*).
-4. Ajoutez les secrets `EBAY_CLIENT_ID` et `EBAY_CLIENT_SECRET` (GitHub et/ou `.env`).
-5. Adaptez les recherches dans `config.yaml` → `sources.ebay_api.searches` (`query`, `condition`, `max_price`).
-
-Sans ces clés, la source est simplement ignorée.
-
-## 3 bis. Boîte mail dédiée
-
-Utilisez une **adresse Gmail créée pour les alertes** :
-1. Activez la **validation en deux étapes** du compte Google.
-2. Créez un **mot de passe d'application** (Compte Google → Sécurité → *Mots de passe des applications*).
-3. Renseignez `IMAP_SERVER=imap.gmail.com`, `IMAP_EMAIL` et `IMAP_PASSWORD` (le mot de passe d'application).
-
-⚠️ Outlook / Hotmail n'acceptent plus l'IMAP par mot de passe : gardez-les comme boîte perso et **transférez**
-les alertes vers la boîte dédiée. Les emails **transférés ou redirigés** sont reconnus automatiquement
-(l'expéditeur d'origine est retrouvé dans le contenu).
-
----
-
-## 4. Alertes sur les sites
-
-- **leboncoin** : recherche → *Sauvegarder la recherche* → dans *Favoris → Recherches*, activez l'**enveloppe ✉️**
-  (alerte email). La cloche 🔔 ne concerne que le téléphone. Si votre compte est sur votre boîte perso, créez une
-  règle qui redirige les emails de leboncoin vers la boîte dédiée.
-- **eBay** : inutile avec l'API (§ 3) ; sinon, recherche avec filtre « Articles en France » → *Enregistrer cette
-  recherche* → notifications par email.
-- **Vinted** : compte avec la boîte dédiée → recherche (mots-clés + prix max) → *Sauvegarder la recherche* →
-  *Paramètres → Notifications* : activez les **emails** pour les recherches sauvegardées (si l'option n'apparaît pas,
-  Vinted ne notifie que dans l'application et rien n'arrivera dans la boîte). Les liens `vinted.fr/items/…` sont reconnus.
-- **Agorastore** et autres : même principe ; ajoutez l'expéditeur dans `sources.email.senders` si besoin.
-
-> **Combien d'annonces ?** Deal Sniper n'a **aucune limite de nombre** : il lit tous les emails des 3 derniers jours,
-> analyse toutes les annonces retenues et envoie toutes les bonnes affaires. La seule limite est celle des sites :
-> un récapitulatif leboncoin ne montre qu'environ **5 annonces**, même s'il en annonce 745. Pour tout voir, créez
-> plusieurs recherches **précises avec prix max** qui produisent chacune moins de 5 nouvelles annonces par jour.
-
-Exemples de recherches efficaces (avec prix max) : `thinkpad sans ssd`, `latitude sans disque`, `ps4 surchauffe`,
-`tv retroeclairage`, `makita sans batterie`, et pour la revente directe un modèle précis à prix bas (`ps5` ≤ 250 €).
-
----
-
-## 5. Notifications
+**Clés eBay** : compte gratuit sur [developer.ebay.com](https://developer.ebay.com) → *Application Keys* →
+jeu de clés **Production** (App ID = `EBAY_CLIENT_ID`, Cert ID = `EBAY_CLIENT_SECRET`). Pour la notification de
+suppression de compte, choisissez l'exemption *« Not persisting eBay data »*.
 
 **Telegram** : @BotFather → `/newbot` → token ; envoyez un message à votre bot puis ouvrez
 `https://api.telegram.org/bot<TOKEN>/getUpdates` pour lire votre `chat.id`.
-**Discord** : salon → *Intégrations* → *Webhooks* → copier l'URL.
 
-```
-🎯 8/10 · 🔧 Réparation · PC portables pros
-Lenovo ThinkPad T480 i5 16 Go sans SSD
+## Commandes
 
-💶 Prix : 85 € + 6,50 € port = 91,50 €
-📍 Lyon 69003 · leboncoin
-🔧 Panne probable : SSD manquant
-🧩 Pièce ≈ 25 € · 📈 Revente ≈ 220 €
-💰 Marge nette ≈ 82 € (confiance haute)
-💬 Modèle très demandé, simple ajout d'un SSD M.2.
-❓ À demander : Le chargeur d'origine est-il fourni ?
-🔗 Voir l'annonce
+```bash
+python -m dealsniper run            # un passage de chaque site (commande par défaut)
+python -m dealsniper watch          # surveillance continue, chaque site à son rythme (serveur / Raspberry Pi)
+python -m dealsniper test-notif     # fausse annonce sur Telegram / Discord
+python -m dealsniper recap          # annonces notées ces 24 dernières heures (--hours N)
+python -m dealsniper reset          # oublie les annonces déjà vues
+python -m dealsniper -v run         # logs détaillés
 ```
 
-**Trois types de messages** :
-- 🎯 **bonne affaire** (≥ 7/10) : un message détaillé par annonce ;
-- 👀 **à vérifier** (5-6/10) : regroupées dans un seul message par passage, avec lien, prix, ville et marge
-  (utile pour les alertes email leboncoin, qui ne donnent ni description ni état : Claude reste prudent) ;
-- 📊 **récap** à la demande : `python -m dealsniper recap` ou mode `recap` du workflow.
+## Où le faire tourner
 
-Si une source tombe en panne (mot de passe IMAP révoqué…), un message ⚠️ vous prévient, au plus une fois par jour.
+**GitHub Actions** (rien à installer) : `.github/workflows/dealsniper.yml` lance `run` toutes les 30 min de 6 h
+à 23 h ; la base est conservée dans le cache GitHub. Lancement manuel : *Actions → Deal Sniper → Run workflow*
+(modes `run`, `test-notif`, `recap`). GitHub retarde ou saute parfois des passages planifiés.
 
----
+**Raspberry Pi / serveur Linux** (plus réactif) :
+```bash
+sudo cp deploy/dealsniper.service /etc/systemd/system/    # adaptez User et chemins
+sudo systemctl daemon-reload && sudo systemctl enable --now dealsniper
+journalctl -u dealsniper -f
+```
+Dans ce cas, supprimez le bloc `schedule:` du workflow GitHub pour ne pas analyser deux fois.
 
-## 6. Configuration
-
-Tout est commenté dans `config.yaml`. L'essentiel :
+## Réglages principaux (`config.yaml`)
 
 | Section | Rôle |
 |---|---|
-| `sources.email` | boîte IMAP, expéditeurs suivis, motifs d'URL d'annonce, suivi des liens de redirection |
-| `location` | `france_only` (rejette « Provenance : Chine », prix en £/$…) et `exclude_overseas` (DOM-TOM) |
-| `filters` | mots-clés rédhibitoires, annonces d'acheteurs, signaux « bonne affaire », prix minimum |
-| `categories` | mots-clés de reconnaissance, `max_budget` (prix + port), exclusions et signaux par catégorie |
-| `analyzer` | modèle, taille des lots, troncature, plafond de dépense journalier (1 $ par défaut, `null` = aucun) |
-| `notifier` | seuil de score, types d'affaires notifiés |
+| `sites` | un bloc par site : `enabled`, `interval`, et ses réglages (recherches eBay, flux RSS…) |
+| `network` | identification, délai entre requêtes, pause après un refus |
+| `location` | France uniquement, DOM-TOM exclus |
+| `filters`, `categories` | mots interdits, budgets par catégorie, signaux positifs |
+| `analyzer` | modèle Claude, taille des lots, plafond de dépense (1 $/jour par défaut) |
+| `notifier` | seuils : 7/10 = bonne affaire, 5/10 = à vérifier |
 
-- Mots-clés **insensibles à la casse et aux accents**, cherchés en **mots entiers**, accords tolérés
-  (`oxyde` attrape « oxydée »).
-- `require_include: true` sur une catégorie n'envoie à Claude que les annonces avec un signal positif.
-- Pour diviser le coût par ~10 : `model: "claude-haiku-5-5"` et `effort: low`.
+**Coût** : environ 0,001 $ par annonce analysée avec `claude-haiku-4-5` (10 fois moins avec `claude-haiku-5-5`).
 
----
+## Sites sans API
 
-## 7. Commandes
-
-```bash
-python -m dealsniper run                 # un passage complet (= python main.py)
-python -m dealsniper -v run --dry-run    # collecte + filtre avec raisons de rejet, sans IA ni sauvegarde
-python -m dealsniper run --no-ai         # montre ce qui partirait à l'IA
-python -m dealsniper run --loop 30       # tourne en continu (un passage toutes les 30 min)
-python -m dealsniper inspect-emails      # diagnostic : annonces extraites de chaque email de la boîte
-python -m dealsniper test-email a.eml    # diagnostic sur un email enregistré
-python -m dealsniper test-notif          # fausse annonce sur Telegram / Discord
-python -m dealsniper recap --hours 24    # annonces analysées récemment, envoyées sur Telegram
-python -m dealsniper reset-seen          # oublie l'historique des annonces vues
-python -m dealsniper dashboard           # interface web sur http://127.0.0.1:5000
-python -m dealsniper daemon              # veille 24 h/24 (Raspberry Pi, voir § 8 bis)
-python -m pytest                         # tests (pip install pytest)
-```
-
----
-
-## 8. Automatisation GitHub Actions
-
-Le workflow `.github/workflows/dealsniper.yml` lance un passage **toutes les 30 minutes de 6 h à 23 h** et recommite
-`data/*.json` pour mémoriser l'état.
-
-1. **Settings → Secrets and variables → Actions** : `ANTHROPIC_API_KEY`, `IMAP_SERVER`, `IMAP_EMAIL`,
-   `IMAP_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, et si besoin `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`,
-   `DISCORD_WEBHOOK_URL`.
-2. **Settings → Actions → General → Workflow permissions** : *Read and write permissions*.
-3. **Actions → Deal Sniper → Run workflow**, puis choisissez le **mode** :
-   - `run` : passage complet ;
-   - `dry-run` : collecte + filtre détaillé, sans IA ni sauvegarde ;
-   - `inspect-emails` : ce qui est extrait de chaque email (idéal après avoir configuré une alerte) ;
-   - `test-notif` : fausse annonce envoyée sur Telegram / Discord ;
-   - `recap` : les annonces analysées ces dernières 24 h, envoyées sur Telegram.
-
-GitHub peut retarder ou sauter des passages planifiés aux heures chargées : c'est normal, le suivant rattrape
-(les emails des 3 derniers jours sont relus). ~36 passages/jour ≈ 1 100 min/mois, sous le quota gratuit de 2 000 min.
-
----
-
-## 8 bis. Démon 24 h/24 sur Raspberry Pi / serveur Linux
-
-Alternative à GitHub Actions, plus réactive : `python -m dealsniper daemon` fait tourner une boucle asyncio par
-source, chacune à son rythme (eBay toutes les 10-15 min, emails toutes les 15-20 min…), avec une base SQLite locale
-(`data/dealsniper.db`). Consommation : quelques dizaines de Mo de RAM, CPU quasi nul.
-
-**Détection en deux temps** : (1) liste légère des annonces récentes ; (2) pour les seules annonces jamais vues
-**et** qui passent le pré-filtre, lecture de la fiche détaillée après une courte pause aléatoire, puis nouveau
-passage du filtre sur la description, analyse Claude et notification.
-
-**Comportement réseau responsable** (`dealsniper/daemon/http.py`) :
-- identification honnête (`daemon.user_agent`), jamais déguisée en navigateur ;
-- au moins `min_host_interval` secondes entre deux requêtes vers un même site ;
-- `robots.txt` respecté pour les connecteurs qui lisent des pages web ;
-- HTTP 429 / 5xx : attente exponentielle (Retry-After respecté) ;
-- HTTP 401 / 403 ou robots.txt : **le site refuse, la source est mise en pause** (6 h par défaut) et vous êtes
-  prévenu. Rien n'est contourné.
-
-**Ajouter une source** : créez `dealsniper/daemon/connectors/ma_source.py` (classe héritant de `Connector`, avec
-`list_recent` et éventuellement `fetch_detail`), ajoutez-la à `REGISTRY` dans `connectors/__init__.py`, puis
-activez-la dans `config.yaml > daemon.connectors`. Le modèle commenté `example_site.py` montre un connecteur web
-piloté par des sélecteurs CSS — à réserver aux sites publics qui l'autorisent.
-
-**Installation sur le Raspberry Pi** :
-```bash
-git clone https://github.com/Marflus/DealSniper.git && cd DealSniper
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env && nano .env            # secrets
-.venv/bin/python -m dealsniper daemon        # essai au premier plan (Ctrl+C pour arrêter)
-sudo cp deploy/dealsniper.service /etc/systemd/system/   # adaptez User et chemins
-sudo systemctl daemon-reload && sudo systemctl enable --now dealsniper
-journalctl -u dealsniper -f                  # logs
-```
-Si le démon tourne sur le Pi, désactivez le passage planifié GitHub (supprimez le bloc `schedule:` du workflow)
-pour ne pas analyser deux fois les mêmes annonces.
-
-## 9. Coûts
-
-Un lot de 10 annonces ≈ 2 500 tokens en entrée et 1 000 en sortie :
-
-| Modèle | Prix (entrée / sortie, par million de tokens) | 50 annonces analysées / jour |
-|---|---|---|
-| `claude-haiku-4-5` (défaut) | 1 $ / 5 $ | ≈ 0,04 $ / jour |
-| `claude-haiku-5-5` | 0,10 $ / 0,50 $ | ≈ 0,004 $ / jour |
-
-Le coût réel de chaque passage est enregistré dans `data/runs.json` et affiché dans l'interface ;
-`max_daily_cost_usd` (1 $ par défaut, soit ~1 000 annonces analysées par jour) est une simple sécurité contre une
-facture imprévue ; mettez `null` pour le supprimer.
-
----
-
-## 10. Dépannage
-
-| Problème | Solution |
-|---|---|
-| `connexion IMAP impossible` | mot de passe d'application, adresse, IMAP activé. |
-| `IMAP : N email(s)` mais 0 annonce | lancez le mode `inspect-emails` : il montre la source reconnue et les liens de chaque email. |
-| Annonces « hors catégorie » | ajoutez le modèle dans les `keywords` d'une catégorie. |
-| Trop d'appels IA | baissez les `max_budget`, ajoutez des exclusions, ou `require_include: true`. |
-| `clé API refusée` | vérifiez `ANTHROPIC_API_KEY` et le crédit sur la console Anthropic. |
-| Rien sur Telegram | mode `test-notif` ; envoyez d'abord un message à votre bot. |
-| L'état n'est pas recommité | *Read and write permissions* (§ 8, étape 2). |
-
-### Sources non prises en charge
-
-**Facebook Marketplace, et la lecture directe de leboncoin ou Vinted** : aucune API publique. Les projets qui s'y
-connectent (fbm-sniper, zorojuro12/deal-sniper…) contournent les protections anti-robots (navigateur « stealth »,
-jetons internes, rotation de cookies et d'IP). C'est contraire aux conditions de ces sites, cela casse à chaque
-changement de leur côté (le `STATUS.md` de fbm-sniper-community indique toutes ses sources hors service en mai 2026)
-et expose votre compte et votre IP à un blocage : Deal Sniper ne le fait pas.
+leboncoin, Vinted et Facebook Marketplace n'ont pas d'API publique et bloquent les robots. Deal Sniper ne les lit
+pas ; pour eux, utilisez les **notifications instantanées des applis** sur des recherches précises avec prix max.
 
 Vérifiez toujours une annonce et le vendeur avant d'acheter : les estimations de l'IA sont indicatives.

@@ -1,10 +1,8 @@
-"""Deal Sniper — chasseur de bonnes affaires électroniques (à réparer ou sous la cote).
+"""Deal Sniper — veille de bonnes affaires électroniques (à réparer ou sous la cote), France uniquement.
 
-Chaîne de traitement :
+    sites/ (un fichier par site) → engine.py (moteur commun) → filters → analyzer (Claude) → notifier
 
-    sources (emails d'alerte, RSS) → filters (Python pur) → analyzer (Claude) → notifier (Telegram/Discord)
-
-Point d'entrée : ``python -m dealsniper`` (voir ``dealsniper/cli.py``).
+Point d'entrée : `python -m dealsniper` (voir cli.py).
 """
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"

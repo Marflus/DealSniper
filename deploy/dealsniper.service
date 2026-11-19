@@ -13,7 +13,7 @@ Wants=network-online.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/DealSniper
-ExecStart=/home/pi/DealSniper/.venv/bin/python -m dealsniper daemon
+ExecStart=/home/pi/DealSniper/.venv/bin/python -m dealsniper watch
 Restart=on-failure
 RestartSec=60
 # Ressources modestes : un Raspberry Pi suffit largement.

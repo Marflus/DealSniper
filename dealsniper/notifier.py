@@ -273,7 +273,7 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
             log.error("Notification impossible pour « %s » : %s", ad.title[:50], exc)
     if len(good) > max_per_run:
         extra = len(good) - max_per_run
-        notifier.send_text(f"… et {extra} autre(s) bonne(s) affaire(s), voir l'interface Deal Sniper.")
+        notifier.send_text(f"… et {extra} autre(s) bonne(s) affaire(s), voir le récapitulatif (mode recap).")
     log.info("Notifications : %d envoyée(s) via %s", len(sent), ", ".join(notifier.channels) or "console")
     return sent
 

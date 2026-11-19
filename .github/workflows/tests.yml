@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    paths: ["dealsniper/**", "tests/**", "config.yaml", "requirements*.txt", "pyproject.toml"]
+    paths: ["dealsniper/**", "tests/**", "config.yaml", "requirements.txt"]
   pull_request:
 
 jobs:

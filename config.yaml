@@ -1,47 +1,22 @@
 # =============================================================================
 #  Deal Sniper — configuration
-#  Les mots-clés sont insensibles à la casse et aux accents ("oxydé" = "OXYDE").
-#  Ils sont recherchés comme mots entiers ("hs" ne matche pas "hstore").
+#  Les mots-clés sont insensibles à la casse et aux accents ("oxydé" = "OXYDE"),
+#  cherchés en mots entiers ("hs" ne trouve pas "hstore").
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-#  Sources d'annonces
+#  Sites surveillés : un bloc par fichier de dealsniper/sites/
+#  interval : pause (secondes, tirée au hasard) entre deux passages en mode `watch`
 # -----------------------------------------------------------------------------
-sources:
-  # Emails d'alerte (IMAP) : complément pour leboncoin / Vinted, qui n'ont aucune API publique.
-  # Source pauvre (titre, prix, ville). Mettez enabled: false pour n'utiliser que l'API eBay.
-  email:
-    enabled: false
-    folder: INBOX
-    lookback_days: 3          # on relit les emails des 3 derniers jours (le dédoublonnage évite les doublons)
-    max_emails: null          # null = tous les emails de la période
-    mark_as_read: false       # true = marque les alertes comme lues après lecture
-    # nom de la source -> morceau de l'adresse/nom d'expéditeur à reconnaître
-    # (laisser vide {} pour accepter TOUS les expéditeurs)
-    senders:
-      leboncoin: "leboncoin"
-      agorastore: "agorastore"
-      ebay: "ebay"
-      vinted: "vinted"
-    # Expressions régulières reconnaissant un lien d'annonce dans un email
-    ad_url_patterns:
-      - 'leboncoin\.fr/(?:ad|vi|[a-z_]+)/.*\d{6,}'
-      - 'agorastore\.fr/.+'
-      - 'ebay\.[a-z.]+/itm/'
-      - 'vinted\.fr/items/\d+'
-    # Les liens « de suivi » opaques des emails sont suivis (en-têtes de redirection
-    # uniquement) pour retrouver l'URL réelle de l'annonce.
-    resolve_tracking_links: true
-
-  # API officielle eBay (gratuite) : recherches en direct, objets situés en France uniquement.
-  # Nécessite EBAY_CLIENT_ID et EBAY_CLIENT_SECRET (voir README § eBay). Sans eux, source ignorée.
-  #   condition : parts (pour pièces / ne fonctionne pas), used (occasion), any (tout)
-  #   max_price : prix maximum filtré par eBay ; limit : annonces récentes par recherche (max 200)
-  ebay_api:
+sites:
+  # API officielle eBay (secrets EBAY_CLIENT_ID / EBAY_CLIENT_SECRET), objets situés en France.
+  #   condition : parts (pour pièces), used (occasion), any (tout) ; max_price en euros
+  ebay:
     enabled: true
+    interval: [600, 900]       # 16 recherches toutes les 10-15 min ≈ 2 000 appels/jour (quota : 5 000)
     marketplace: EBAY_FR
     country: FR
-    limit: 100
+    limit: 100                 # annonces récentes par recherche (max 200)
     searches:
       # --- À réparer ---
       - {query: "thinkpad", condition: parts, max_price: 120}
@@ -62,24 +37,27 @@ sources:
       - {query: "makita sans batterie", condition: any, max_price: 80}
       - {query: "dewalt machine nue", condition: any, max_price: 80}
 
+  # Flux RSS / Atom de n'importe quel site qui en publie un.
   rss:
     enabled: true
-    timeout: 20
-    # Ajoutez vos flux ici (eBay, RSS-Bridge, rss.app, etc.)
+    interval: [900, 1800]
     feeds: []
-    #  - name: ebay-thinkpad
-    #    url: "https://www.ebay.fr/sch/i.html?_nkw=thinkpad+sans+ssd&_rss=1"
-    #  - name: rssbridge-lbc
-    #    url: "https://rss-bridge.example.org/?action=display&bridge=...&format=Atom"
+    #  - {name: mon-flux, url: "https://exemple.fr/annonces.rss"}
+
+  # Vos propres sites : copiez dealsniper/sites/_template.py, puis ajoutez un bloc ici.
+  # mon_site:
+  #   enabled: true
+  #   interval: [1800, 3600]
+  #   list_url: "https://exemple.fr/annonces?tri=recent"
 
 # -----------------------------------------------------------------------------
-#  Enrichissement : description, état et vendeur lus sur la page de l'annonce
-#  (une requête simple par annonce retenue ; si le site refuse, on n'insiste pas)
+#  Réseau (commun à tous les sites)
 # -----------------------------------------------------------------------------
-enrich:
-  enabled: true
-  sources: [leboncoin, vinted]
-  delay_seconds: 2
+network:
+  user_agent: "DealSniper/3.0 (veille personnelle non commerciale)"  # identification honnête
+  min_host_interval: 10        # secondes minimum entre deux requêtes vers un même site
+  detail_delay: [2, 6]         # pause avant chaque lecture de fiche détaillée
+  access_denied_pause_hours: 6 # un refus (401/403, robots.txt) met le site en pause
 
 # -----------------------------------------------------------------------------
 #  Localisation : uniquement les annonces situées en France
@@ -243,7 +221,6 @@ analyzer:
   batch_size: 10              # annonces par appel API
   max_description_chars: 600  # troncature des descriptions envoyées
   max_tokens: 4096            # plafond de la réponse (le lot est coupé en deux s'il est atteint)
-  max_ads_per_run: null       # null = aucune limite (sinon : au-delà, report au passage suivant)
   max_daily_cost_usd: 1.00    # sécurité anti-facture : ~1 000 annonces/jour avec haiku-4-5 (null = aucun plafond)
   max_retries: 4              # retries automatiques (429, 5xx, surcharge, réseau)
   timeout_seconds: 90
@@ -257,28 +234,9 @@ notifier:
   watch_score: 5              # « à vérifier » (5-6/10) : regroupées dans un seul message par passage (null = désactivé)
   # types d'affaires à notifier : reparation (objet en panne) / revente_directe (fonctionnel sous la cote)
   deal_types: ["reparation", "revente_directe"]
-  max_per_run: null           # null = toutes les bonnes affaires sont envoyées
 
 # -----------------------------------------------------------------------------
-#  Stockage local (dossier data/)
+#  Stockage (data/dealsniper.db)
 # -----------------------------------------------------------------------------
 storage:
-  seen_retention_days: 60     # durée de mémoire des annonces déjà vues
-  max_deals_history: 2000     # annonces analysées conservées pour l'interface
-
-# -----------------------------------------------------------------------------
-#  Démon 24 h/24 (python -m dealsniper daemon) — Raspberry Pi / serveur Linux
-# -----------------------------------------------------------------------------
-daemon:
-  # Identification honnête auprès des sites (jamais déguisée en navigateur)
-  user_agent: "DealSniper/3.0 (veille personnelle non commerciale)"
-  min_host_interval: 10        # secondes minimum entre deux requêtes vers un même site
-  detail_delay: [2, 6]         # pause aléatoire avant chaque lecture de fiche (étape 2)
-  access_denied_pause_hours: 6 # un refus (401/403, robots.txt) met la source en pause
-  seen_retention_days: 90
-  connectors:
-    ebay:  {enabled: true, interval: [600, 900]}    # API officielle : ~2 000 appels/jour sur 5 000
-    email: {enabled: false, interval: [900, 1200]}
-    rss:   {enabled: true, interval: [900, 1800]}
-    # example_site:            # modèle à adapter (voir dealsniper/daemon/connectors/example_site.py)
-    #   enabled: false
+  seen_retention_days: 90     # durée de mémoire des annonces déjà vues

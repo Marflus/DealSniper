@@ -27,8 +27,7 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Données locales : verrou et fichiers corrompus
-# (seen_ads.json / deals.json / runs.json restent versionnables pour GitHub Actions)
+# Données locales (base SQLite)
 data/.run.lock
 data/*.db
 data/*.db-wal

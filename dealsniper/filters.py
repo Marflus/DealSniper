@@ -16,10 +16,10 @@ import logging
 from collections import Counter
 from typing import Any
 
-from .location import foreign_country, is_overseas
 from .models import Ad
-from .prices import has_foreign_currency
-from .text import first_keyword, normalize
+from .utils.location import foreign_country, is_overseas
+from .utils.prices import has_foreign_currency
+from .utils.text import first_keyword, normalize
 
 log = logging.getLogger(__name__)
 

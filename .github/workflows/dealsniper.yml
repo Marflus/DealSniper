@@ -1,29 +1,23 @@
-# Exécution automatique de Deal Sniper sur GitHub Actions.
-#  * planifié : toutes les 30 minutes de 6 h à 23 h (heure de Paris en hiver, UTC+1) ;
-#  * manuel : onglet Actions > Deal Sniper > Run workflow, en choisissant le mode.
-# Après un passage « run », data/*.json est recommité pour mémoriser l'état.
+# Deal Sniper sur GitHub Actions (sans serveur).
+#  * planifié : un passage toutes les 30 min de 6 h à 23 h (heure de Paris en hiver) ;
+#  * manuel : Actions > Deal Sniper > Run workflow, en choisissant le mode.
+# La base SQLite (annonces déjà vues) est conservée d'un passage à l'autre dans le cache GitHub.
+# Si Deal Sniper tourne en continu sur un Raspberry Pi (`watch`), supprimez le bloc `schedule`.
 name: Deal Sniper
 
 on:
   schedule:
-    # Toutes les 30 min (à :07 et :37) : GitHub saute souvent des passages planifiés aux heures
-    # chargées, un rythme plus serré compense. ~36 passages/jour ≈ 1 100 min/mois (quota gratuit : 2 000).
-    - cron: "7,37 5-22 * * *"
+    - cron: "7,37 5-22 * * *"   # GitHub peut retarder ou sauter des passages aux heures chargées
   workflow_dispatch:
     inputs:
       mode:
         description: "Que faire ?"
         type: choice
         default: run
-        options:
-          - run              # passage complet (IA + notifications)
-          - dry-run          # collecte + filtre, sans IA ni sauvegarde
-          - inspect-emails   # diagnostic : annonces extraites de chaque email
-          - test-notif       # fausse annonce envoyée sur Telegram / Discord
-          - recap            # annonces analysées ces dernières 24 h, envoyées sur Telegram
+        options: [run, test-notif, recap]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: dealsniper
@@ -32,9 +26,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      MODE: ${{ inputs.mode || 'run' }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -43,38 +35,28 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Installer les dépendances
-        run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt
 
-      - name: Deal Sniper (${{ env.MODE }})
+      - name: Restaurer la base (annonces déjà vues)
+        uses: actions/cache/restore@v4
+        with:
+          path: data/dealsniper.db
+          key: dealsniper-db-${{ github.run_id }}
+          restore-keys: dealsniper-db-
+
+      - name: Deal Sniper (${{ inputs.mode || 'run' }})
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          IMAP_SERVER: ${{ secrets.IMAP_SERVER }}
-          IMAP_PORT: ${{ secrets.IMAP_PORT }}
-          IMAP_EMAIL: ${{ secrets.IMAP_EMAIL }}
-          IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
-          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
-        run: |
-          case "$MODE" in
-            run)     python -m dealsniper run ;;
-            dry-run) python -m dealsniper -v run --dry-run ;;
-            *)       python -m dealsniper "$MODE" ;;
-          esac
+        run: python -m dealsniper ${{ inputs.mode || 'run' }}
 
-      - name: Sauvegarder l'état (data/)
-        if: env.MODE == 'run'
-        run: |
-          git config user.name  "dealsniper-bot"
-          git config user.email "dealsniper-bot@users.noreply.github.com"
-          git add data/seen_ads.json data/deals.json data/runs.json
-          if git diff --cached --quiet; then
-            echo "Aucun changement."
-          else
-            git commit -m "chore(data): mise à jour de l'état [skip ci]"
-            git pull --rebase --autostash
-            git push
-          fi
+      - name: Sauvegarder la base
+        if: always() && (inputs.mode || 'run') == 'run'
+        uses: actions/cache/save@v4
+        with:
+          path: data/dealsniper.db
+          key: dealsniper-db-${{ github.run_id }}
