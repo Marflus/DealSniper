@@ -166,3 +166,41 @@ def test_reprice_after_price_drop():
     assert analyzer.reprice(first, 110, "enchere") is first  # enchère : prix provisoire, rien à recalculer
     free = {"realiste": True, "sans_ia": True, "valeur_revente_estimee": 200, "marque_recherchee": True}
     assert analyzer.reprice(free, 100)["score_rentabilite"] == 9  # marge 80 → 8, +1 marque recherchée
+
+
+def test_post_retries_rate_limits_and_server_errors(monkeypatch):
+    import requests
+
+    from dealsniper import notifier
+
+    waits, calls = [], []
+
+    class R:
+        def __init__(self, code, body=None):
+            self.status_code, self.ok, self.text, self._body = code, code < 400, "", body or {}
+
+        def json(self):
+            return self._body
+
+    def run(responses):
+        calls.clear()
+        waits.clear()
+        seq = iter(responses)
+
+        def post(url, json=None, timeout=None):
+            calls.append(url)
+            item = next(seq)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        monkeypatch.setattr(notifier.requests, "post", post)
+        return notifier._post("https://api.example/send", {}, "Test")
+
+    monkeypatch.setattr(notifier, "_pause", waits.append)
+    rate_limited = R(429, {"parameters": {"retry_after": 3}})
+    assert run([rate_limited, R(200)]) is True and waits == [3.0]  # attend le délai demandé
+    assert run([R(502), R(200)]) is True and len(calls) == 2  # erreur serveur : réessayé
+    assert run([requests.ConnectionError("coupé"), R(200)]) is True  # réseau : réessayé
+    assert run([R(400)]) is False and len(calls) == 1  # requête refusée : pas d'insistance
+    assert run([R(500), R(500), R(500)]) is False and len(calls) == notifier.MAX_ATTEMPTS

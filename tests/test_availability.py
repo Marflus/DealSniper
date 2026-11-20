@@ -86,3 +86,55 @@ def test_run_refused_while_checking(client, monkeypatch):
     deadline = time.monotonic() + 10
     while c.get("/api/check").get_json()["running"] and time.monotonic() < deadline:
         time.sleep(0.05)
+
+
+def test_check_ads_report_groups_sites_and_stops(config):
+    """Bilan complet : en ligne / disparues / non vérifiables, progression, arrêt demandé en cours de route."""
+    from dealsniper.availability import check_ads
+
+    def handler(request):
+        return httpx.Response(404 if request.url.path.endswith("-gone") else 200, text="ok")
+
+    ads = [{"uid": f"v{i}", "title": f"Vinted {i}", "source": "vinted",
+            "url": f"https://www.vinted.fr/items/{i}" + ("-gone" if i == 1 else "")} for i in range(3)]
+    ads.append({"uid": "lbc", "title": "LBC", "source": "leboncoin", "url": "https://www.leboncoin.fr/ad/x/9"})
+    seen = []
+
+    async def go(stop=None):
+        async with PoliteClient("test", 0, transport=httpx.MockTransport(handler), sleep=_no_sleep) as http:
+            return await check_ads(ads, config, on_progress=lambda r: seen.append(r["done"]), stop=stop, http=http)
+
+    report = asyncio.run(go())
+    assert report["total"] == 4 and report["done"] == 4 and report["active"] == 2
+    assert [g["uid"] for g in report["gone"]] == ["v1"] and [u["uid"] for u in report["unknown"]] == ["lbc"]
+    assert report["statuses"] == {"v0": ACTIVE, "v1": GONE, "v2": ACTIVE, "lbc": UNKNOWN}
+    assert sorted(seen) == [1, 2, 3, 4] and not report["cancelled"]
+
+    calls = []
+    report = asyncio.run(go(stop=lambda: calls.append(1) or len(calls) > 2))  # arrêt après deux annonces
+    assert report["cancelled"] and report["done"] < 4
+
+
+def test_ebay_checked_through_the_api(config, monkeypatch):
+    """Avec la clé eBay : l'API dit si l'objet est terminé (404 ou plus disponible)."""
+    from dealsniper.sites.ebay import EbaySite
+
+    def handler(request):
+        if "oauth2" in request.url.path:
+            return httpx.Response(200, json={"access_token": "t", "expires_in": 7200})
+        item = request.url.params["legacy_item_id"]
+        if item == "111111111111":
+            return httpx.Response(404)
+        status = "OUT_OF_STOCK" if item == "222222222222" else "IN_STOCK"
+        return httpx.Response(200, json={"estimatedAvailabilities": [{"estimatedAvailabilityStatus": status}]})
+
+    monkeypatch.setenv("EBAY_CLIENT_ID", "id")
+    monkeypatch.setenv("EBAY_CLIENT_SECRET", "secret")
+    ebay = EbaySite({"marketplace": "EBAY_FR", **config["sites"]["ebay"]}, config)
+
+    async def go():
+        async with PoliteClient("test", 0, transport=httpx.MockTransport(handler), sleep=_no_sleep) as http:
+            return [(await check_one(http, ebay, {"source": "ebay", "url": f"https://www.ebay.fr/itm/{n}"}))[0]
+                    for n in ("111111111111", "222222222222", "333333333333")]
+
+    assert asyncio.run(go()) == [GONE, GONE, ACTIVE]

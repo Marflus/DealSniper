@@ -720,3 +720,28 @@ def test_only_sites_reason():
     load_sites(config)
     others = [reason for name, reason in skipped if name != "ebay"]
     assert others and all(reason == "non retenu (--sites)" for reason in others)
+
+
+def test_run_once_end_to_end(monkeypatch, config):
+    """Passage complet : verrou pris puis rendu, annonces du passage connues, résultat en base, progression finie."""
+    from dealsniper import progress as progress_module
+    from dealsniper.runlock import run_lock
+
+    monkeypatch.setattr(engine, "load_sites", lambda cfg: [FakeSite(cfg)])
+    monkeypatch.setattr(engine, "skipped_sites", [])  # pas de restes des tests précédents
+    monkeypatch.setattr(engine.analyzer, "analyze", fake_analyze)
+    monkeypatch.setattr(engine.notifier, "notify", lambda ads, cfg: list(ads))
+    engine.CANCEL.set()  # annulation restée d'un passage précédent : doit être oubliée au démarrage
+    engine.run_once(config)
+
+    run_uids = set(engine.RUN_UIDS)
+    assert run_uids == {"ebay:100000000001", "ebay:100000000002", "ebay:100000000003"}
+    snap = progress_module.current.snapshot()
+    assert snap["done"] and [s["site"] for s in snap["sites"]] == ["Fake"]
+    assert "1 analysées" in snap["sites"][0]["text"]
+    with Database(data_dir() / "dealsniper.db") as db:
+        statuses = {a["uid"]: a["status"] for a in db.search(days=1)}
+    assert statuses == {"ebay:100000000001": "analyzed", "ebay:100000000002": "rejected",
+                        "ebay:100000000003": "rejected"}
+    with run_lock(data_dir()):  # verrou bien rendu à la fin
+        pass

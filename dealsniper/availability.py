@@ -11,6 +11,7 @@ Aucune IA, aucun coût. Les requêtes respectent le rythme poli configuré (`net
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -81,8 +82,9 @@ async def check_one(http: PoliteClient, ebay: Any, ad: dict[str, Any]) -> tuple[
 
 async def check_ads(ads: list[dict[str, Any]], config: dict[str, Any],
                     on_progress: Callable[[dict[str, Any]], None] | None = None,
-                    stop: Callable[[], bool] | None = None) -> dict[str, Any]:
-    """Vérifie les annonces ; renvoie le bilan et, par annonce, son statut (pour l'enregistrer)."""
+                    stop: Callable[[], bool] | None = None, http: PoliteClient | None = None) -> dict[str, Any]:
+    """Vérifie les annonces ; renvoie le bilan et, par annonce, son statut (pour l'enregistrer).
+    `http` : client à utiliser (tests) ; sinon un client poli est créé avec les réglages `network`."""
     network = config["network"]
     ebay = None
     if env("EBAY_CLIENT_ID") and env("EBAY_CLIENT_SECRET") and "ebay" in config["sites"]:
@@ -91,8 +93,10 @@ async def check_ads(ads: list[dict[str, Any]], config: dict[str, Any],
         ebay = EbaySite({"marketplace": "EBAY_FR", **config["sites"]["ebay"]}, config)
     report: dict[str, Any] = {"total": len(ads), "done": 0, "active": 0, "gone": [], "unknown": [], "cancelled": False}
     statuses: dict[str, str] = {}
-    async with PoliteClient(network["user_agent"], float(network["min_host_interval"]),
-                            host_intervals=network.get("host_intervals"), max_retries=1) as http:
+    owned = http is None
+    client = http or PoliteClient(network["user_agent"], float(network["min_host_interval"]),
+                                  host_intervals=network.get("host_intervals"), max_retries=1)
+    async with client if owned else contextlib.nullcontext(client) as http:
         # Un site à la fois mais tous les sites en parallèle : chacun garde son propre rythme poli.
         by_site: dict[str, list[dict[str, Any]]] = {}
         for ad in ads:
