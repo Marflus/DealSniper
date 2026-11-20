@@ -17,6 +17,7 @@ import statistics
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 from .filters import desirable_brand
@@ -57,15 +58,24 @@ def category_brands(config: dict[str, Any]) -> list[str]:
     return sorted({k for cat in config["categories"] for k in cat.get("keywords") or []}, key=len, reverse=True)
 
 
+@lru_cache(maxsize=4096)
+def _brand(brand: str) -> tuple[str, re.Pattern[str] | None]:
+    """Mot-clé normalisé et son expression compilée (mot entier) ; None pour un mot trop vague."""
+    b = normalize(brand)
+    if not b or b in GENERIC:
+        return b, None
+    return b, re.compile(r"(?<![a-z0-9])" + re.escape(b) + r"(?![a-z0-9])")
+
+
 def model_key(title: str, brands: list[str]) -> str | None:
     """« Lenovo ThinkPad T480 i5 8Go » → « thinkpad t480 » ; None si le modèle n'est pas identifiable."""
     text = normalize(title)
     best: tuple[int, str] | None = None
     for brand in brands:
-        b = normalize(brand)
-        if not b or b in GENERIC:
+        b, pattern = _brand(brand)
+        if pattern is None:
             continue
-        m = re.search(r"(?<![a-z0-9])" + re.escape(b) + r"(?![a-z0-9])", text)
+        m = pattern.search(text)
         if m and (best is None or m.start() < best[0] or (m.start() == best[0] and len(b) > len(best[1]))):
             best = (m.start(), b)
     if best is None:

@@ -74,7 +74,7 @@ def build_negotiation_message(ad: Ad, max_buy: float | None = None) -> str:
     asked = ad.price
 
     if max_buy is not None and max_buy > 0 and (asked is None or asked > max_buy):
-        target = int(round(max_buy))
+        target = round(max_buy)
         if has_issue:
             return (
                 f"Bonjour, votre annonce « {title} » est-elle toujours disponible ? "

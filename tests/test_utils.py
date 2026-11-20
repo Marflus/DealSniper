@@ -37,3 +37,38 @@ def test_location():
     assert foreign_country("Provenance : Chine") == "chine"
     assert foreign_country("Fabriqué en Chine, très bon état") is None
     assert is_overseas("Le Tampon 97430") and not is_overseas("Paris 75011")
+
+
+def test_fast_keyword_search_matches_the_simple_definition():
+    """first_keyword (recherche combinée + caches) doit donner exactement le résultat de la définition simple."""
+    import random
+    import re
+    import unicodedata
+
+    from dealsniper.utils.text import first_keyword, normalize
+
+    def slow_normalize(text):
+        text = unicodedata.normalize("NFKD", text)
+        text = "".join(c for c in text if not unicodedata.combining(c))
+        return re.sub(r"\s+", " ", text.replace("’", "'").replace(" ", " ").lower()).strip()
+
+    def slow_first(text, keywords):
+        for kw in keywords:
+            k = slow_normalize(kw)
+            if not k:
+                continue
+            suffix = r"(?:e|s|es|x)?" if k[-1].isalpha() else ""
+            if re.search(r"(?<![a-z0-9])" + re.escape(k) + suffix + r"(?![a-z0-9])", text):
+                return kw
+        return None
+
+    words = ["oxyde", "HS", "carte mère", "écran cassé", "i5", "ps5", "boîte vide", "Dyson V10", "sans ssd",
+             "ne s'allume", "a saisir", "Œuvre", "x", "", "8go"]
+    texts = ["Carte Mère HS", "écran cassée, oxydées", "PS5 + manettes", "hstore i5-8250U", "dyson v10s neuf",
+             "Sans SSD ni RAM", "ne s’allume plus", "À SAISIR !", "œuvre d'art", "boite vide 8go", "rien à signaler"]
+    rng = random.Random(4)
+    for _ in range(2000):
+        text = " ".join(rng.sample(texts, rng.randint(1, 3)))
+        keywords = rng.sample(words, rng.randint(1, 6))
+        assert normalize(text) == slow_normalize(text)
+        assert first_keyword(normalize(text), keywords) == slow_first(slow_normalize(text), keywords), (text, keywords)
