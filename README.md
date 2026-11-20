@@ -84,10 +84,11 @@ Gardez la fenêtre noire ouverte tant que vous utilisez l'interface : la fermer 
 
 | Onglet | Contenu |
 |---|---|
-| **Annonces** | toutes les annonces trouvées, 20 par page : photo, prix d'achat / revente / marge, les 3 notes. Le bouton **i** ouvre le détail : panne probable, ville, type de vente, coût de la pièce, vendeur (note et nombre d'évaluations quand le site les donne), description et questions à poser au vendeur (générées sans IA, donc gratuites). Filtres par texte, site, catégorie, notes, prix, marge, période ; tri par date, note, marge, prix ou facilité de vente. Pendant un passage, une ligne par site montre l'avancement, la durée et le coût IA ; à la fin, le détail de chaque recherche reste affiché. |
+| **Annonces** | toutes les annonces trouvées, 20 par page : photo, prix d'achat / revente / marge (« cote » quand la revente vient des prix réels), les 3 notes, distance. **☆** met en favori, **⊘** masque l'annonce, **i** ouvre le détail : panne, ville et distance, cote du marché et estimation de l'IA, coût de la pièce, vendeur (note et évaluations quand le site les donne), description, questions à poser au vendeur, liens de réparation (iFixit, pièce sur eBay / AliExpress) et « Je l'ai acheté ». Vues Notées / Écartées / Toutes / Favoris / Masquées ; filtres par texte, site, catégorie, notes, prix, marge, distance, période ; tri par date, note, marge, prix, facilité de vente ou distance ; **export CSV** pour Excel. Pendant un passage, une ligne par site montre l'avancement, la durée et le coût IA ; à la fin, le détail de chaque recherche reste affiché. |
+| **Achats** | vos achats (ajoutés depuis une annonce ou à la main) : prix payé, réparation, prix de revente réel. Bénéfice, rentabilité, stock. Dès 3 ventes, Deal Sniper compare vos ventes réelles à ses estimations et ajuste sa prudence tout seul ; chaque vente réelle enrichit aussi la cote du modèle. |
 | **Recherches** | ce que chaque site cherche. La carte **🌐 Tous les sites** contient les recherches communes, lancées partout ; chaque site peut en ajouter. |
 | **Catégories** | familles d'objets (PC portables, mini-PC, Dyson…) : mots-clés du titre, budget maximum, exclusions, signaux positifs. Une annonce hors catégorie est écartée gratuitement. |
-| **Filtres** | mots interdits (oxydé, iCloud…), annonces d'acheteurs, déjà vendues ou réservées, France uniquement, prix minimum. |
+| **Filtres** | mots interdits (oxydé, iCloud…), annonces d'acheteurs, déjà vendues ou réservées, France uniquement, prix minimum, **votre code postal** (pour les distances). |
 | **Réglages** | seuils de notification, budget IA quotidien et modèle, état de l'installation, thème clair / sombre, envoi d'une notification de test. |
 
 Tout est enregistré dans votre `config.yaml` (bouton **Enregistrer** ou **Ctrl+S**) et appliqué au passage suivant.
@@ -149,8 +150,8 @@ Tout se règle depuis l'interface ; `config.yaml` reste lisible et commenté si 
 | `searches` | recherches communes à tous les sites (`condition` : `parts` = pour pièces, `used` = occasion, `any` ; seul eBay l'utilise) |
 | `sites` | un bloc par site : activé, rythme en surveillance continue, recherches propres, `fetch_details` |
 | `categories` | mots-clés, budget maximum, exclusions et signaux par famille d'objets |
-| `filters`, `location` | mots interdits, vendu / réservé, acheteurs, prix minimum, France uniquement |
-| `analyzer` | modèle Claude, plafond de dépense quotidien, prudence des estimations (`resale_haircut`) |
+| `filters`, `location` | mots interdits, vendu / réservé, acheteurs, prix minimum, France uniquement, `home` (votre code postal) |
+| `analyzer` | modèle Claude, plafond de dépense quotidien, prudence (`resale_haircut`, `auto_calibrate`), seuil de la cote (`market_min_margin`) |
 | `notifier` | note minimale pour un message, récapitulatif « à vérifier », marge / facilités minimales |
 | `network` | délai entre deux requêtes vers un même site, pause après un refus |
 
@@ -160,15 +161,24 @@ Tout se règle depuis l'interface ; `config.yaml` reste lisible et commenté si 
 
 1. **recherche** des annonces récentes ;
 2. seules les **nouvelles** sont traitées (les annonces déjà vues sont mémorisées dans `data/dealsniper.db`) ;
-3. **filtre gratuit** : catégorie, budget, France, mots interdits, déjà vendue… ;
-4. **fiche détaillée** des annonces retenues, puis nouveau filtre sur la description ;
-5. **notation par Claude** par lots, avec un garde-fou en Python : la revente estimée est rabotée de 10 % et la
-   marge recalculée (revente − prix − pièce − 10 % de frais) ;
-6. **notification** des meilleures annonces.
+3. **filtre gratuit** : doublon d'une annonce déjà vue sur un autre site, catégorie, budget, France, mots interdits,
+   déjà vendue… ;
+4. **cote du marché** (gratuit) : le modèle est reconnu dans le titre (« thinkpad t480 », « dyson v10 »…) et comparé
+   au prix médian des annonces de ce modèle **en état de marche** vues ces 60 derniers jours. S'il n'y en a pas assez,
+   un échantillon d'occasions fonctionnelles est demandé à l'API eBay (gardé 7 jours). Une annonce dont la marge est
+   impossible même sans réparation est écartée **sans appel à l'IA** ;
+5. **fiche détaillée** des annonces retenues, puis nouveau filtre sur la description ;
+6. **notation par Claude** par lots. Garde-fous en Python : la revente retenue est la plus basse entre la cote et
+   l'estimation de l'IA, rabotée de 10 % (ou selon vos ventes réelles), et la marge est recalculée
+   (revente − prix − pièce − 10 % de frais) ;
+7. **notification** des meilleures annonces.
 
-**Coût IA** : environ 0,001 $ par annonce notée avec Claude Haiku 4.5, dix fois moins avec Haiku 5.5
-(Réglages → Budget IA). Un plafond quotidien (1 $ par défaut) bloque toute surprise : une fois atteint, les
-annonces attendent le lendemain.
+**Coût IA** : environ 0,0001 $ par annonce notée avec Claude Haiku 5.5 (modèle par défaut, réflexion désactivée).
+La cote du marché évite en plus d'envoyer à l'IA les annonces sans marge possible. Un plafond quotidien (1 $ par
+défaut) bloque toute surprise : une fois atteint, les annonces attendent le lendemain.
+
+**Distances** : avec votre code postal (onglet Filtres), chaque annonce affiche sa distance. Les coordonnées des
+communes viennent de l'API officielle geo.api.gouv.fr, téléchargées une fois dans `data/communes.json`.
 
 **Respect des sites** : requêtes espacées et identifiées (`DealSniper/3.0`), API officielle pour eBay, pause
 automatique de 6 h si un site refuse l'accès.
@@ -193,6 +203,9 @@ DealSniper/
 │   ├── progress.py             lignes de progression (terminal + interface)
 │   ├── filters.py              filtre gratuit
 │   ├── analyzer.py             notation par Claude (lots, schéma JSON, coût, garde-fous)
+│   ├── market.py               cote du marché : modèle reconnu, prix réels, doublons
+│   ├── purchases.py            bénéfices et calibrage des estimations sur vos ventes réelles
+│   ├── geo.py                  distances (communes de geo.api.gouv.fr)
 │   ├── notifier.py             Telegram / Discord
 │   ├── db.py                   SQLite : annonces vues, coûts, pauses
 │   ├── http.py                 client HTTP poli (délais par site, robots.txt, 429, 403)
@@ -217,5 +230,8 @@ pip install pytest ruff
 ruff check dealsniper tests
 python -m pytest -q
 ```
+
+`tests/test_ui_smoke.py` ouvre l'interface dans un navigateur et vérifie qu'aucun onglet ne déclenche d'erreur
+JavaScript (ignoré si Playwright et son navigateur ne sont pas installés).
 
 L'interface n'a pas de mot de passe : ne l'exposez pas sur Internet (`--host 0.0.0.0` uniquement sur votre Wi-Fi).
