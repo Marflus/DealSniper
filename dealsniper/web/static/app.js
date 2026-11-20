@@ -52,10 +52,10 @@ async function api(url, options = {}) {
 function showTab(tab) {
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".page").forEach((p) => (p.hidden = p.id !== `tab-${tab}`));
-  $("#savebar").hidden = ["ads", "purchases", "stats"].includes(tab);  // ces onglets n'éditent pas config.yaml
+  $("#savebar").hidden = ["ads", "search", "purchases", "stats"].includes(tab);  // n'éditent pas config.yaml
   if (tab === "purchases") loadPurchases();
   else if (tab === "stats") loadStats();
-  else if (tab !== "ads" && !settings) loadSettings();
+  else if (!["ads", "search"].includes(tab) && !settings) loadSettings();
   try { localStorage.setItem("dealsniper-tab", tab); } catch (e) { /* stockage indisponible */ }
 }
 document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
@@ -633,15 +633,16 @@ function renderAds(keepPage = false) {
 
 // Annonces sans photo : on demande l'aperçu de leur lien (une à la fois, mémorisé côté serveur).
 let imageQueue = Promise.resolve();
-function loadMissingImages() {
-  document.querySelectorAll("#ads [data-need-image]").forEach((card) => {
+function loadMissingImages() { loadMissingImagesIn("#ads"); }
+function loadMissingImagesIn(root) {
+  document.querySelectorAll(`${root} [data-need-image]`).forEach((card) => {
     card.removeAttribute("data-need-image");
     const uid = card.dataset.uid;
     imageQueue = imageQueue.then(async () => {
       const data = await api(`/api/image/${encodeURIComponent(uid)}`).catch(() => ({}));
       const ad = allAds.find((a) => a.uid === uid);
       if (ad) ad.image = data.image || "";
-      const live = document.querySelector(`#ads [data-uid="${CSS.escape(uid)}"] .thumb .placeholder`);
+      const live = document.querySelector(`${root} [data-uid="${CSS.escape(uid)}"] .thumb .placeholder`);
       if (data.image && live) {
         live.outerHTML = `<img src="${esc(data.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"
           onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'placeholder',textContent:'📦'}))">`;
@@ -649,6 +650,9 @@ function loadMissingImages() {
     });
   });
 }
+
+// Minuscules sans accents, pour comparer des titres.
+const normalizeFr = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 function renderPager(pages) {
   const pager = $("#pager");
@@ -699,19 +703,79 @@ $("#run").addEventListener("click", async () => {
   } catch (e) { toast(e.message); }
 });
 
-// Recherche ponctuelle : lance tous les sites sur un terme précis, en direct.
+// ---------- Recherche ponctuelle (onglet dédié) ----------
+let searchQuery = "", searchPoll = null;
+
 $("#quick-search").addEventListener("submit", async (e) => {
   e.preventDefault();
   const query = $("#qs-query").value.trim();
   if (!query) return;
+  searchQuery = query;
+  $("#qs-run").disabled = true;
+  $("#qs-run").textContent = "⏳ Recherche en cours…";
+  $("#search-report").hidden = true;
+  $("#search-results").innerHTML = "";
   try {
     await api("/api/search-now", { method: "POST", body: JSON.stringify({ query, max_price: $("#qs-price").value }) });
-    toast(`🔎 Recherche « ${query} » lancée sur tous les sites…`);
-    $("#f-text").value = query;  // filtre l'affichage sur le terme cherché
-    setStatus("analyzed");
-    loadAds();
-  } catch (e2) { toast(e2.message); }
+    if (!searchPoll) searchPoll = setInterval(pollSearch, 1200);
+    pollSearch();
+  } catch (e2) {
+    toast(e2.message);
+    $("#qs-run").disabled = false;
+    $("#qs-run").textContent = "Analyser maintenant";
+  }
 });
+
+async function pollSearch() {
+  let data;
+  try { data = await api(`/api/ads?status=analyzed&days=1`); } catch (e) { return; }
+  const p = data.progress;
+  // Progression en direct pendant la recherche.
+  const box = $("#search-live");
+  box.hidden = !(data.running && p && (p.sites || []).length);
+  if (!box.hidden) {
+    box.innerHTML = (p.sites || []).map((l) => `<div class="prog-row ${l.done ? "done" : ""}">
+      <b>${esc(l.site)}</b><span class="prog-text">${esc(l.text)}</span>
+      <span class="prog-time">⏱ ${duration(l.elapsed)}</span><span class="prog-cost">${l.cost ? iaCost(l.cost) : "—"}</span>
+      <span class="spin">${l.done ? "✓" : "…"}</span></div>`).join("");
+  }
+  if (data.running) return;
+  // Terminé : compte rendu + résultats.
+  if (searchPoll) { clearInterval(searchPoll); searchPoll = null; }
+  $("#qs-run").disabled = false;
+  $("#qs-run").textContent = "Analyser maintenant";
+  $("#search-live").hidden = true;
+  renderSearchReport(p, data.ads || []);
+}
+
+function renderSearchReport(p, ads) {
+  const q = normalizeFr(searchQuery);
+  const results = ads
+    .filter((a) => normalizeFr(`${a.title} ${a.description || ""}`).includes(q))
+    .sort((x, y) => (y.score ?? -1) - (x.score ?? -1));
+  results.forEach((r) => { if (!allAds.find((a) => a.uid === r.uid)) allAds.push(r); });  // pour le « i », favoris…
+  const found = (p.sites || []).reduce((n, s) => n + (s.searches || []).reduce((m, x) => m + (x.found || 0), 0), 0);
+  const kpi = (label, value) => `<div class="kpi"><span>${label}</span><b>${value}</b></div>`;
+  const perSite = (p.sites || []).map((s) => `<div class="prog-row done">
+      <b>${esc(s.site)}</b><span class="prog-text">${esc(s.text)}</span>
+      <span class="prog-time">⏱ ${duration(s.elapsed)}</span><span class="prog-cost">${s.cost ? iaCost(s.cost) : "—"}</span><span></span></div>`).join("");
+  $("#search-report").hidden = false;
+  $("#search-report").innerHTML = `
+    <div class="panel search-report">
+      <div class="report-head">✅ Recherche « ${esc(searchQuery)} » terminée</div>
+      <div class="kpis">
+        ${kpi("Annonces trouvées", found || "—")}
+        ${kpi("Retenues et notées", results.length)}
+        ${kpi("Durée", duration(p.elapsed || 0))}
+        ${kpi("Coût IA", iaCost(p.cost || 0))}
+      </div>
+      <div class="report-sites">${perSite || '<p class="muted small">Aucun site n\'a répondu.</p>'}</div>
+      ${results.length ? "" : '<p class="muted small">Aucune annonce retenue pour ce terme (essayez un prix max plus haut ou un terme plus large).</p>'}
+    </div>`;
+  $("#search-results").innerHTML = results.slice(0, 30).map(adCard).join("");
+  loadMissingImagesIn("#search-results");
+}
+$("#search-results").addEventListener("click", onAdAction);
 
 $("#test-notif").addEventListener("click", async () => {
   const data = await api("/api/test-notif", { method: "POST" }).catch(() => ({ ok: false }));

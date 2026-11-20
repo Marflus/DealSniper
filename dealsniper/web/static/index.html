@@ -25,6 +25,7 @@
     <div class="brand"><img src="/static/logo.svg" alt="" width="30" height="30"><span>Deal<b>Sniper</b></span></div>
     <nav class="tabs">
       <button class="tab active" data-tab="ads">Annonces</button>
+      <button class="tab" data-tab="search">Recherche</button>
       <button class="tab" data-tab="stats">Bilan</button>
       <button class="tab" data-tab="purchases">Achats</button>
       <button class="tab" data-tab="searches">Recherches</button>
@@ -45,11 +46,6 @@
     <!-- ANNONCES -->
     <section id="tab-ads" class="page">
       <div id="setup" class="setup" hidden></div>
-      <form id="quick-search" class="quick-search">
-        <input id="qs-query" placeholder="🔎  Recherche ponctuelle : cherchez un truc précis sur tous les sites d'un coup…" autocomplete="off">
-        <span class="affix"><input id="qs-price" type="number" min="0" placeholder="prix max"><i>€</i></span>
-        <button class="primary">Analyser maintenant</button>
-      </form>
       <div class="toolbar">
         <div class="toolbar-row">
           <input id="f-text" class="search" type="search" placeholder="🔍  Rechercher un modèle, une ville…">
@@ -110,6 +106,21 @@
     </section>
 
     <div id="settings-error" class="banner error" hidden></div>
+
+    <!-- RECHERCHE PONCTUELLE -->
+    <section id="tab-search" class="page" hidden>
+      <div class="page-head"><h1>Recherche ponctuelle</h1>
+        <p>Cherchez un objet précis sur tous les sites d'un coup, en direct. Les résultats sont notés par l'IA
+          et rangés aussi dans l'onglet Annonces.</p></div>
+      <form id="quick-search" class="quick-search">
+        <input id="qs-query" placeholder="🔎  Ex. : thinkpad x1 carbon, dyson v11, steam deck…" autocomplete="off">
+        <span class="affix"><input id="qs-price" type="number" min="0" placeholder="prix max"><i>€</i></span>
+        <button id="qs-run" class="primary">Analyser maintenant</button>
+      </form>
+      <div id="search-live" class="progress" hidden></div>
+      <div id="search-report" hidden></div>
+      <div id="search-results" class="grid"></div>
+    </section>
 
     <!-- BILAN / TABLEAU DE BORD -->
     <section id="tab-stats" class="page" hidden>
