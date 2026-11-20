@@ -45,6 +45,15 @@ WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_use
                    "user_location": {"type": "approximate", "country": "FR"}}
 
 
+class AnalysisFailed(RuntimeError):
+    """Analyse impossible (refus du modèle, réponse vide ou illisible). Porte le coût déjà dépensé,
+    pour qu'il soit compté dans le budget du jour même sans résultat."""
+
+    def __init__(self, message: str, cost_usd: float):
+        super().__init__(message)
+        self.cost_usd = round(cost_usd, 5)
+
+
 def _describe(ad: Ad) -> str:
     parts = [f"Titre : {ad.title}", f"Catégorie : {ad.category or '?'}"]
     if ad.price is not None:
@@ -187,7 +196,15 @@ def analyze_market(ad: Ad, config: dict[str, Any], client: Any = None) -> dict[s
             continue
         break
 
-    result = sanitize(_parse_json(text) if text else {}, ad)
+    if getattr(resp, "stop_reason", "") == "refusal":
+        raise AnalysisFailed("Le modèle a refusé cette analyse.", cost)
+    try:
+        raw = _parse_json(text) if text else {}
+    except ValueError as exc:  # JSONDecodeError compris
+        raise AnalysisFailed("Réponse illisible, réessayez.", cost) from exc
+    result = sanitize(raw if isinstance(raw, dict) else {}, ad)
+    if result["revente_typique"] is None:  # rien d'exploitable : on ne l'enregistre pas comme une analyse
+        raise AnalysisFailed("Aucun prix de revente trouvé pour ce modèle, réessayez.", cost)
     result["cost_usd"] = round(cost, 4)
     result["model"] = model
     return result
@@ -219,9 +236,14 @@ def seller_questions(ad: Ad, config: dict[str, Any], deep: dict[str, Any] | None
     if model.startswith("claude-haiku-5"):
         params["thinking"] = {"type": "disabled"}
     resp = client.messages.create(**params)
-    usage = getattr(resp, "usage", None)
-    cost = (usage.input_tokens * price_in + usage.output_tokens * price_out) / 1e6 if usage else 0.0
+    cost = _usage_cost(getattr(resp, "usage", None), price_in, price_out, 0.0)
     text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
-    raw = _parse_json(text) if text else {}
-    questions = [str(q).strip()[:160] for q in (raw.get("questions") or []) if str(q).strip()][:5]
+    try:
+        raw = _parse_json(text) if text else {}
+    except ValueError as exc:
+        raise AnalysisFailed("Réponse illisible, réessayez.", cost) from exc
+    items = raw.get("questions") if isinstance(raw, dict) else None
+    questions = [str(q).strip()[:160] for q in (items or []) if str(q).strip()][:5]
+    if not questions:
+        raise AnalysisFailed("Aucune question proposée, réessayez.", cost)
     return {"questions": questions, "cost_usd": round(cost, 5)}

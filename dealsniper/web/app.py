@@ -320,6 +320,12 @@ def create_app() -> Flask:
 
     geo = Geo(data_dir() / "communes.json")
 
+    def _charge(usd: float) -> None:
+        """Ajoute une dépense IA au compteur du jour (plafond quotidien)."""
+        if usd:
+            with database() as db:
+                asyncio.run(db.add_cost(usd))
+
     def add_distances(items: list[dict], home: str) -> None:
         """Distance depuis chez vous ; la liste des communes se charge en arrière-plan la première fois."""
         if not home:
@@ -415,7 +421,7 @@ def create_app() -> Flask:
     @app.post("/api/ads/<uid>/market-analysis")
     def market_analysis(uid: str):
         """Analyse de marché approfondie d'une annonce (gros modèle + recherche web, à la demande)."""
-        from ..deep import analyze_market
+        from ..deep import AnalysisFailed, analyze_market
         from ..models import Ad
 
         with database() as db:
@@ -424,6 +430,9 @@ def create_app() -> Flask:
             return jsonify(ok=False, error="Annonce inconnue"), 404
         try:
             result = analyze_market(Ad.from_dict(ad), current_config())
+        except AnalysisFailed as exc:  # refus, réponse vide : rien d'enregistré, mais la dépense compte
+            _charge(exc.cost_usd)
+            return jsonify(ok=False, error=str(exc)), 502
         except Exception as exc:  # clé manquante, API indisponible, recherche web refusée…
             return jsonify(ok=False, error=str(exc)[:200]), 502
         with database() as db:
@@ -434,7 +443,7 @@ def create_app() -> Flask:
     @app.post("/api/ads/<uid>/questions")
     def ad_questions(uid: str):
         """Questions au vendeur sur mesure (à la demande, après l'analyse approfondie)."""
-        from ..deep import seller_questions
+        from ..deep import AnalysisFailed, seller_questions
         from ..models import Ad
 
         with database() as db:
@@ -443,6 +452,9 @@ def create_app() -> Flask:
             return jsonify(ok=False, error="Annonce inconnue"), 404
         try:
             result = seller_questions(Ad.from_dict(ad), current_config(), ad.get("market_deep"))
+        except AnalysisFailed as exc:
+            _charge(exc.cost_usd)
+            return jsonify(ok=False, error=str(exc)), 502
         except Exception as exc:
             return jsonify(ok=False, error=str(exc)[:200]), 502
         deep = {**(ad.get("market_deep") or {}), "questions": result["questions"]}
