@@ -40,6 +40,15 @@ MAX_AI_ATTEMPTS = 3  # échecs d'analyse propres à une annonce avant de l'aband
 CANCEL = threading.Event()
 
 
+def missing_browser_hint(exc: Exception) -> str | None:
+    """Navigateur de Playwright / Patchright pas encore téléchargé : la commande à lancer, sinon None."""
+    text = str(exc).lower()
+    if not any(sign in text for sign in ("executable doesn't exist", "playwright install", "patchright install")):
+        return None
+    tool = "patchright" if "patchright" in text else "playwright"
+    return f"navigateur manquant : lancez « .venv\\Scripts\\python -m {tool} install chromium »"
+
+
 class RunCancelled(Exception):
     """Levée par le suivi des recherches quand un arrêt est demandé : interrompt `list_recent` entre deux
     recherches, quel que soit le site (chaque connecteur appelle `report` après chaque recherche)."""
@@ -304,6 +313,11 @@ class Engine:
             await asyncio.to_thread(notifier.Notifier().send_text,
                                     f"⚠️ Deal Sniper : {site.name} refuse l'accès ({exc}). Pause de {hours:.0f} h.")
         except Exception as exc:
+            hint = missing_browser_hint(exc)
+            if hint:  # cas fréquent à l'installation : message clair plutôt qu'une pile d'appels
+                log.error("%s : %s", site.name, hint)
+                self.progress.done(site.label, hint)
+                return
             log.exception("%s : passage en échec (nouvel essai au prochain passage)", site.name)
             self.progress.done(site.label, f"erreur : {exc}"[:120])
 

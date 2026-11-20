@@ -98,6 +98,7 @@ def only_sites(config: dict, names: str) -> None:
     for name, site in config["sites"].items():
         if name.lower() not in wanted:
             site["enabled"] = False
+            site["skip_reason"] = "non retenu (--sites)"  # pas « désactivé » : l'utilisateur ne l'a pas coupé
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -682,3 +682,41 @@ def test_price_drop_updates_margin_and_score(monkeypatch, config):
     assert before["score_rentabilite"] == 4  # marge négative à 170 €
     assert after["analysis"]["marge_nette_estimee"] == 50 and after["score"] == 8
     assert alerts and alerts[0]["margin"] == 50 and alerts[0]["score"] == 8
+
+
+def test_missing_browser_gives_a_clear_hint(config):
+    from dealsniper.engine import missing_browser_hint
+
+    assert "playwright install chromium" in missing_browser_hint(
+        Exception("BrowserType.launch: Executable doesn't exist at /ms-playwright/chromium … playwright install"))
+    assert "patchright install chromium" in missing_browser_hint(Exception("run: patchright install chromium"))
+    assert missing_browser_hint(Exception("Timeout 30000ms exceeded")) is None
+
+    class NoBrowser(FakeSite):
+        async def list_recent(self, http):
+            raise RuntimeError("Executable doesn't exist at C:/ms-playwright/chromium-1243/chrome.exe")
+
+    async def go():
+        db = Database(data_dir() / "nb.db")
+        async with client() as http:
+            eng = engine.Engine(config, db, http)
+            await eng.process_safely(NoBrowser(config))
+        db.close()
+        return eng.progress.snapshot()
+
+    snap = asyncio.run(go())
+    assert "navigateur manquant" in snap["sites"][0]["text"]
+
+
+def test_only_sites_reason():
+    from pathlib import Path
+
+    from dealsniper.cli import only_sites
+    from dealsniper.config import load_config
+    from dealsniper.sites import load_sites, skipped
+
+    config = load_config(Path(__file__).resolve().parents[1] / "config.example.yaml")
+    only_sites(config, "ebay")
+    load_sites(config)
+    others = [reason for name, reason in skipped if name != "ebay"]
+    assert others and all(reason == "non retenu (--sites)" for reason in others)
