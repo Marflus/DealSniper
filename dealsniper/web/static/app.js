@@ -327,7 +327,7 @@ function adCard(ad) {
   return `<article class="ad ${ad.status}" data-uid="${esc(ad.uid)}" ${ad.image == null ? "data-need-image" : ""}>
     <a class="thumb" href="${esc(ad.url)}" target="_blank" rel="noopener">${image}</a>
     <div class="body">
-      <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${ad.watched ? '<span class="watch-badge" title="Correspond à une veille">🔭</span> ' : ""}${esc(ad.title)}</a>
+      <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${ad.watched ? '<span class="watch-badge" title="Correspond à une veille">🔭</span> ' : ""}${ad.price_drop ? `<span class="drop-badge" title="Prix passé de ${esc(euros(ad.price_drop.from))} à ${esc(euros(ad.price_drop.to))}">⬇ −${esc(euros(ad.price_drop.from - ad.price_drop.to))}</span> ` : ""}${esc(ad.title)}</a>
       <div class="stats">
         <div><span>Achat</span><b>${buy}</b></div>
         <div title="${a.source_revente === "cote" ? "D'après la cote réelle du modèle (prix des annonces en état de marche)" : "Estimation de l'IA, rabotée par prudence"}">
@@ -410,6 +410,7 @@ function showDetails(uid) {
       ${row("🩺 Panne probable", esc(faultText(a)))}
       ${row("📍 Ville", esc(cleanPlace(ad.location)) + (ad.distance_km != null ? ` <span class="muted">(à ${ad.distance_km} km de chez vous)</span>` : ""))}
       ${row("🏷️ Type de vente", ad.price_mode === "enchere" ? "Enchère (prix provisoire)" : "Prix fixe")}
+      ${ad.price_drop ? row("⬇ Baisse de prix", `${euros(ad.price_drop.from)} → <b>${euros(ad.price_drop.to)}</b> (−${euros(ad.price_drop.from - ad.price_drop.to)})`) : ""}
       ${row("📦 Remise", `${delivery(ad).icon} ${delivery(ad).label}`)}
       ${row("💶 Achat", buy)}
       ${row("🔩 Pièce estimée", a.cout_piece_estime ? euros(a.cout_piece_estime) : "")}

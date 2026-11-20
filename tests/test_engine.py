@@ -395,3 +395,25 @@ def test_ending_soon_selects_unreminded_auctions(tmp_path):
     first, second, msg = asyncio.run(scenario())
     assert len(first) == 1 and second == []  # seule l'enchère proche, une seule fois
     assert "Enchère bientôt finie" in msg and "PS5 enchère" in msg
+
+
+def test_price_drop_detection(tmp_path):
+    import asyncio
+
+    from dealsniper.db import Database
+    from dealsniper.models import Ad
+
+    async def scenario():
+        db = Database(tmp_path / "drop.db")
+        ad = Ad(title="ThinkPad T480", url="https://www.ebay.fr/itm/1", source="ebay", price=120, shipping=0,
+                analysis={"score_rentabilite": 8})
+        await db.remember(ad, "analyzed")
+        big = db.record_price_drops({ad.uid: 90.0}, 10)   # −30 € : signalé
+        small = db.record_price_drops({ad.uid: 85.0}, 10)  # −5 € depuis 90 : ignoré
+        stored = db.ad_data(ad.uid)
+        db.close()
+        return big, small, stored
+
+    big, small, stored = asyncio.run(scenario())
+    assert big and big[0]["pct"] == 25 and big[0]["to"] == 90
+    assert small == [] and stored["price"] == 90 and stored["price_drop"]["from"] == 120

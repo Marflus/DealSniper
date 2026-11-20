@@ -523,3 +523,7 @@ button.wide { width: 100%; }
 .watch-row { display: grid; grid-template-columns: 1fr 130px 38px; gap: 8px; align-items: center; }
 .watch-row .affix input { width: 100%; }
 .watch-badge { font-size: 13px; }
+
+/* Baisse de prix */
+.drop-badge { font-size: 12px; font-weight: 700; color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent);
+  padding: 1px 7px; border-radius: 99px; white-space: nowrap; }

@@ -92,6 +92,12 @@ class Engine:
         # Annonces déjà vues mais enregistrées sans photo : on complète avec celle de la liste (aucune requête).
         await self.db.fill_images({ad.uid: ad.image for ad in listed if ad.image and ad.uid not in new_uids})
         new_ads = list({ad.uid: ad for ad in listed if ad.uid in new_uids}.values())
+        seen_prices = {ad.uid: ad.total_price for ad in listed if ad.uid not in new_uids and ad.total_price is not None}
+        min_drop = float(self.config["filters"].get("price_drop_min_eur") or 10)
+        drops = await asyncio.to_thread(self.db.record_price_drops, seen_prices, min_drop)
+        notable = [d for d in drops if d["status"] == "analyzed" and (d["score"] or 0) >= 1]
+        if notable:
+            await asyncio.to_thread(notifier.notify_price_drops, notable, self.config)
         if self.market:
             await self.market.observe(listed)  # cote : chaque prix vu enrichit la référence (gratuit)
         if self.config["analyzer"].get("enabled", True) and await self.budget_left() == 0:

@@ -271,6 +271,26 @@ def auction_reminder(ad: Ad) -> str:
             f"Enchère actuelle : {price}\n{ad.url}")
 
 
+def notify_price_drops(drops: list[dict[str, Any]], config: dict[str, Any]) -> None:
+    """Prévient que des annonces déjà repérées ont baissé de prix (signal d'achat fort)."""
+    notifier = Notifier()
+    lines = []
+    for d in sorted(drops, key=lambda x: x["pct"], reverse=True):
+        drop = _eur(d["from"] - d["to"])
+        head = f"• {d['title'][:70]} : {_eur(d['from'])} → {_eur(d['to'])} (−{drop}, −{d['pct']} %)"
+        lines.append(f"{head}\n   {d['url']}")
+    header = f"⬇ Baisses de prix ({len(drops)})"
+    if not notifier.channels:
+        print("\n".join([header, *lines]))
+        return
+    if "telegram" in notifier.channels:
+        for message in _chunks(f"<b>{header}</b>", [html.escape(x) for x in lines]):
+            notifier._telegram(message)
+    if "discord" in notifier.channels:
+        for message in _chunks(f"**{header}**", lines, DISCORD_LIMIT):
+            notifier._discord(content=message)
+
+
 def demo_ad() -> Ad:
     """Fausse annonce utilisée par `test-notif`."""
     return Ad(

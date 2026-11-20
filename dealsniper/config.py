@@ -31,7 +31,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "searches": [],  # recherches communes, lancées sur tous les sites
     "location": {"france_only": True, "exclude_overseas": True, "home": ""},
-    "filters": {"drop_uncategorized": True, "keep_unknown_price": True, "min_price": 5,
+    "filters": {"drop_uncategorized": True, "keep_unknown_price": True, "min_price": 5, "price_drop_min_eur": 10,
                 "deal_signals": [], "buyer_ad_keywords": [], "global_exclude_keywords": [],
                 "sold_title_keywords": ["vendu", "reserve"],
                 "sold_phrases": ["deja vendu", "plus disponible", "n'est plus a vendre", "est reserve",

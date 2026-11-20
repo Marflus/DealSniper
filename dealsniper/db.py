@@ -177,6 +177,30 @@ class Database:
             data["image"] = image or ""
             self._sql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(data, ensure_ascii=False), uid))
 
+    def record_price_drops(self, prices: dict[str, float], min_drop: float) -> list[dict]:
+        """Prix en baisse d'au moins `min_drop` sur une annonce déjà vue : met à jour le prix stocké
+        et renvoie {uid, title, status, score, from, to, pct} (signal d'achat fort)."""
+        if not prices:
+            return []
+        marks = ",".join("?" * len(prices))
+        rows = self._sql(f"SELECT uid, data, status, score FROM seen WHERE uid IN ({marks})", tuple(prices))
+        drops = []
+        for uid, data, status, score in rows:
+            ad = json.loads(data or "{}")
+            old = ad.get("price")
+            new = prices.get(uid)
+            if old is None or new is None or new > old - min_drop:
+                continue
+            ad["price"] = new
+            if ad.get("total_price") is not None:
+                ad["total_price"] = round(new + (ad.get("shipping") or 0), 2)
+            ad["price_drop"] = {"from": old, "to": new, "at": _now().isoformat(timespec="seconds")}
+            self._sql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(ad, ensure_ascii=False), uid))
+            drops.append({"uid": uid, "title": ad.get("title", ""), "status": status, "score": score,
+                          "url": ad.get("url", ""), "from": old, "to": new,
+                          "pct": round(100 * (old - new) / old) if old else 0})
+        return drops
+
     def patch_ad(self, uid: str, patch: dict) -> bool:
         """Fusionne des champs dans l'annonce stockée (ex. résultat d'analyse de marché). False si inconnue."""
         data = self.ad_data(uid)
