@@ -51,14 +51,14 @@ sites:
   vinted:
     enabled: true
     interval: [900, 1500]      # recherches communes : passages plus espacés pour rester discret
-    limit: 25
+    limit: 25                  # annonces par recherche (sans cette ligne : 60) ; max_pages : 3 par défaut
     searches: []
 
   leboncoin:
     enabled: true
     headless: false
     interval: [900, 1500]
-    limit: 25
+    limit: 25                  # annonces par recherche (sans cette ligne : 70) ; max_pages : 3 par défaut
     searches:
       # Catégories LBC : 15=Informatique, 16=Image&Son, 43=Consoles, 21=Bricolage
       - {query: "tv pas d'image", category: '16', max_price: 120}  # rétroéclairage : réparation simple, retrait sur place
@@ -67,7 +67,7 @@ sites:
     enabled: true
     interval: [900, 1500]
     city: "paris"      # ou ta ville
-    limit: 20
+    limit: 20                  # annonces par recherche (sans cette ligne : 50) ; max_scrolls : 5 par défaut
     headless: false
     fetch_details: false       # n'ouvre pas une fenêtre par annonce (l'IA juge sur titre + prix)
     searches:
