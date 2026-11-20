@@ -217,8 +217,8 @@ automatique de 6 h si un site refuse l'accès.
 
 **Sites lus par navigateur** (`leboncoin.py`, `vinted.py`, `facebook.py`) : ces connecteurs pilotent un
 navigateur et sont maintenus à part. Ils peuvent être bloqués à tout moment par les sites et ne fonctionnent pas
-sur GitHub Actions. Ils ont besoin du navigateur de Playwright :
-`.venv\Scripts\python -m playwright install chromium`.
+sur GitHub Actions. Le navigateur de Playwright (Vinted, Facebook) est installé automatiquement par
+`start_ui.bat` au premier lancement (sinon : `.venv\Scripts\python -m playwright install chromium`).
 
 Les estimations de l'IA restent indicatives : vérifiez toujours l'annonce et le vendeur avant d'acheter.
 

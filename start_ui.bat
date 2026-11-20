@@ -21,5 +21,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem Navigateur de Playwright (Vinted, Facebook) : telecharge une seule fois.
+if not exist ".venv\playwright-ok" (
+    echo Installation du navigateur pour Vinted / Facebook ^(une seule fois^)...
+    ".venv\Scripts\python.exe" -m playwright install chromium && echo ok> ".venv\playwright-ok"
+)
+
 ".venv\Scripts\python.exe" -m dealsniper ui --open %*
 pause
