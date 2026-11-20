@@ -154,3 +154,15 @@ def test_only_pepites_get_an_instant_message(monkeypatch, config):
     assert sent_ad == [9]  # seule la pépite (≥9) en message immédiat
     assert any(h.startswith("💡 Bonnes affaires") and s == [8, 7] for h, s in digests)  # 7-8 regroupées
     assert {a.score for a in sent} == {9, 8, 7}
+
+
+def test_reprice_after_price_drop():
+    ad = Ad(title="ThinkPad", url="https://e.x/1", source="t", price=170)
+    raw = analyzer.sanitize_analysis(item(1, score=8) | {"valeur_revente_estimee": 2000 / 9, "cout_piece_estime": 20})
+    first = analyzer.make_realistic(raw, ad)  # revente 200 : marge 200 − 170 − 20 − 20 = −10 → note plafonnée
+    assert first["marge_nette_estimee"] == -10 and first["score_rentabilite"] == 4 and first["score_ia"] == 8
+    again = analyzer.reprice(first, 110)  # baisse à 110 € : marge 50 → la note de l'IA revient
+    assert again["marge_nette_estimee"] == 50 and again["score_rentabilite"] == 8
+    assert analyzer.reprice(first, 110, "enchere") is first  # enchère : prix provisoire, rien à recalculer
+    free = {"realiste": True, "sans_ia": True, "valeur_revente_estimee": 200, "marque_recherchee": True}
+    assert analyzer.reprice(free, 100)["score_rentabilite"] == 9  # marge 80 → 8, +1 marque recherchée

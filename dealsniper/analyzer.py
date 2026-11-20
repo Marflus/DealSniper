@@ -182,14 +182,42 @@ def make_realistic(analysis: dict[str, Any], ad: Ad, haircut: float = 0.9) -> di
     else:
         margin = resale - ad.total_price - analysis["cout_piece_estime"] - 0.10 * resale
     margin = round(margin, 2)
-    score = analysis["score_rentabilite"]
-    if margin < 20:
-        score = min(score, 4)
-    elif margin < 40:
-        score = min(score, 6)
-    return {**analysis, "valeur_revente_estimee": resale, "marge_nette_estimee": margin, "score_rentabilite": score,
+    ai_score = analysis["score_rentabilite"]
+    return {**analysis, "valeur_revente_estimee": resale, "marge_nette_estimee": margin,
+            "score_rentabilite": cap_score(ai_score, margin), "score_ia": ai_score,
             "valeur_revente_ia": ai_resale, "source_revente": "cote" if base < ai_resale else "ia",
             "realiste": True}  # marque : garde-fou déjà appliqué
+
+
+def cap_score(score: int, margin: float) -> int:
+    """Une marge recalculée faible plafonne la note : < 20 € → 4/10 max ; < 40 € → 6/10 max."""
+    if margin < 20:
+        return min(score, 4)
+    if margin < 40:
+        return min(score, 6)
+    return score
+
+
+def reprice(analysis: dict[str, Any] | None, total: float | None, price_mode: str = "fixe") -> dict[str, Any] | None:
+    """Nouveau prix (baisse) : marge et note recalculées avec la même revente estimée, sans nouvel appel IA.
+
+    Même formule que `make_realistic` : revente − prix payé − pièce − 10 % de frais. La note de départ est
+    celle de l'IA avant plafonnement (`score_ia`) : une marge devenue bonne peut donc relever la note.
+    Mode sans IA : note fondée sur la marge seule, comme à l'estimation (market.free_estimate).
+    """
+    if not analysis or not analysis.get("realiste") or price_mode == "enchere" or total is None:
+        return analysis
+    resale = analysis.get("valeur_revente_estimee")
+    if resale is None:
+        return analysis
+    margin = round(resale - total - float(analysis.get("cout_piece_estime") or 0) - 0.10 * resale, 2)
+    if analysis.get("sans_ia"):
+        from .market import margin_score
+
+        score = margin_score(margin, bool(analysis.get("marque_recherchee")))
+    else:
+        score = cap_score(int(analysis.get("score_ia", analysis.get("score_rentabilite", 1))), margin)
+    return {**analysis, "marge_nette_estimee": margin, "score_rentabilite": score}
 
 
 class Analyzer:

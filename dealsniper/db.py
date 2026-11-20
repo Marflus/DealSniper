@@ -300,6 +300,16 @@ class Database:
         self._save_data([(uid, {**json.loads(data or "{}"), "gone": known[uid] == "gone", "checked_at": checked_at})
                          for uid, data in rows])
 
+    def update_analysis(self, uid: str, analysis: dict) -> None:
+        """Remplace l'analyse d'une annonce (ex. recalcul après une baisse de prix), note comprise."""
+        data = self.ad_data(uid)
+        if data is None:
+            return
+        data["analysis"] = analysis
+        with self._lock:
+            self._conn.execute("UPDATE seen SET data = ?, score = ? WHERE uid = ?",
+                               (_dumps(data), analysis.get("score_rentabilite"), uid))
+
     def patch_ad(self, uid: str, patch: dict) -> bool:
         """Fusionne des champs dans l'annonce stockée (ex. résultat d'analyse de marché). False si inconnue."""
         data = self.ad_data(uid)

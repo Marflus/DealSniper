@@ -196,6 +196,12 @@ class Engine:
         prices = {ad.uid: ad.price for ad in already_seen if ad.price is not None}
         min_drop = float(self.config["filters"].get("price_drop_min_eur") or 10)
         drops = await asyncio.to_thread(self.db.record_price_drops, prices, min_drop)
+        for drop in drops:  # marge et note recalculées au nouveau prix (sans nouvel appel IA)
+            data = await asyncio.to_thread(self.db.ad_data, drop["uid"]) or {}
+            analysis = analyzer.reprice(data.get("analysis"), data.get("total_price"), data.get("price_mode", "fixe"))
+            if analysis and analysis is not data.get("analysis"):
+                await asyncio.to_thread(self.db.update_analysis, drop["uid"], analysis)
+                drop.update(score=analysis["score_rentabilite"], margin=analysis.get("marge_nette_estimee"))
         notable = [d for d in drops if d["status"] == "analyzed" and (d["score"] or 0) >= 1]
         if notable:
             await asyncio.to_thread(notifier.notify_price_drops, notable)

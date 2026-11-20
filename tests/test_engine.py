@@ -643,3 +643,42 @@ def test_cap_applies_before_reading_details(monkeypatch, config):
     assert len(site.details) == 2 and stats["analysées"] == 2
     assert site.details == ["ebay:200000000000", "ebay:200000000001"]  # les moins chères d'abord
     assert len(unseen) == 4  # les 4 autres reviendront au prochain passage
+
+
+def test_price_drop_updates_margin_and_score(monkeypatch, config):
+    """Baisse de prix d'une annonce notée : marge et note recalculées, alerte avec la nouvelle marge."""
+    alerts = []
+    monkeypatch.setattr(engine.notifier, "notify_price_drops", alerts.extend)
+    price = {"value": 170}
+
+    class OneAd(FakeSite):
+        async def list_recent(self, http):
+            return [Ad(title="ThinkPad T480 sans SSD", url="https://www.ebay.fr/itm/300000000001", source="ebay",
+                       price=price["value"])]
+
+    def analyze(ads, cfg, budget, should_stop=None):
+        for ad in ads:
+            raw = {"type_affaire": "reparation", "score_rentabilite": 8, "facilite_reparation": 9,
+                   "facilite_vente": 8, "panne_probable": "SSD", "cout_piece_estime": 20,
+                   "valeur_revente_estimee": 2000 / 9, "marge_nette_estimee": 0}
+            ad.analysis = engine.analyzer.make_realistic(raw, ad)
+        return AnalysisResult(analyzed=list(ads))
+
+    monkeypatch.setattr(engine.analyzer, "analyze", analyze)
+
+    async def go():
+        db = Database(data_dir() / "drop2.db")
+        async with client() as http:
+            eng = engine.Engine(config, db, http)
+            await eng.process(OneAd(config))
+            before = db.ad_data("ebay:300000000001")["analysis"]
+            price["value"] = 110
+            await eng.process(OneAd(config))
+        after = db.search(days=1)[0]
+        db.close()
+        return before, after
+
+    before, after = asyncio.run(go())
+    assert before["score_rentabilite"] == 4  # marge négative à 170 €
+    assert after["analysis"]["marge_nette_estimee"] == 50 and after["score"] == 8
+    assert alerts and alerts[0]["margin"] == 50 and alerts[0]["score"] == 8

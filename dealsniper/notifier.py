@@ -286,7 +286,9 @@ def notify_price_drops(drops: list[dict[str, Any]]) -> None:
     lines = []
     for d in sorted(drops, key=lambda x: x["pct"], reverse=True):
         drop = _eur(d["from"] - d["to"])
-        lines.append(f"• {d['title'][:70]} : {_eur(d['from'])} → {_eur(d['to'])} (−{drop}, −{d['pct']} %)"
+        gain = d.get("margin")
+        margin = f" · marge ≈ {'+' if gain >= 0 else ''}{_eur(gain)}" if gain is not None else ""
+        lines.append(f"• {d['title'][:70]} : {_eur(d['from'])} → {_eur(d['to'])} (−{drop}, −{d['pct']} %){margin}"
                      f"\n   {d['url']}")
     Notifier().send_lines(f"⬇ Baisses de prix ({len(drops)})", [html.escape(x) for x in lines], lines)
 
