@@ -4,7 +4,7 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const euros = (v) => (v == null ? "?" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`);
 const FILTER_IDS = ["f-text", "f-category", "f-type", "f-score", "f-ease", "f-sale", "f-price", "f-margin", "f-distance",
-  "f-days", "f-sort"];
+  "f-delivery", "f-days", "f-sort"];
 const SEARCH_FIELDS = { common: ["query", "condition", "max_price"], ebay: ["query", "condition", "max_price"], leboncoin: ["query", "category", "max_price"],
                         default: ["query", "max_price"] };
 const LBC_CATEGORIES = { "": "Toutes catégories", 15: "Informatique", 43: "Consoles & jeux vidéo", 16: "Image & son", 21: "Bricolage" };
@@ -248,11 +248,13 @@ function filteredAds() {
   const maxPrice = $("#f-price").value === "" ? null : Number($("#f-price").value);
   const minMargin = $("#f-margin").value === "" ? null : Number($("#f-margin").value);
   const maxDistance = $("#f-distance").value === "" ? null : Number($("#f-distance").value);
+  const deliveryMode = $("#f-delivery").value;
 
   const ads = allAds.filter((ad) => {
     const a = ad.analysis || {};
     if (status === "fav" ? !ad.favorite : status === "hidden" ? !ad.hidden : ad.hidden) return false;
     if (maxDistance != null && (ad.distance_km ?? Infinity) > maxDistance) return false;
+    if (deliveryMode && delivery(ad).mode !== deliveryMode) return false;
     if (text && !`${ad.title} ${ad.description} ${ad.location} ${ad.category}`.toLowerCase().includes(text)) return false;
     if (selectedSites.size && !selectedSites.has(ad.source)) return false;
     if (category && ad.category !== category) return false;
@@ -294,6 +296,24 @@ function scoreRow(ad) {
 // « Laon 02000 02000 » → « Laon 02000 »
 const cleanPlace = (place) => String(place || "").split(/\s+/).filter((w, i, all) => all.indexOf(w) === i).join(" ");
 
+// Mode de remise : eBay fournit les frais de port (envoi possible) ; sinon on ne sait pas (souvent sur place).
+function delivery(ad) {
+  if (ad.shipping != null) return { mode: "ship", icon: "🚚", label: ad.shipping > 0 ? `Envoi ${euros(ad.shipping)}` : "Envoi possible" };
+  return { mode: "pickup", icon: "🤝", label: "Remise en main propre" };
+}
+
+// Signaux de risque calculés localement (gratuit) : vendeur, prix trop beau, enchère, réparation difficile.
+function riskFlags(ad) {
+  const a = ad.analysis || {}, s = ad.seller || {}, flags = [];
+  if (s.positive_pct != null && s.positive_pct < 95) flags.push(`Vendeur ${String(s.positive_pct).replace(".", ",")} % d'avis positifs`);
+  if (s.reviews != null && s.reviews < 5) flags.push("Vendeur avec très peu d'évaluations");
+  if (ad.market && ad.market.median && ad.total_price != null && ad.total_price < ad.market.median * 0.4)
+    flags.push("Prix très bas vs la cote — vérifier que ce n'est pas une arnaque");
+  if (ad.price_mode === "enchere") flags.push("Enchère : le prix final peut grimper");
+  if (a.facilite_reparation != null && a.facilite_reparation <= 3) flags.push("Réparation difficile (soudure / panne incertaine)");
+  return flags;
+}
+
 function adCard(ad) {
   const a = ad.analysis || {};
   const image = ad.image
@@ -316,8 +336,9 @@ function adCard(ad) {
       </div>
       ${ad.analysis ? scoreRow(ad) : ""}
       ${ad.reason ? `<div class="reason">✗ ${esc(ad.reason)}</div>` : ""}
+      ${(() => { const r = riskFlags(ad); return r.length ? `<div class="risk" title="${esc(r.join(" · "))}">⚠️ ${r.length} point${r.length > 1 ? "s" : ""} de vigilance</div>` : ""; })()}
       <div class="meta">
-        <div class="site-line">${ad.distance_km != null ? `📍 ${ad.distance_km} km · ` : ""}${siteLogo(ad.source, 14)} ${esc(siteName(ad.source))}${ad.category ? ` · ${esc(ad.category)}` : ""}</div>
+        <div class="site-line">${ad.distance_km != null ? `📍 ${ad.distance_km} km · ` : ""}<span title="${esc(delivery(ad).label)}">${delivery(ad).icon}</span> ${siteLogo(ad.source, 14)} ${esc(siteName(ad.source))}${ad.category ? ` · ${esc(ad.category)}` : ""}</div>
         <div class="card-actions">
           <button class="mini ${ad.favorite ? "on" : ""}" data-fav="${esc(ad.uid)}" title="${ad.favorite ? "Retirer des favoris" : "Mettre en favori"}">${ad.favorite ? "★" : "☆"}</button>
           <button class="mini" data-hide="${esc(ad.uid)}" title="${ad.hidden ? "Ne plus masquer" : "Masquer cette annonce"}">${ad.hidden ? "↺" : "⊘"}</button>
@@ -389,6 +410,7 @@ function showDetails(uid) {
       ${row("🩺 Panne probable", esc(faultText(a)))}
       ${row("📍 Ville", esc(cleanPlace(ad.location)) + (ad.distance_km != null ? ` <span class="muted">(à ${ad.distance_km} km de chez vous)</span>` : ""))}
       ${row("🏷️ Type de vente", ad.price_mode === "enchere" ? "Enchère (prix provisoire)" : "Prix fixe")}
+      ${row("📦 Remise", `${delivery(ad).icon} ${delivery(ad).label}`)}
       ${row("💶 Achat", buy)}
       ${row("🔩 Pièce estimée", a.cout_piece_estime ? euros(a.cout_piece_estime) : "")}
       ${row("📊 Cote du marché", ad.market ? `${euros(ad.market.median)} <span class="muted">(${esc(ad.market.model)}, ${ad.market.count} ${ad.market.source === "ebay" ? "occasions eBay" : "annonces"})</span>` : "")}
@@ -403,6 +425,7 @@ function showDetails(uid) {
     </div>
     ${deepBlock(ad)}
     ${desc ? `<details class="d-desc"><summary>Description du vendeur</summary><p>${esc(desc.slice(0, 1200))}${desc.length > 1200 ? "…" : ""}</p></details>` : ""}
+    ${(() => { const r = riskFlags(ad); return r.length ? `<div class="d-risk"><b>⚠️ Points de vigilance</b><ul>${r.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""; })()}
     <div class="d-questions"><b>💬 Questions à poser au vendeur</b><ul>${sellerQuestions(ad).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
     ${repairLinks(ad)}
     <div class="d-actions">

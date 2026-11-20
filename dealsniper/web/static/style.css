@@ -510,3 +510,9 @@ button.wide { width: 100%; }
 .tax-note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .tax-box.depasse .tax-note { color: var(--bad); }
 @media (max-width: 560px) { .tax-kpis { grid-template-columns: 1fr; gap: 4px; } }
+
+/* Risque et remise sur les cartes */
+.risk { font-size: 12px; color: var(--mid); font-weight: 600; }
+.d-risk { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+  background: color-mix(in srgb, var(--mid) 10%, var(--card)); border: 1px solid color-mix(in srgb, var(--mid) 30%, var(--line)); }
+.d-risk ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }

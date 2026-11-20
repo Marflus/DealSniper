@@ -71,6 +71,11 @@
           <label class="field">Prix max <input id="f-price" type="number" min="0" placeholder="—"> €</label>
           <label class="field">Marge min <input id="f-margin" type="number" placeholder="—"> €</label>
           <label class="field" title="Distance depuis chez vous (code postal à régler dans Filtres)">📍 ≤ <input id="f-distance" type="number" min="0" placeholder="—"> km</label>
+          <select id="f-delivery" title="Mode de remise">
+            <option value="">Remise : peu importe</option>
+            <option value="ship">🚚 Envoi possible</option>
+            <option value="pickup">🤝 Sur place (pas d'envoi)</option>
+          </select>
           <select id="f-days">
             <option value="1">24 heures</option>
             <option value="7" selected>7 jours</option>
