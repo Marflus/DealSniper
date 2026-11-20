@@ -32,6 +32,20 @@ let status = "analyzed";
 let selectedSites = new Set();  // vide = tous les sites
 let settings = null;
 
+// Préférences du navigateur (onglet, thème, filtres…) : le stockage peut être indisponible
+// (navigation privée, données bloquées) ; l'interface fonctionne alors sans mémoire.
+const store = {
+  get(key, fallback = null) {
+    try { return localStorage.getItem("dealsniper-" + key) ?? fallback; } catch (e) { return fallback; }
+  },
+  set(key, value) {
+    try {
+      if (value == null || value === "") localStorage.removeItem("dealsniper-" + key);
+      else localStorage.setItem("dealsniper-" + key, value);
+    } catch (e) { /* stockage indisponible */ }
+  },
+};
+
 function toast(message) {
   const el = $("#toast");
   el.textContent = message;
@@ -56,7 +70,7 @@ function showTab(tab) {
   if (tab === "purchases") loadPurchases();
   else if (tab === "stats") loadStats();
   else if (!["ads", "search"].includes(tab) && !settings) loadSettings();
-  try { localStorage.setItem("dealsniper-tab", tab); } catch (e) { /* stockage indisponible */ }
+  store.set("tab", tab);
 }
 document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
 $(".brand").addEventListener("click", () => showTab("ads"));  // cliquer le logo revient aux annonces
@@ -65,7 +79,7 @@ $(".brand").addEventListener("click", () => showTab("ads"));  // cliquer le logo
 function showSettingsSection(id) {
   document.querySelectorAll("#set-nav .set-item").forEach((b) => b.classList.toggle("on", b.dataset.sec === id));
   document.querySelectorAll(".set-sec").forEach((sec) => (sec.hidden = sec.id !== id));
-  try { localStorage.setItem("dealsniper-set", id); } catch (e) { /* stockage indisponible */ }
+  store.set("set", id);
 }
 $("#set-nav").addEventListener("click", (e) => {
   const item = e.target.closest("[data-sec]");
@@ -77,17 +91,15 @@ function setTheme(theme) {
   if (theme) document.documentElement.dataset.theme = theme;
   else delete document.documentElement.dataset.theme;
   document.querySelectorAll("#theme-choice button").forEach((b) => b.classList.toggle("on", b.dataset.value === theme));
-  try { theme ? localStorage.setItem("dealsniper-theme", theme) : localStorage.removeItem("dealsniper-theme"); } catch (e) { /* idem */ }
+  store.set("theme", theme);
 }
 document.querySelectorAll("#theme-choice button").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.value)));
 setTheme(document.documentElement.dataset.theme || "");
 
 // ---------- Filtres (mémorisés dans le navigateur) ----------
 function saveFilters() {
-  try {
-    const values = Object.fromEntries(FILTER_IDS.map((id) => [id, $("#" + id).value]));
-    localStorage.setItem("dealsniper-filters", JSON.stringify({ ...values, status, sites: [...selectedSites] }));
-  } catch (e) { /* stockage indisponible */ }
+  const values = Object.fromEntries(FILTER_IDS.map((id) => [id, $("#" + id).value]));
+  store.set("filters", JSON.stringify({ ...values, status, sites: [...selectedSites] }));
 }
 
 // Téléphone : filtres repliés derrière un bouton qui indique combien sont actifs.
@@ -105,7 +117,7 @@ document.querySelector(".toolbar").addEventListener("click", () => setTimeout(co
 
 function restoreFilters() {
   try {
-    const values = JSON.parse(localStorage.getItem("dealsniper-filters") || "{}");
+    const values = JSON.parse(store.get("filters", "{}"));
     FILTER_IDS.forEach((id) => { if (values[id] != null && values[id] !== "0") $("#" + id).value = values[id]; });
     if (values.status != null) setStatus(values.status, false);
     selectedSites = new Set(values.sites || []);
@@ -1381,16 +1393,14 @@ async function loadStatus() {
   // Bandeau sur l'onglet Annonces : seulement les problèmes, masquable.
   const problems = items.filter((i) => !i.ok);
   const key = problems.map((p) => p.text).join("|");
-  let hidden = "";
-  try { hidden = localStorage.getItem("dealsniper-setup-hidden") || ""; } catch (e) { /* stockage indisponible */ }
-  $("#setup").hidden = !problems.length || hidden === key;
+  $("#setup").hidden = !problems.length || store.get("setup-hidden", "") === key;
   $("#setup").innerHTML = `<div><b>À régler pour profiter de tout Deal Sniper</b>
       <ul>${problems.map((p) => `<li>${esc(p.text)}</li>`).join("")}</ul>
       <small>Après avoir modifié <code>.env</code>, relancez <code>start_ui.bat</code>.</small></div>
     <button class="icon" title="Masquer" data-hide-setup>✕</button>`;
   $("#setup [data-hide-setup]").addEventListener("click", () => {
     $("#setup").hidden = true;
-    try { localStorage.setItem("dealsniper-setup-hidden", key); } catch (e) { /* idem */ }
+    store.set("setup-hidden", key);
   });
 }
 
@@ -1398,7 +1408,7 @@ restoreFilters();
 countActiveFilters();
 loadStatus();
 api("/api/preferences").then((d) => { preferences = d.categories || {}; renderAds(true); }).catch(() => {});
-try { showSettingsSection(localStorage.getItem("dealsniper-set") || "set-notif"); } catch (e) { /* idem */ }
-try { showTab(localStorage.getItem("dealsniper-tab") || "ads"); } catch (e) { showTab("ads"); }
+showSettingsSection(store.get("set", "set-notif"));
+showTab(store.get("tab", "ads"));
 loadAds();
 setInterval(loadAds, 60000);

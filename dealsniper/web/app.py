@@ -11,6 +11,7 @@ import asyncio
 import io
 import shutil
 import threading
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,7 @@ from .. import progress, purchases
 from ..config import DESIRABLE_BRANDS, config_file, data_dir, env, load_config
 from ..db import Database
 from ..geo import Geo
-from ..market import model_key
+from ..market import category_brands, model_key
 
 STATIC_DIR = Path(__file__).parent / "static"
 LIST_FIELDS = ("keywords", "exclude_keywords", "include_keywords")
@@ -283,8 +284,7 @@ def create_app() -> Flask:
             item["distance_km"] = geo.distance(point, item.get("location"))
 
     def brands() -> list[str]:
-        config = load_config(config_path())
-        return sorted({k for cat in config["categories"] for k in cat.get("keywords") or []}, key=len, reverse=True)
+        return category_brands(load_config(config_path()))
 
     @app.get("/")
     def index():
@@ -297,15 +297,12 @@ def create_app() -> Flask:
 
     @app.get("/api/ads")
     def ads():
-        db = database()
-        try:
+        with database() as db:
             status = request.args.get("status") or None
-            days = int(request.args.get("days", 30))
+            days = request.args.get("days", 30, type=int)
             items = db.search(status=status if status in ("analyzed", "rejected") else None, days=days)
             _realistic(items)
             cost = asyncio.run(db.cost_today())
-        finally:
-            db.close()
         try:
             config = load_config(config_path())
             cap, home = config["analyzer"].get("max_daily_cost_usd"), str(config["location"].get("home") or "")
@@ -318,42 +315,30 @@ def create_app() -> Flask:
 
     @app.get("/api/stats")
     def stats():
-        db = database()
-        try:
-            return jsonify(db.stats(int(request.args.get("days", 30))))
-        finally:
-            db.close()
+        with database() as db:
+            return jsonify(db.stats(request.args.get("days", 30, type=int)))
 
     @app.get("/api/preferences")
     def preferences():
         """Goûts appris (par catégorie) pour le tri « Recommandé »."""
-        db = database()
-        try:
+        with database() as db:
             return jsonify(categories=db.preferences())
-        finally:
-            db.close()
 
     @app.post("/api/ads/<uid>/mark")
     def mark_ad(uid: str):
         """Favori ou masquée : {"favorite": true} / {"hidden": true}."""
         body = request.get_json(force=True) or {}
-        db = database()
-        try:
+        with database() as db:
             found = db.mark(uid, favorite=body.get("favorite"), hidden=body.get("hidden"))
-        finally:
-            db.close()
         return jsonify(ok=found), 200 if found else 404
 
     @app.get("/api/ads/<uid>/history")
     def ad_history(uid: str):
         """Cote du modèle de l'annonce dans le temps, à partir des prix déjà observés (sans IA)."""
-        db = database()
-        try:
+        with database() as db:
             ad = db.ad_data(uid)
             model = model_key((ad or {}).get("title") or "", brands()) if ad else None
             history = db.price_history(model) if model else []
-        finally:
-            db.close()
         return jsonify(model=model, history=history)
 
     @app.post("/api/ads/<uid>/market-analysis")
@@ -362,33 +347,24 @@ def create_app() -> Flask:
         from ..deep import analyze_market
         from ..models import Ad
 
-        db = database()
-        try:
+        with database() as db:
             ad = db.ad_data(uid)
-        finally:
-            db.close()
         if ad is None:
             return jsonify(ok=False, error="Annonce inconnue"), 404
         try:
             result = analyze_market(Ad.from_dict(ad), load_config(config_path()))
         except Exception as exc:  # clé manquante, API indisponible, recherche web refusée…
             return jsonify(ok=False, error=str(exc)[:200]), 502
-        db = database()
-        try:
+        with database() as db:
             db.patch_ad(uid, {"market_deep": result})
             asyncio.run(db.add_cost(result.get("cost_usd", 0)))
-        finally:
-            db.close()
         return jsonify(ok=True, market_deep=result)
 
     # --- achats -------------------------------------------------------------------
     @app.get("/api/purchases")
     def list_purchases():
-        db = database()
-        try:
+        with database() as db:
             rows = db.purchases()
-        finally:
-            db.close()
         try:
             base = float(load_config(config_path())["analyzer"]["resale_haircut"])
         except Exception:
@@ -400,8 +376,7 @@ def create_app() -> Flask:
     def add_purchase():
         """Depuis une annonce (« uid ») ou à la main (« title », « buy_price »)."""
         body = request.get_json(force=True) or {}
-        db = database()
-        try:
+        with database() as db:
             values: dict[str, Any] = {"title": str(body.get("title") or "").strip(),
                                       "buy_price": _number(body.get("buy_price"))}
             ad = db.ad_data(body["uid"]) if body.get("uid") else None
@@ -417,8 +392,6 @@ def create_app() -> Flask:
             if not values["title"]:
                 return jsonify(ok=False, error="Titre manquant"), 400
             purchase_id = db.add_purchase(values)
-        finally:
-            db.close()
         return jsonify(ok=True, id=purchase_id)
 
     @app.put("/api/purchases/<int:purchase_id>")
@@ -433,23 +406,17 @@ def create_app() -> Flask:
                 values[key] = str(body[key] or "").strip() or None
         if values.get("sold_price") is not None and not values.get("sold_at"):
             values["sold_at"] = datetime.now().date().isoformat()
-        db = database()
-        try:
+        with database() as db:
             db.update_purchase(purchase_id, values)
             row = next((p for p in db.purchases() if p["id"] == purchase_id), None)
             if row:
                 db.record_sale(purchase_id, row.get("model"), row.get("sold_price"))  # vraie vente → cote
-        finally:
-            db.close()
         return jsonify(ok=row is not None)
 
     @app.delete("/api/purchases/<int:purchase_id>")
     def delete_purchase(purchase_id: int):
-        db = database()
-        try:
+        with database() as db:
             db.delete_purchase(purchase_id)
-        finally:
-            db.close()
         return jsonify(ok=True)
 
     @app.get("/api/image/<uid>")
@@ -457,18 +424,16 @@ def create_app() -> Flask:
         """Photo d'une annonce sans image : aperçu de son lien, cherché une seule fois."""
         from .preview import fetch_image
 
-        db = database()
-        try:
+        with database() as db:
             ad = db.ad_data(uid)
-            if ad is None:
-                return jsonify(image=None), 404
-            if ad.get("image") is not None:  # déjà connue ("" = aucune)
-                return jsonify(image=ad["image"] or None)
-            image = fetch_image(ad.get("url") or "")
+        if ad is None:
+            return jsonify(image=None), 404
+        if ad.get("image") is not None:  # déjà connue ("" = aucune)
+            return jsonify(image=ad["image"] or None)
+        image = fetch_image(ad.get("url") or "")  # requête réseau : base fermée pendant l'attente
+        with database() as db:
             db.set_image(uid, image)
-            return jsonify(image=image)
-        finally:
-            db.close()
+        return jsonify(image=image)
 
     @app.get("/api/status")
     def status():
@@ -479,19 +444,17 @@ def create_app() -> Flask:
 
         report: dict[str, Any] = {"anthropic": bool(env("ANTHROPIC_API_KEY")), "channels": Notifier().channels,
                                   "sites": [], "error": None, "ai_enabled": True}
-        db = database()
         try:
             config = load_config(config_path())
             report["ai_enabled"] = bool(config["analyzer"].get("enabled", True))
             loaded = load_sites(config)
-            health = db.site_health()
+            with database() as db:
+                health = db.site_health()
             report["sites"] = [{"label": s.label, "ok": True, **_health(health.get(s.name, {}))} for s in loaded] + [
                 {"label": SITE_LABELS.get(name, name.capitalize()), "ok": False, "reason": reason}
                 for name, reason in skipped]
         except Exception as exc:  # config.yaml illisible : affiché tel quel
             report["error"] = str(exc)
-        finally:
-            db.close()
         return jsonify(report)
 
     @app.post("/api/secrets")
@@ -534,52 +497,20 @@ def create_app() -> Flask:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True)
 
-    @app.post("/api/run")
-    def run_now():
+    def start_run(prepare: Callable[[dict[str, Any]], None] | None = None):
+        """Lance un passage en arrière-plan (un seul à la fois) ; `prepare` adapte la configuration."""
         with lock:
             if state["running"]:
                 return jsonify(ok=False, message="Un passage est déjà en cours."), 409
             state["running"], state["error"] = True, None
 
-        def worker():
-            from ..engine import run_once
-
-            try:
-                run_once(load_config(config_path()))
-            except Exception as exc:
-                state["error"] = str(exc)
-            finally:
-                state["running"] = False
-
-        threading.Thread(target=worker, daemon=True).start()
-        return jsonify(ok=True)
-
-    @app.post("/api/search-now")
-    def search_now():
-        """Recherche ponctuelle : tous les sites cherchent CE terme en une fois, puis notation."""
-        body = request.get_json(force=True) or {}
-        query = str(body.get("query") or "").strip()
-        if not query:
-            return jsonify(ok=False, error="Tapez ce que vous cherchez"), 400
-        with lock:
-            if state["running"]:
-                return jsonify(ok=False, message="Un passage est déjà en cours."), 409
-            state["running"], state["error"] = True, None
-
-        def worker():
+        def worker() -> None:
             from ..engine import run_once
 
             try:
                 config = load_config(config_path())
-                search: dict[str, Any] = {"query": query, "condition": "any"}
-                price = _number(body.get("max_price"))
-                if price is not None:
-                    search["max_price"] = price
-                config["searches"] = [search]              # une seule recherche, commune à tous les sites
-                for site in config["sites"].values():
-                    site["searches"] = []                  # on ignore les recherches habituelles
-                    site["common_searches"] = True
-                config["filters"]["drop_uncategorized"] = False  # ne pas écarter un terme hors catégories
+                if prepare:
+                    prepare(config)
                 run_once(config)
             except Exception as exc:
                 state["error"] = str(exc)
@@ -588,6 +519,31 @@ def create_app() -> Flask:
 
         threading.Thread(target=worker, daemon=True).start()
         return jsonify(ok=True)
+
+    @app.post("/api/run")
+    def run_now():
+        return start_run()
+
+    @app.post("/api/search-now")
+    def search_now():
+        """Recherche ponctuelle : tous les sites cherchent CE terme en une fois, puis notation."""
+        body = request.get_json(force=True) or {}
+        query = str(body.get("query") or "").strip()
+        if not query:
+            return jsonify(ok=False, error="Tapez ce que vous cherchez"), 400
+        search: dict[str, Any] = {"query": query, "condition": "any"}
+        price = _number(body.get("max_price"))
+        if price is not None:
+            search["max_price"] = price
+
+        def prepare(config: dict[str, Any]) -> None:
+            config["searches"] = [search]              # une seule recherche, commune à tous les sites
+            for site in config["sites"].values():
+                site["searches"] = []                  # on ignore les recherches habituelles
+                site["common_searches"] = True
+            config["filters"]["drop_uncategorized"] = False  # ne pas écarter un terme hors catégories
+
+        return start_run(prepare)
 
     @app.post("/api/test-notif")
     def test_notif():

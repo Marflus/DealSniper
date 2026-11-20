@@ -52,6 +52,11 @@ ACCESSORY_FIRST = {"chargeur", "batterie", "clavier", "coque", "housse", "etui",
                    "sacoche", "sac", "piece", "pieces", "accessoire", "kit", "bloc"}
 
 
+def category_brands(config: dict[str, Any]) -> list[str]:
+    """Mots-clés de catégorie servant de « marques » pour reconnaître un modèle (les plus longs d'abord)."""
+    return sorted({k for cat in config["categories"] for k in cat.get("keywords") or []}, key=len, reverse=True)
+
+
 def model_key(title: str, brands: list[str]) -> str | None:
     """« Lenovo ThinkPad T480 i5 8Go » → « thinkpad t480 » ; None si le modèle n'est pas identifiable."""
     text = normalize(title)
@@ -162,8 +167,7 @@ def free_estimate(ad, quote, haircut: float = 0.9) -> dict:
 class Market:
     def __init__(self, db, config: dict[str, Any], sampler: Sampler | None = None, samples_per_pass: int = 10):
         self.db = db
-        self.brands = sorted({k for cat in config["categories"] for k in cat.get("keywords") or []},
-                             key=len, reverse=True)
+        self.brands = category_brands(config)
         self.min_price = float(config["filters"].get("min_price") or 0)
         self.sampler = sampler
         self.samples_per_hour = samples_per_pass

@@ -20,7 +20,7 @@ from . import watch as watchlist_match
 from .config import data_dir
 from .db import Database
 from .http import AccessDenied, PoliteClient
-from .market import Market, fingerprint
+from .market import Market, Quote, category_brands, fingerprint, free_estimate
 from .models import Ad
 from .progress import LiveLogHandler, Progress
 from .purchases import calibrated_config
@@ -37,8 +37,7 @@ class Engine:
                  market: Market | None = None):
         self.config = config
         self.market = market
-        self.brands = market.brands if market else sorted(
-            {k for cat in config["categories"] for k in cat.get("keywords") or []}, key=len, reverse=True)
+        self.brands = market.brands if market else category_brands(config)
         self.progress = progress or Progress()
         self.db = db
         self.http = http
@@ -92,12 +91,7 @@ class Engine:
         # Annonces déjà vues mais enregistrées sans photo : on complète avec celle de la liste (aucune requête).
         await self.db.fill_images({ad.uid: ad.image for ad in listed if ad.image and ad.uid not in new_uids})
         new_ads = list({ad.uid: ad for ad in listed if ad.uid in new_uids}.values())
-        seen_prices = {ad.uid: ad.total_price for ad in listed if ad.uid not in new_uids and ad.total_price is not None}
-        min_drop = float(self.config["filters"].get("price_drop_min_eur") or 10)
-        drops = await asyncio.to_thread(self.db.record_price_drops, seen_prices, min_drop)
-        notable = [d for d in drops if d["status"] == "analyzed" and (d["score"] or 0) >= 1]
-        if notable:
-            await asyncio.to_thread(notifier.notify_price_drops, notable, self.config)
+        await self._price_drops([ad for ad in listed if ad.uid not in new_uids])
         if self.market:
             await self.market.observe(listed)  # cote : chaque prix vu enrichit la référence (gratuit)
         if self.config["analyzer"].get("enabled", True) and await self.budget_left() == 0:
@@ -106,37 +100,8 @@ class Engine:
             show(site.label, f"{len(listed)} annonces · budget IA du jour atteint")
             return {"listées": len(listed), "nouvelles": len(new_ads), "retenues": 0, "analysées": 0, "notifiées": 0}
 
-        candidates = []
         prints: dict[str, str | None] = {}  # empreintes anti-doublons (même annonce sur plusieurs sites)
-        for i, ad in enumerate(new_ads, 1):
-            show(site.label, f"{len(listed)} annonces · tri des nouvelles {i}/{len(new_ads)}")
-            prints[ad.uid] = fingerprint(ad, self.brands)
-            ad.watched = watchlist_match.matches(ad, self.config.get("watchlist") or [])
-            duplicate = prints[ad.uid] and await self.db.duplicate_of(prints[ad.uid], ad.source)
-            # Une annonce surveillée passe outre la catégorie et la cote (mais pas les doublons).
-            reason = (f"doublon d'une annonce déjà vue sur {SITE_LABELS.get(duplicate, duplicate)}" if duplicate
-                      else None if ad.watched else filters.check(ad, self.config) or await self.market_problem(ad))
-            if ad.watched and not duplicate:
-                filters.check(ad, self.config)  # renseigne category / signals sans écarter
-            if reason:
-                await self.db.remember(ad, "rejected", reason=reason, fingerprint=prints[ad.uid])
-                continue
-            if not site.cfg.get("fetch_details", True):  # pas de fiche détaillée : moins de requêtes / fenêtres
-                candidates.append(ad)
-                continue
-            await self.sleep(random.uniform(*self.network["detail_delay"]))
-            try:
-                ad = await site.fetch_detail(self.http, ad)
-            except AccessDenied:
-                raise
-            except Exception as exc:  # fiche illisible : on garde les infos de la liste
-                log.debug("%s : fiche non lue (%s)", site.name, exc)
-            reason = filters.check(ad, self.config)
-            if reason:
-                await self.db.remember(ad, "rejected", reason=reason, fingerprint=prints[ad.uid])
-            else:
-                candidates.append(ad)
-
+        candidates = await self._select(site, listed, new_ads, prints)
         stats = {"listées": len(listed), "nouvelles": len(new_ads), "retenues": len(candidates),
                  "analysées": 0, "notifiées": 0}
         if not candidates:
@@ -164,15 +129,60 @@ class Engine:
         stats.update(analysées=len(result.analyzed), notifiées=len(sent))
         return stats
 
-    async def _process_without_ai(self, site, candidates, prints, stats) -> dict[str, int]:
-        """Mode sans IA : estimation par la cote du marché, notifications sur la marge, zéro appel Claude."""
-        from .market import free_estimate
+    def _check(self, ad: Ad) -> str | None:
+        """Raison de rejet par le filtre ; une annonce surveillée n'est jamais écartée
+        (le filtre renseigne quand même sa catégorie et ses signaux)."""
+        reason = filters.check(ad, self.config)
+        return None if ad.watched else reason
 
+    async def _price_drops(self, already_seen: list[Ad]) -> None:
+        """Annonces déjà vues dont le prix a baissé : prix mis à jour, alerte pour celles déjà notées."""
+        prices = {ad.uid: ad.price for ad in already_seen if ad.price is not None}
+        min_drop = float(self.config["filters"].get("price_drop_min_eur") or 10)
+        drops = await asyncio.to_thread(self.db.record_price_drops, prices, min_drop)
+        notable = [d for d in drops if d["status"] == "analyzed" and (d["score"] or 0) >= 1]
+        if notable:
+            await asyncio.to_thread(notifier.notify_price_drops, notable, self.config)
+
+    async def _select(self, site: Site, listed: list[Ad], new_ads: list[Ad],
+                      prints: dict[str, str | None]) -> list[Ad]:
+        """Tri des nouvelles annonces : doublons, filtre, cote, puis fiche détaillée et second filtre."""
+        candidates = []
+        for i, ad in enumerate(new_ads, 1):
+            self.progress.update(site.label, f"{len(listed)} annonces · tri des nouvelles {i}/{len(new_ads)}")
+            prints[ad.uid] = fingerprint(ad, self.brands)
+            ad.watched = watchlist_match.matches(ad, self.config.get("watchlist") or [])
+            duplicate = prints[ad.uid] and await self.db.duplicate_of(prints[ad.uid], ad.source)
+            # Une annonce surveillée passe outre la catégorie et la cote (mais pas les doublons).
+            if duplicate:
+                reason = f"doublon d'une annonce déjà vue sur {SITE_LABELS.get(duplicate, duplicate)}"
+            else:
+                reason = self._check(ad)
+                problem = None if reason else await self.market_problem(ad)  # renseigne aussi la cote
+                reason = reason or (None if ad.watched else problem)
+            if not reason and site.cfg.get("fetch_details", True):  # sinon : moins de requêtes / fenêtres
+                await self.sleep(random.uniform(*self.network["detail_delay"]))
+                try:
+                    ad = await site.fetch_detail(self.http, ad)
+                except AccessDenied:
+                    raise
+                except Exception as exc:  # fiche illisible : on garde les infos de la liste
+                    log.debug("%s : fiche non lue (%s)", site.name, exc)
+                reason = self._check(ad)  # la description complète peut révéler une panne grave, « vendu »…
+            if reason:
+                await self.db.remember(ad, "rejected", reason=reason, fingerprint=prints[ad.uid])
+            else:
+                candidates.append(ad)
+        return candidates
+
+    async def _process_without_ai(self, site: Site, candidates: list[Ad], prints: dict[str, str | None],
+                                  stats: dict[str, int]) -> dict[str, int]:
+        """Mode sans IA : estimation par la cote du marché, notifications sur la marge, zéro appel Claude."""
         haircut = float(self.config["analyzer"]["resale_haircut"])
         estimated = []
         for ad in candidates:
             if ad.market and ad.market.get("median"):
-                ad.analysis = free_estimate(ad, type("Q", (), {"median": ad.market["median"]}), haircut)
+                ad.analysis = free_estimate(ad, Quote(**ad.market), haircut)
                 estimated.append(ad)
         self.progress.update(site.label, f"{stats['listées']} annonces · cote du marché (sans IA)")
         async with self._ai_lock:
@@ -216,8 +226,7 @@ class Engine:
                 for ad in ending:
                     await asyncio.to_thread(notifier.Notifier().send_text, notifier.auction_reminder(ad))
                     await asyncio.to_thread(self.db.mark_reminded, ad.uid)
-                    if ending:
-                        log.info("Rappel d'enchère : %s", ad.title[:50])
+                    log.info("Rappel d'enchère : %s", ad.title[:50])
             except Exception:
                 log.exception("Vérification des fins d'enchère en échec")
             await self.sleep(120)

@@ -66,7 +66,14 @@ def seed(db: Database) -> None:
 
     if db.search(limit=1):
         return
+    from .config import DESIRABLE_BRANDS
+    from .filters import BRAND_SIGNAL
+    from .utils.text import first_keyword, normalize
+
     for i, (ad, status, reason) in enumerate(DEMO_ADS):
+        brand = first_keyword(normalize(ad.title), DESIRABLE_BRANDS)
+        if brand and status == "analyzed":  # comme le vrai filtre : badge ⭐ « marque recherchée »
+            ad.signals = [*ad.signals, f"{BRAND_SIGNAL} {brand}"]
         asyncio.run(db.remember(ad, status, reason=reason))
         if i in (0, 2):  # un favori, pour montrer la vue « Favoris »
             db.mark(ad.uid, favorite=True)

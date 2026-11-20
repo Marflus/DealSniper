@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import html
 import logging
 import time
+from datetime import datetime
 from typing import Any
 
 import requests
 
 from .config import env
+from .filters import desirable_brand
 from .models import Ad
 
 log = logging.getLogger(__name__)
@@ -38,7 +41,7 @@ def _summary(ad: Ad) -> dict[str, str]:
     ease = a.get("facilite_reparation")
     demand = a.get("facilite_vente")
     return {
-        "title": ad.title,
+        "title": f"⭐ {ad.title}" if desirable_brand(ad) else ad.title,  # marque recherchée
         "buy": buy,
         "resale": f"{_eur(a.get('valeur_revente_estimee'))} (marge {margin_txt})"
                   + (f" · vente {demand}/10" if demand else ""),
@@ -167,22 +170,25 @@ class Notifier:
             ok |= self._discord(embeds=[format_discord(ad)])
         return ok
 
-    def send_digest(self, header: str, ads: list[Ad]) -> bool:
-        """Un ou quelques messages regroupant plusieurs annonces (au lieu d'un message par annonce)."""
+    def send_lines(self, header: str, html_lines: list[str], text_lines: list[str]) -> bool:
+        """Récapitulatif : un en-tête et des lignes (HTML pour Telegram, Markdown pour Discord / console),
+        découpé en autant de messages que nécessaire."""
         if not self.channels:
-            print(header)
-            for ad in ads:
-                print(_digest_line(ad, html_mode=False))
+            print("\n".join([header, *text_lines]))
             return True
         ok = False
         if "telegram" in self.channels:
-            for message in _chunks(f"<b>{html.escape(header)}</b>", [_digest_line(a, True) for a in ads]):
+            for message in _chunks(f"<b>{html.escape(header)}</b>", html_lines):
                 ok |= self._telegram(message)
-                time.sleep(0.5)
+                time.sleep(0.5)  # Telegram : ~1 message/seconde par conversation
         if "discord" in self.channels:
-            for message in _chunks(f"**{header}**", [_digest_line(a, False) for a in ads], DISCORD_LIMIT):
+            for message in _chunks(f"**{header}**", text_lines, DISCORD_LIMIT):
                 ok |= self._discord(content=message)
         return ok
+
+    def send_digest(self, header: str, ads: list[Ad]) -> bool:
+        """Un ou quelques messages regroupant plusieurs annonces (au lieu d'un message par annonce)."""
+        return self.send_lines(header, [_digest_line(a, True) for a in ads], [_digest_line(a, False) for a in ads])
 
     def send_text(self, text: str) -> bool:
         if not self.channels:
@@ -197,7 +203,8 @@ class Notifier:
 
 
 def _rank(ads: list[Ad]) -> list[Ad]:
-    return sorted(ads, key=lambda a: (-a.score, -(a.analysis or {}).get("marge_nette_estimee", 0)))
+    # marge None possible (mode sans IA, enchère) : classée comme 0
+    return sorted(ads, key=lambda a: (-a.score, -((a.analysis or {}).get("marge_nette_estimee") or 0)))
 
 
 def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
@@ -261,8 +268,6 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
 
 def auction_reminder(ad: Ad) -> str:
     """Message court de rappel de fin d'enchère."""
-    import contextlib
-    from datetime import datetime
     end = ""
     with contextlib.suppress(ValueError, TypeError):
         end = datetime.fromisoformat(str(ad.ends_at).replace("Z", "+00:00")).astimezone().strftime("%H:%M")
@@ -273,22 +278,12 @@ def auction_reminder(ad: Ad) -> str:
 
 def notify_price_drops(drops: list[dict[str, Any]], config: dict[str, Any]) -> None:
     """Prévient que des annonces déjà repérées ont baissé de prix (signal d'achat fort)."""
-    notifier = Notifier()
     lines = []
     for d in sorted(drops, key=lambda x: x["pct"], reverse=True):
         drop = _eur(d["from"] - d["to"])
-        head = f"• {d['title'][:70]} : {_eur(d['from'])} → {_eur(d['to'])} (−{drop}, −{d['pct']} %)"
-        lines.append(f"{head}\n   {d['url']}")
-    header = f"⬇ Baisses de prix ({len(drops)})"
-    if not notifier.channels:
-        print("\n".join([header, *lines]))
-        return
-    if "telegram" in notifier.channels:
-        for message in _chunks(f"<b>{header}</b>", [html.escape(x) for x in lines]):
-            notifier._telegram(message)
-    if "discord" in notifier.channels:
-        for message in _chunks(f"**{header}**", lines, DISCORD_LIMIT):
-            notifier._discord(content=message)
+        lines.append(f"• {d['title'][:70]} : {_eur(d['from'])} → {_eur(d['to'])} (−{drop}, −{d['pct']} %)"
+                     f"\n   {d['url']}")
+    Notifier().send_lines(f"⬇ Baisses de prix ({len(drops)})", [html.escape(x) for x in lines], lines)
 
 
 def demo_ad() -> Ad:

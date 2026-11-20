@@ -455,3 +455,46 @@ def test_max_ads_per_run_caps_candidates(monkeypatch, config):
 
     stats = asyncio.run(run())
     assert sent == [2] and stats["retenues"] == 2  # seulement 2 envoyées à l'IA
+
+
+def test_watched_ad_survives_detail_and_drop_ignores_shipping(monkeypatch, config):
+    """Une veille n'est pas écartée par la fiche détaillée ; une baisse se mesure sur le prix, port à part."""
+    monkeypatch.setattr(engine.analyzer, "analyze", fake_analyze)
+    cfg = {**config, "watchlist": [{"query": "latitude 7490"}]}
+
+    class ShippedSite(FakeSite):
+        price = 80
+
+        async def list_recent(self, http):
+            ads = await super().list_recent(http)
+            for ad in ads:
+                ad.shipping, ad.price = 8, (self.price if "Latitude" in ad.title else ad.price)
+            return ads
+
+    async def go():
+        db = Database(data_dir() / "w.db")
+        site = ShippedSite(cfg)
+        async with client() as http:
+            eng = engine.Engine(cfg, db, http)
+            first = await eng.process(site)
+            site.price = 75  # −5 € : sous le seuil de 10 €, même avec 8 € de port
+            await eng.process(site)
+            unchanged = db.ad_data("ebay:100000000003")["price"]
+            site.price = 60  # −20 €
+            await eng.process(site)
+            dropped = db.ad_data("ebay:100000000003")
+        db.close()
+        return first, unchanged, dropped
+
+    first, unchanged, dropped = asyncio.run(go())
+    assert first["retenues"] == 2  # ThinkPad + Latitude surveillé malgré « carte mère oxydée »
+    assert unchanged == 80
+    assert dropped["price"] == 60 and dropped["total_price"] == 68 and dropped["price_drop"]["from"] == 80
+
+
+def test_rank_tolerates_missing_margin():
+    from dealsniper.notifier import _rank
+
+    a = Ad(title="a", url="https://x/1", source="t", analysis={"score_rentabilite": 7, "marge_nette_estimee": None})
+    b = Ad(title="b", url="https://x/2", source="t", analysis={"score_rentabilite": 7, "marge_nette_estimee": 30})
+    assert [x.title for x in _rank([a, b])] == ["b", "a"]

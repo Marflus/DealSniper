@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+import statistics
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -52,6 +53,19 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _stamp(delta: timedelta | None = None) -> str:
+    """Horodatage ISO (UTC, à la seconde), éventuellement décalé : format unique de la base."""
+    return (_now() + (delta or timedelta())).isoformat(timespec="seconds")
+
+
+def _dumps(data: dict) -> str:
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _marks(n: int) -> str:
+    return ",".join("?" * n)
+
+
 class Database:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -77,14 +91,37 @@ class Database:
     async def _asql(self, query: str, params: tuple = ()) -> list[tuple]:
         return await asyncio.to_thread(self._sql, query, params)
 
+    def _many(self, query: str, rows: list[tuple]) -> None:
+        """Plusieurs écritures dans UNE transaction (bien plus rapide, et ménage la carte SD)."""
+        if not rows:
+            return
+        with self._lock:
+            self._conn.execute("BEGIN")
+            try:
+                self._conn.executemany(query, rows)
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+            self._conn.execute("COMMIT")
+
+    def _save_data(self, rows: list[tuple[str, dict]]) -> None:
+        """Réécrit le JSON de plusieurs annonces : [(uid, données), ...]."""
+        self._many("UPDATE seen SET data = ? WHERE uid = ?", [(_dumps(data), uid) for uid, data in rows])
+
     def close(self) -> None:
         self._conn.close()
+
+    def __enter__(self) -> Database:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
     async def unseen(self, uids: list[str]) -> set[str]:
         """Parmi `uids`, ceux qui ne sont pas encore en base."""
         if not uids:
             return set()
-        rows = await self._asql(f"SELECT uid FROM seen WHERE uid IN ({','.join('?' * len(uids))})", tuple(uids))
+        rows = await self._asql(f"SELECT uid FROM seen WHERE uid IN ({_marks(len(uids))})", tuple(uids))
         return set(uids) - {uid for (uid,) in rows}
 
     async def remember(self, ad: Ad, status: str, notified: bool = False, reason: str | None = None,
@@ -97,13 +134,12 @@ class Database:
             "seen_at = excluded.seen_at, data = excluded.data, reason = excluded.reason, "
             "fingerprint = excluded.fingerprint",
             (ad.uid, ad.source, status, ad.score if ad.analysis else None, int(notified),
-             _now().isoformat(timespec="seconds"), json.dumps(ad.to_dict(), ensure_ascii=False), reason,
-             fingerprint),
+             _stamp(), _dumps(ad.to_dict()), reason, fingerprint),
         )
 
     async def duplicate_of(self, fingerprint: str, site: str, days: int = 14) -> str | None:
         """Site d'une annonce identique déjà vue ailleurs récemment (même modèle / titre et même prix)."""
-        since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
+        since = _stamp(-timedelta(days=days))
         rows = await self._asql("SELECT site FROM seen WHERE fingerprint = ? AND site != ? AND seen_at >= ? LIMIT 1",
                                 (fingerprint, site, since))
         return rows[0][0] if rows else None
@@ -133,8 +169,8 @@ class Database:
         values = {"bought_at": _now().date().isoformat(), **values}
         row = [values.get(f) for f in fields]
         with self._lock:
-            marks = ",".join("?" * len(fields))
-            cur = self._conn.execute(f"INSERT INTO purchases ({', '.join(fields)}) VALUES ({marks})", row)
+            cur = self._conn.execute(f"INSERT INTO purchases ({', '.join(fields)}) VALUES ({_marks(len(fields))})",
+                                     row)
             return int(cur.lastrowid)
 
     def update_purchase(self, purchase_id: int, values: dict) -> None:
@@ -152,7 +188,7 @@ class Database:
         uid = f"achat:{purchase_id}"
         if model and price:
             self._sql("INSERT OR REPLACE INTO prices (uid, model, price, working, site, seen_at) VALUES (?,?,?,1,?,?)",
-                      (uid, model, price, "vente", _now().isoformat(timespec="seconds")))
+                      (uid, model, price, "vente", _stamp()))
         else:
             self._sql("DELETE FROM prices WHERE uid = ?", (uid,))
 
@@ -164,7 +200,7 @@ class Database:
 
     def search(self, status: str | None = None, days: int = 30, limit: int = 2000) -> list[dict]:
         """Annonces récentes pour l'interface (les filtres fins sont faits dans le navigateur)."""
-        since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
+        since = _stamp(-timedelta(days=days))
         query = "SELECT data, status, score, notified, seen_at, reason, favorite, hidden FROM seen WHERE seen_at >= ?"
         params: list = [since]
         if status:
@@ -188,16 +224,16 @@ class Database:
         data = self.ad_data(uid)
         if data is not None:
             data["image"] = image or ""
-            self._sql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(data, ensure_ascii=False), uid))
+            self._save_data([(uid, data)])
 
     def record_price_drops(self, prices: dict[str, float], min_drop: float) -> list[dict]:
         """Prix en baisse d'au moins `min_drop` sur une annonce déjà vue : met à jour le prix stocké
         et renvoie {uid, title, status, score, from, to, pct} (signal d'achat fort)."""
         if not prices:
             return []
-        marks = ",".join("?" * len(prices))
-        rows = self._sql(f"SELECT uid, data, status, score FROM seen WHERE uid IN ({marks})", tuple(prices))
-        drops = []
+        rows = self._sql(f"SELECT uid, data, status, score FROM seen WHERE uid IN ({_marks(len(prices))})",
+                         tuple(prices))
+        drops, updates = [], []
         for uid, data, status, score in rows:
             ad = json.loads(data or "{}")
             old = ad.get("price")
@@ -207,11 +243,12 @@ class Database:
             ad["price"] = new
             if ad.get("total_price") is not None:
                 ad["total_price"] = round(new + (ad.get("shipping") or 0), 2)
-            ad["price_drop"] = {"from": old, "to": new, "at": _now().isoformat(timespec="seconds")}
-            self._sql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(ad, ensure_ascii=False), uid))
+            ad["price_drop"] = {"from": old, "to": new, "at": _stamp()}
+            updates.append((uid, ad))
             drops.append({"uid": uid, "title": ad.get("title", ""), "status": status, "score": score,
                           "url": ad.get("url", ""), "from": old, "to": new,
                           "pct": round(100 * (old - new) / old) if old else 0})
+        self._save_data(updates)
         return drops
 
     def patch_ad(self, uid: str, patch: dict) -> bool:
@@ -220,26 +257,28 @@ class Database:
         if data is None:
             return False
         data.update(patch)
-        self._sql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(data, ensure_ascii=False), uid))
+        self._save_data([(uid, data)])
         return True
 
     async def fill_images(self, images: dict[str, str]) -> None:
         """Ajoute la photo des annonces déjà en base qui n'en ont pas."""
         if not images:
             return
-        marks = ",".join("?" * len(images))
-        rows = await self._asql(f"SELECT uid, data FROM seen WHERE uid IN ({marks})", tuple(images))
+        rows = await self._asql(f"SELECT uid, data FROM seen WHERE uid IN ({_marks(len(images))})", tuple(images))
+        updates = []
         for uid, data in rows:
             ad = json.loads(data or "{}")
             if not ad.get("image"):
-                ad["image"] = images[uid]
-                await self._asql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(ad, ensure_ascii=False), uid))
+                updates.append((uid, {**ad, "image": images[uid]}))
+        await asyncio.to_thread(self._save_data, updates)
 
     def ending_soon(self, minutes: int) -> list[Ad]:
         """Enchères notées qui se terminent dans la fenêtre à venir et pas encore rappelées."""
         now = _now()
         until = now + timedelta(minutes=minutes)
-        rows = self._sql("SELECT data FROM seen WHERE status = 'analyzed'")
+        # Filtre JSON côté SQLite : seules les enchères sont décodées (vérifié toutes les 2 minutes).
+        rows = self._sql("SELECT data FROM seen WHERE status = 'analyzed' "
+                         "AND json_extract(data, '$.price_mode') = 'enchere'")
         out = []
         for (data,) in rows:
             ad = json.loads(data or "{}")
@@ -259,9 +298,7 @@ class Database:
 
     def stats(self, days: int = 30) -> dict:
         """Bilan pour le tableau de bord : totaux, catégories, activité par jour (annonces notées)."""
-        import statistics as _stats
-
-        since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
+        since = _stamp(-timedelta(days=days))
         rows = self._sql("SELECT data, score, seen_at FROM seen WHERE status = 'analyzed' AND seen_at >= ?", (since,))
         by_cat: dict[str, dict] = {}
         by_day: dict[str, int] = {}
@@ -281,25 +318,25 @@ class Database:
             by_day[seen_at[:10]] = by_day.get(seen_at[:10], 0) + 1
         categories = sorted(
             [{"name": c, "count": e["count"],
-              "avg_margin": round(_stats.mean(e["margins"])) if e["margins"] else None,
-              "avg_score": round(_stats.mean(e["scores"]), 1) if e["scores"] else None} for c, e in by_cat.items()],
+              "avg_margin": round(statistics.mean(e["margins"])) if e["margins"] else None,
+              "avg_score": round(statistics.mean(e["scores"]), 1) if e["scores"] else None} for c, e in by_cat.items()],
             key=lambda x: (x["avg_margin"] is not None, x["avg_margin"] or 0, x["count"]), reverse=True)
         activity = [{"date": d, "prix": n} for d, n in sorted(by_day.items())]
-        return {"days": days, "total": len(rows), "avg_margin": round(_stats.mean(margins)) if margins else None,
-                "avg_score": round(_stats.mean(scores), 1) if scores else None,
+        return {"days": days, "total": len(rows), "avg_margin": round(statistics.mean(margins)) if margins else None,
+                "avg_score": round(statistics.mean(scores), 1) if scores else None,
                 "best_margin": round(max(margins)) if margins else None,
                 "categories": categories, "activity": activity}
 
     def analyzed_since(self, hours: int) -> list[Ad]:
         """Annonces notées par Claude ces dernières `hours` heures (meilleures d'abord)."""
-        since = (_now() - timedelta(hours=hours)).isoformat(timespec="seconds")
+        since = _stamp(-timedelta(hours=hours))
         rows = self._sql("SELECT data FROM seen WHERE status = 'analyzed' AND seen_at >= ? ORDER BY score DESC",
                          (since,))
         return [Ad.from_dict(json.loads(data)) for (data,) in rows]
 
     async def forget_older_than(self, days: int) -> None:
         """Oublie les vieilles annonces (sauf les favoris) et les vieux prix observés."""
-        limit = (_now() - timedelta(days=days)).isoformat()
+        limit = _stamp(-timedelta(days=days))
         await self._asql("DELETE FROM seen WHERE seen_at < ? AND favorite = 0", (limit,))
         await self._asql("DELETE FROM prices WHERE seen_at < ?", (limit,))
 
@@ -308,9 +345,8 @@ class Database:
 
     async def paused_until(self, site: str) -> datetime | None:
         rows = await self._asql("SELECT paused_until FROM sites WHERE name = ?", (site,))
-        if rows and rows[0][0] and datetime.fromisoformat(rows[0][0]) > _now():
-            return datetime.fromisoformat(rows[0][0])
-        return None
+        until = datetime.fromisoformat(rows[0][0]) if rows and rows[0][0] else None
+        return until if until and until > _now() else None
 
     async def pause(self, site: str, hours: float, reason: str) -> datetime:
         until = _now() + timedelta(hours=hours)
@@ -321,7 +357,7 @@ class Database:
 
     async def record_site_ok(self, site: str, count: int) -> None:
         """Dernière récolte réussie d'un site (pour l'indicateur de santé)."""
-        now = _now().isoformat(timespec="seconds")
+        now = _stamp()
         await self._asql("INSERT INTO sites (name, last_ok, last_count, last_error) VALUES (?, ?, ?, NULL) "
                          "ON CONFLICT(name) DO UPDATE SET last_ok = excluded.last_ok, "
                          "last_count = excluded.last_count, last_error = NULL", (site, now, int(count)))
@@ -334,38 +370,35 @@ class Database:
     # --- cote du marché -----------------------------------------------------------
     async def record_prices(self, rows: list[tuple[str, str, float, int, str]]) -> None:
         """(uid, modèle, prix, en état de marche, site) ; une annonce déjà enregistrée n'est pas recomptée."""
-        now = _now().isoformat(timespec="seconds")
-        for uid, model, price, working, site in rows:
-            await self._asql("INSERT OR IGNORE INTO prices (uid, model, price, working, site, seen_at) "
-                             "VALUES (?,?,?,?,?,?)", (uid, model, price, working, site, now))
+        now = _stamp()
+        await asyncio.to_thread(self._many, "INSERT OR IGNORE INTO prices (uid, model, price, working, site, seen_at) "
+                                "VALUES (?,?,?,?,?,?)", [(*row, now) for row in rows])
 
     def price_history(self, model: str, months: int = 12) -> list[dict]:
         """Médiane mensuelle du prix d'un modèle (annonces en état de marche), pour le graphe de cote."""
-        import statistics as _stats
-
-        since = (_now() - timedelta(days=30 * months)).isoformat(timespec="seconds")
+        since = _stamp(-timedelta(days=30 * months))
         rows = self._sql("SELECT substr(seen_at, 1, 7) AS mois, price FROM prices "
                          "WHERE model = ? AND working = 1 AND seen_at >= ? ORDER BY mois", (model, since))
         by_month: dict[str, list[float]] = {}
         for mois, price in rows:
             by_month.setdefault(mois, []).append(price)
-        return [{"date": mois, "prix": round(_stats.median(prices)), "count": len(prices)}
+        return [{"date": mois, "prix": round(statistics.median(prices)), "count": len(prices)}
                 for mois, prices in sorted(by_month.items())]
 
     async def working_prices(self, model: str, days: int) -> list[float]:
-        since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
+        since = _stamp(-timedelta(days=days))
         rows = await self._asql("SELECT price FROM prices WHERE model = ? AND working = 1 AND seen_at >= ?",
                                 (model, since))
         return [price for (price,) in rows]
 
     async def market_sample(self, model: str, max_age_days: int) -> list[float] | None:
-        since = (_now() - timedelta(days=max_age_days)).isoformat(timespec="seconds")
+        since = _stamp(-timedelta(days=max_age_days))
         rows = await self._asql("SELECT prices FROM market_samples WHERE model = ? AND updated_at >= ?", (model, since))
         return json.loads(rows[0][0]) if rows else None
 
     async def save_market_sample(self, model: str, prices: list[float]) -> None:
         await self._asql("INSERT OR REPLACE INTO market_samples (model, prices, updated_at) VALUES (?,?,?)",
-                         (model, json.dumps(prices), _now().isoformat(timespec="seconds")))
+                         (model, json.dumps(prices), _stamp()))
 
     async def add_cost(self, usd: float) -> None:
         await self._asql("INSERT INTO costs (day, usd) VALUES (?, ?) "
