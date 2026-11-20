@@ -285,7 +285,8 @@ def create_app() -> Flask:
 
     @app.get("/static/<path:name>")
     def static_files(name: str):
-        return send_from_directory(STATIC_DIR, name)
+        mimetype = "application/manifest+json" if name.endswith(".webmanifest") else None
+        return send_from_directory(STATIC_DIR, name, mimetype=mimetype)
 
     @app.get("/api/ads")
     def ads():
