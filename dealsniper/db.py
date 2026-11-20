@@ -81,6 +81,9 @@ class Database:
             if column not in existing:
                 self._conn.execute(f"ALTER TABLE seen ADD COLUMN {column} {kind}")
         self._conn.execute("CREATE INDEX IF NOT EXISTS seen_fingerprint ON seen (fingerprint)")
+        # Onglet Annonces, bilan, récap : filtre et tri par date (et statut) sur une table qui grossit.
+        self._conn.execute("CREATE INDEX IF NOT EXISTS seen_status_date ON seen (status, seen_at)")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS seen_date ON seen (seen_at)")
         site_cols = {row[1] for row in self._conn.execute("PRAGMA table_info(sites)")}
         for column, kind in (("last_ok", "TEXT"), ("last_count", "INTEGER")):
             if column not in site_cols:

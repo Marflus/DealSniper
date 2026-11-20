@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from .text import normalize
+from .text import first_keyword, normalize
 
 FOREIGN_COUNTRIES = (
     "allemagne", "germany", "deutschland", "espagne", "spain", "italie", "italy", "belgique", "belgium",
@@ -56,5 +56,4 @@ def is_overseas(text: str) -> bool:
         return False
     if _OVERSEAS_POSTCODE_RE.search(text):
         return True
-    text_n = normalize(text)
-    return any(name in text_n for name in OVERSEAS_NAMES)
+    return first_keyword(normalize(text), OVERSEAS_NAMES) is not None  # en mot entier
