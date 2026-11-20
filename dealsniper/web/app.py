@@ -11,13 +11,16 @@ import asyncio
 import copy
 import io
 import shutil
+import sqlite3
+import tempfile
 import threading
+import zipfile
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_file, send_from_directory
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
@@ -446,11 +449,46 @@ def create_app() -> Flask:
             asyncio.run(db.add_cost(result["cost_usd"]))
         return jsonify(ok=True, questions=result["questions"], cost_usd=result["cost_usd"])
 
+    @app.get("/api/ads/<uid>/negotiation")
+    def ad_negotiation(uid: str):
+        """Message de négociation prêt à copier, basé sur le prix conseillé de l'analyse."""
+        from ..deep import build_negotiation_message
+        from ..models import Ad
+
+        with database() as db:
+            ad_dict = db.ad_data(uid)
+        if ad_dict is None:
+            return jsonify(ok=False, error="Annonce inconnue"), 404
+        items = [ad_dict]
+        _realistic(items)  # garde-fou et prix d'achat max à la formule actuelle
+        ad_dict = items[0]
+        deep = ad_dict.get("market_deep") or {}
+        if deep.get("message_negociation"):
+            return jsonify(ok=True, message=deep["message_negociation"],
+                           prix_achat_max=deep.get("prix_achat_max"), source="deep")
+        ad = Ad.from_dict(ad_dict)
+        max_buy = deep.get("prix_achat_max")
+        if max_buy is None:
+            # Sans analyse approfondie : prix qui laisse +30 € net avec la revente estimée
+            # (même formule que la marge : revente − prix − pièce − 10 % de frais = 30 €).
+            analysis = ad.analysis or {}
+            resale = analysis.get("valeur_revente_estimee")
+            piece = float(analysis.get("cout_piece_estime") or 0)
+            if resale:
+                candidate = round(float(resale) * 0.9 - piece - 30)
+                if candidate > 0:
+                    max_buy = candidate
+        msg = build_negotiation_message(ad, max_buy)
+        return jsonify(ok=True, message=msg, prix_achat_max=max_buy,
+                       source="deep" if deep.get("prix_achat_max") is not None else "auto")
+
     # --- achats -------------------------------------------------------------------
     @app.get("/api/purchases")
     def list_purchases():
         with database() as db:
             rows = db.purchases()
+        for row in rows:
+            row["hourly_rate"] = purchases.hourly_rate(row)  # €/h quand le temps passé est renseigné
         try:
             base = float(current_config()["analyzer"]["resale_haircut"])
         except Exception:
@@ -460,11 +498,12 @@ def create_app() -> Flask:
 
     @app.post("/api/purchases")
     def add_purchase():
-        """Depuis une annonce (« uid ») ou à la main (« title », « buy_price »)."""
+        """Depuis une annonce (« uid ») ou à la main (« title », « buy_price », « hours_spent »)."""
         body = _json_body()
         with database() as db:
             values: dict[str, Any] = {"title": str(body.get("title") or "").strip(),
-                                      "buy_price": _number(body.get("buy_price"))}
+                                      "buy_price": _number(body.get("buy_price")),
+                                      "hours_spent": _number(body.get("hours_spent"))}
             ad = db.ad_data(body["uid"]) if body.get("uid") else None
             if ad:
                 items = [ad]
@@ -484,7 +523,7 @@ def create_app() -> Flask:
     def update_purchase(purchase_id: int):
         body = _json_body()
         values: dict[str, Any] = {}
-        for key in ("buy_price", "repair_cost", "sold_price", "estimated_resale"):
+        for key in ("buy_price", "repair_cost", "sold_price", "estimated_resale", "hours_spent"):
             if key in body:
                 values[key] = _number(body[key])
         for key in ("title", "notes", "sold_at", "bought_at"):
@@ -504,6 +543,119 @@ def create_app() -> Flask:
         with database() as db:
             db.delete_purchase(purchase_id)
         return jsonify(ok=True)
+
+    # --- sauvegarde & restauration ------------------------------------------------
+    @app.get("/api/backup")
+    def backup_data():
+        """Archive ZIP : dealsniper.db (copie cohérente, même en cours d'écriture) et config.yaml (jamais .env)."""
+        db_path = data_dir() / "dealsniper.db"
+        cfg_path = config_path()
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            if cfg_path.exists():
+                zf.write(cfg_path, arcname="config.yaml")
+            if db_path.exists():
+                with tempfile.TemporaryDirectory() as tmp:
+                    snap = Path(tmp) / "dealsniper.db"
+                    src, dst = sqlite3.connect(db_path), sqlite3.connect(snap)
+                    try:
+                        src.backup(dst)  # API de sauvegarde SQLite : cohérente même avec le journal WAL
+                    finally:
+                        dst.close()
+                        src.close()
+                    zf.write(snap, arcname="dealsniper.db")
+        buf.seek(0)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        return send_file(buf, mimetype="application/zip", as_attachment=True,
+                         download_name=f"dealsniper-backup-{stamp}.zip")
+
+    @app.post("/api/restore")
+    def restore_data():
+        """Restaure dealsniper.db et/ou config.yaml depuis une archive de sauvegarde (copie des actuels avant)."""
+        from ..runlock import Busy, run_lock
+
+        if state["running"] or check["running"]:
+            return jsonify(ok=False, error="Impossible de restaurer pendant un passage ou une vérification."), 409
+        raw = request.files["file"].read() if "file" in request.files else request.get_data()
+        if not raw:
+            return jsonify(ok=False, error="Aucun fichier ZIP reçu."), 400
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(raw))
+        except zipfile.BadZipFile:
+            return jsonify(ok=False, error="Archive ZIP invalide."), 400
+
+        restored: list[str] = []
+        backups: list[str] = []
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        lock = run_lock(data_dir(), "une restauration")
+        try:
+            lock.acquire()  # aucun passage (même `watch` dans une autre fenêtre) pendant le remplacement
+        except Busy as exc:
+            return jsonify(ok=False, error=str(exc)), 409
+
+        try:
+            with zf, tempfile.TemporaryDirectory() as tmp:
+                names = set(zf.namelist())
+                if not (names & {"config.yaml", "dealsniper.db"}):
+                    return jsonify(ok=False, error="L'archive ne contient ni config.yaml ni dealsniper.db."), 400
+
+                new_cfg_text: str | None = None
+                if "config.yaml" in names:
+                    try:
+                        new_cfg_text = zf.read("config.yaml").decode("utf-8")
+                        _yaml().load(new_cfg_text)
+                    except Exception as exc:
+                        return jsonify(ok=False, error=f"config.yaml invalide dans l'archive : {exc}"), 400
+
+                new_db_path: Path | None = None
+                if "dealsniper.db" in names:
+                    new_db_path = Path(tmp) / "dealsniper.db"
+                    new_db_path.write_bytes(zf.read("dealsniper.db"))
+                    try:
+                        conn = sqlite3.connect(new_db_path)
+                        try:
+                            check_row = conn.execute("PRAGMA integrity_check").fetchone()
+                            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                        finally:
+                            conn.close()
+                    except sqlite3.DatabaseError as exc:
+                        return jsonify(ok=False, error=f"Base dealsniper.db illisible : {exc}"), 400
+                    if not check_row or check_row[0] != "ok" or "seen" not in tables:
+                        return jsonify(ok=False, error="Base dealsniper.db invalide ou corrompue."), 400
+
+                if new_cfg_text is not None:
+                    cfg_path = config_path()
+                    if cfg_path.exists():
+                        bak = cfg_path.with_name(f"config.{stamp}.bak.yaml")
+                        shutil.copyfile(cfg_path, bak)
+                        backups.append(bak.name)
+                    cfg_path.write_text(new_cfg_text, encoding="utf-8")
+                    restored.append("config.yaml")
+
+                if new_db_path is not None:
+                    db_path = data_dir() / "dealsniper.db"
+                    db_path.parent.mkdir(parents=True, exist_ok=True)
+                    if db_path.exists():
+                        bak = db_path.with_name(f"dealsniper.{stamp}.bak.db")
+                        src, dst = sqlite3.connect(db_path), sqlite3.connect(bak)
+                        try:
+                            src.backup(dst)  # copie cohérente (journal WAL compris)
+                        finally:
+                            dst.close()
+                            src.close()
+                        backups.append(bak.name)
+                    # Contenu remplacé par l'API de sauvegarde SQLite (pas de copie de fichier) : sûr même si
+                    # l'interface a la base ouverte au même moment, journal WAL compris (Windows notamment).
+                    src, dst = sqlite3.connect(new_db_path), sqlite3.connect(db_path)
+                    try:
+                        src.backup(dst)
+                    finally:
+                        dst.close()
+                        src.close()
+                    restored.append("dealsniper.db")
+        finally:
+            lock.release()
+        return jsonify(ok=True, restored=restored, backups=backups)
 
     @app.get("/api/image/<uid>")
     def ad_image(uid: str):

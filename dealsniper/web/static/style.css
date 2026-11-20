@@ -687,3 +687,11 @@ button.danger, .primary.danger { background: var(--bad) !important; border-color
 
 .pro-badge { font-size: 10px; font-weight: 800; padding: 1px 5px; border-radius: 5px; color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); }
+
+/* Message de négociation (fiche « i ») */
+.nego-box { margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+.nego-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.nego-box textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--card); color: var(--fg); resize: vertical; }
+.d-side .d-actions { flex-wrap: wrap; }

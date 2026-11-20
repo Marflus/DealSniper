@@ -56,6 +56,26 @@ function toast(message) {
   toast.timer = setTimeout(() => (el.hidden = true), 3500);
 }
 
+// Copie dans le presse-papiers, avec repli pour l'accès en HTTP local (téléphone sur le Wi-Fi).
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* repli ci-dessous */ }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+  ta.remove();
+  return ok;
+}
+
 async function api(url, options = {}) {
   const resp = await fetch(url, { headers: { "Content-Type": "application/json" }, ...options });
   const data = await resp.json().catch(() => ({}));
@@ -469,6 +489,7 @@ function showDetails(uid) {
         <div class="d-actions">
           <button class="ghost" data-fav="${esc(ad.uid)}">${ad.favorite ? "★ En favori" : "☆ Favori"}</button>
           <button class="ghost" data-buy="${esc(ad.uid)}">🛒 Acheté</button>
+          <button class="ghost" data-nego="${esc(ad.uid)}" title="Préparer et copier un message de négociation">💬 Négocier</button>
         </div>
         <a class="primary d-open" href="${esc(ad.url)}" target="_blank" rel="noopener">Voir l'annonce ↗</a>
       </aside>
@@ -491,6 +512,7 @@ function showDetails(uid) {
             ${row("Repérée", seen && !isNaN(seen) ? seen.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "")}`)}
           ${card("👤 Vendeur", sellerRows(ad.seller, row))}
         </div>
+        <div id="d-nego-box">${ad._nego ? negotiationBox(ad.uid, ad._nego.message, ad._nego.prix_achat_max) : ""}</div>
         ${desc ? `<details class="d-desc"><summary>Description du vendeur</summary><p>${esc(desc.slice(0, 1500))}${desc.length > 1500 ? "…" : ""}</p></details>` : ""}
       </div>
     </div>
@@ -566,8 +588,39 @@ function deepBlock(ad) {
       </div>
       <div class="deep-charts">${salesChart(d) || '<div class="chart-empty">Pas de vente datée trouvée pour le graphique</div>'}<div id="d-history"></div></div>
     </div>
+    ${d.message_negociation && !ad._nego ? negotiationBox(ad.uid, d.message_negociation, d.prix_achat_max) : ""}
     <div class="deep-actions">${questions}${repairLinks(ad)}</div>
   </section>`;
+}
+
+// Message de négociation modifiable, prêt à copier (bouton « Négocier » ou analyse approfondie).
+function negotiationBox(uid, message, maxBuy) {
+  const target = maxBuy != null && maxBuy > 0 ? ` <span class="muted small">(prix conseillé ≤ ${euros(maxBuy)})</span>` : "";
+  return `<div class="nego-box">
+    <div class="nego-head"><b>✉️ Message de négociation${target}</b>
+      <button type="button" class="ghost" data-copy-nego="${esc(uid)}">📋 Copier</button></div>
+    <textarea data-nego-text="${esc(uid)}" rows="3">${esc(message)}</textarea>
+  </div>`;
+}
+
+async function negotiateAd(uid) {
+  const ad = allAds.find((x) => x.uid === uid);
+  if (!ad) return;
+  try {
+    const data = await api(`/api/ads/${encodeURIComponent(uid)}/negotiation`);
+    ad._nego = data;
+    showDetails(uid);
+    const copied = await copyText(data.message);
+    toast(copied ? "📋 Message de négociation copié !" : "✉️ Message prêt dans la fiche");
+  } catch (e) {
+    toast("❌ " + e.message);
+  }
+}
+
+async function copyNegotiation(btn) {
+  const text = btn.closest(".nego-box")?.querySelector("[data-nego-text]")?.value.trim();
+  if (!text) return;
+  toast(await copyText(text) ? "📋 Message copié !" : "❌ Copie impossible : sélectionnez le texte à la main");
 }
 
 async function askQuestions(uid) {
@@ -656,6 +709,7 @@ async function deepMarket(uid) {
   try {
     const data = await api(`/api/ads/${encodeURIComponent(uid)}/market-analysis`, { method: "POST" });
     ad.market_deep = data.market_deep;
+    ad._nego = null;  // le message de l'analyse remplace celui préparé avant
     showDetails(uid);
     renderAds(true);
   } catch (e) {
@@ -702,7 +756,7 @@ async function buyAd(uid) {
 }
 
 function onAdAction(e) {
-  const t = e.target.closest("[data-info],[data-fav],[data-hide],[data-buy],[data-deep],[data-questions]");
+  const t = e.target.closest("[data-info],[data-fav],[data-hide],[data-buy],[data-deep],[data-questions],[data-nego],[data-copy-nego]");
   if (!t) return;
   if (t.dataset.info) showDetails(t.dataset.info);
   else if (t.dataset.fav) markAd(t.dataset.fav, { favorite: !allAds.find((x) => x.uid === t.dataset.fav)?.favorite });
@@ -710,6 +764,8 @@ function onAdAction(e) {
   else if (t.dataset.buy) buyAd(t.dataset.buy);
   else if (t.dataset.deep) deepMarket(t.dataset.deep);
   else if (t.dataset.questions) askQuestions(t.dataset.questions);
+  else if (t.dataset.nego) negotiateAd(t.dataset.nego);
+  else if (t.dataset.copyNego) copyNegotiation(t);
 }
 $("#ads").addEventListener("click", onAdAction);
 $("#details-body").addEventListener("click", onAdAction);
@@ -763,7 +819,7 @@ function loadMissingImagesIn(root) {
 }
 
 // Minuscules sans accents, pour comparer des titres.
-const normalizeFr = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const normalizeFr = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 function renderPager(pages) {
   const pager = $("#pager");
@@ -1372,6 +1428,44 @@ $("#reset-config").addEventListener("click", async () => {
     toast(data.backup ? `✅ Configuration d'exemple chargée (ancienne gardée : ${data.backup})` : "✅ Configuration d'exemple chargée");
   } catch (e) { toast("❌ " + e.message); }
 });
+// ---------- Sauvegarde et restauration (.zip) ----------
+$("#backup-data").addEventListener("click", async () => {
+  try {
+    const resp = await fetch("/api/backup");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    const match = (resp.headers.get("Content-Disposition") || "").match(/filename="?([^"]+)"?/i);
+    const filename = match ? match[1] : `dealsniper-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+    const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: filename });
+    link.click();
+    URL.revokeObjectURL(link.href);
+    toast(`💾 Sauvegarde téléchargée (${filename})`);
+  } catch (e) {
+    toast("❌ Impossible de créer la sauvegarde : " + e.message);
+  }
+});
+
+$("#restore-data").addEventListener("click", () => $("#restore-file").click());
+
+$("#restore-file").addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  if (!confirm(`Restaurer « ${file.name} » ?\n\nVotre base et/ou configuration actuelles seront sauvegardées automatiquement avant remplacement.`)) return;
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const resp = await fetch("/api/restore", { method: "POST", body: form });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    settings = null;
+    await Promise.all([loadSettings(), loadAds(), loadStatus()]);
+    toast(`✅ Restauré : ${(data.restored || []).join(", ")}`);
+  } catch (err) {
+    toast("❌ Restauration échouée : " + err.message);
+  }
+});
+
 $("#discard").addEventListener("click", () => { if (confirm("Annuler les modifications non enregistrées ?")) loadSettings(); });
 
 // ---------- Vérification : les annonces affichées sont-elles toujours en ligne ? ----------
@@ -1480,6 +1574,7 @@ $("#export-csv").addEventListener("click", () => {
 // ---------- Achats ----------
 const frDate = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "");
 const money = (v) => (v == null ? "—" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} €`);
+const hourly = (v) => (v == null ? "—" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} €/h`);
 
 async function loadPurchases() {
   let data;
@@ -1489,7 +1584,10 @@ async function loadPurchases() {
   $("#p-summary").innerHTML = kpi("Achats", `${s.count} <small>(${s.in_stock} en stock)</small>`)
     + kpi("Investi", money(s.invested)) + kpi("Revendu", money(s.revenue))
     + kpi("Bénéfice", `${s.profit >= 0 ? "+" : ""}${money(s.profit)}`, s.profit >= 0 ? "pos" : "neg")
-    + kpi("Rentabilité", s.roi_pct == null ? "—" : `${s.roi_pct.toLocaleString("fr-FR")} %`);
+    + kpi("Rentabilité", s.roi_pct == null ? "—" : `${s.roi_pct.toLocaleString("fr-FR")} %`)
+    + kpi("Rentabilité horaire", s.hourly_rate == null ? "—"
+      : `${hourly(s.hourly_rate)}${s.sold_hours ? ` <small>(${Number(s.sold_hours).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} h)</small>` : ""}`,
+      s.hourly_rate == null ? "" : s.hourly_rate >= 0 ? "pos" : "neg");
   const t = data.tax;
   const barCls = t.level === "depasse" ? "full" : t.level === "proche" ? "warn" : "";
   $("#p-tax").className = `tax-box ${t.level}`;
@@ -1507,8 +1605,8 @@ async function loadPurchases() {
        vos prix de revente réels à ses estimations et ajuste sa prudence tout seul.`
     : `🎯 <b>Calibrage</b> : vos ventes se font à <b>${Math.round(c.ratio * 100)} %</b> de l'estimation (${c.sales} ventes).
        Prudence appliquée : × ${String(c.haircut).replace(".", ",")} au lieu de × ${String(c.base).replace(".", ",")}.`;
-  const field = (p, key, label, type = "number") => `<label class="pf"><span>${label}</span>
-      <input data-pid="${p.id}" data-key="${key}" type="${type}" ${type === "number" ? 'step="0.01" min="0"' : ""} value="${esc(p[key] ?? "")}"></label>`;
+  const field = (p, key, label, type = "number", step = "0.01") => `<label class="pf"><span>${label}</span>
+      <input data-pid="${p.id}" data-key="${key}" type="${type}" ${type === "number" ? `step="${step}" min="0"` : ""} value="${esc(p[key] ?? "")}"></label>`;
   $("#p-list").innerHTML = data.purchases.length ? data.purchases.map((p) => {
     const cost = (p.buy_price || 0) + (p.repair_cost || 0);
     const profit = p.sold_price != null ? p.sold_price - cost : null;
@@ -1516,12 +1614,12 @@ async function loadPurchases() {
       <div class="p-head">
         <div><b>${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>` : esc(p.title)}</b>
           <small>${p.source ? `${esc(siteName(p.source))} · ` : ""}acheté le ${esc(frDate(p.bought_at))}${p.sold_at ? ` · revendu le ${esc(frDate(p.sold_at))}` : ""}</small></div>
-        <span class="p-profit ${profit == null ? "" : profit >= 0 ? "pos" : "neg"}">${profit == null ? "En stock" : `${profit >= 0 ? "+" : ""}${money(profit)}`}</span>
+        <span class="p-profit ${profit == null ? "" : profit >= 0 ? "pos" : "neg"}">${profit == null ? "En stock" : `${profit >= 0 ? "+" : ""}${money(profit)}`}${p.hourly_rate != null ? ` <small>· ${hourly(p.hourly_rate)}</small>` : ""}</span>
         <button class="icon danger" data-del="${p.id}" title="Supprimer cet achat">🗑</button>
       </div>
       <div class="p-fields">
         ${field(p, "buy_price", "Prix payé (€)")}${field(p, "repair_cost", "Réparation (€)")}
-        ${field(p, "sold_price", "Revendu (€)")}
+        ${field(p, "sold_price", "Revendu (€)")}${field(p, "hours_spent", "Temps (h)", "number", "0.25")}
         <label class="pf"><span>Estimation</span><b>${money(p.estimated_resale)}</b></label>
         ${field(p, "notes", "Notes", "text")}
       </div>
@@ -1553,13 +1651,13 @@ $("#p-add").addEventListener("submit", async (e) => {
   } catch (err) { toast("❌ " + err.message); }
 });
 
-// « il y a 5 min », « il y a 2 h », « hier »…
 // Marque recherchée repérée par le filtre (signal « marque recherchée : apple »), sinon "".
 function brandOf(ad) {
   const s = (ad.signals || []).find((x) => x.startsWith("marque recherchée"));
   return s ? s.split(":").slice(1).join(":").trim() : "";
 }
 
+// « il y a 5 min », « il y a 2 h », « hier »…
 function timeAgo(iso) {
   const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
   const sec = Math.max(0, (Date.now() - d.getTime()) / 1000);

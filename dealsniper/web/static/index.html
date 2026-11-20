@@ -170,7 +170,7 @@
     <section id="tab-purchases" class="page" hidden>
       <div class="page-head">
         <h1>Achats</h1>
-        <p>Bénéfice réel de vos achats-reventes.</p>
+        <p>Bénéfice réel et rentabilité horaire (€/h) de vos achats-reventes.</p>
       </div>
       <div id="p-summary" class="kpis"></div>
       <div id="p-tax" class="tax-box"></div>
@@ -180,6 +180,7 @@
         <b>Ajouter un achat à la main</b>
         <input name="title" placeholder="Objet (ex. ThinkPad T480 sans SSD)" required>
         <span class="affix"><input name="buy_price" type="number" min="0" step="0.01" placeholder="Prix payé"><i>€</i></span>
+        <span class="affix"><input name="hours_spent" type="number" min="0" step="0.25" placeholder="Temps"><i>h</i></span>
         <button class="primary">Ajouter</button>
       </form>
     </section>
@@ -334,6 +335,22 @@
                 <div><b>Repartir de la configuration d'exemple</b><small>Récupère les dernières recherches, catégories et
                   réglages recommandés. Votre configuration actuelle est d'abord sauvegardée.</small></div>
                 <button id="reset-config" class="ghost">↺ Réinitialiser</button>
+              </div>
+            </div>
+
+            <div class="panel" style="margin-top:14px">
+              <div class="sec-head"><span class="sec-icon green">💾</span><div><h2>Sauvegarde et restauration</h2>
+                <p>Base (<code>dealsniper.db</code>) et réglages (<code>config.yaml</code>). Le fichier <code>.env</code> n'est jamais inclus.</p></div></div>
+              <div class="setting">
+                <div><b>Télécharger une sauvegarde</b><small>Archive ZIP : annonces, favoris, achats et configuration</small></div>
+                <button id="backup-data" type="button" class="primary">⬇ Sauvegarder (.zip)</button>
+              </div>
+              <div class="setting">
+                <div><b>Restaurer une sauvegarde</b><small>Remplace la base et/ou la configuration (copie de sécurité automatique avant)</small></div>
+                <div>
+                  <input id="restore-file" type="file" accept=".zip" hidden>
+                  <button id="restore-data" type="button" class="ghost">⬆ Restaurer (.zip)</button>
+                </div>
               </div>
             </div>
           </section>

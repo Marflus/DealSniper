@@ -30,10 +30,15 @@ selon le nombre de prix réels trouvés, et 2 à 4 sources courtes au format « 
 Donne aussi « ventes » : jusqu'à 12 ventes ou annonces RÉELLEMENT observées pendant ta recherche, chacune avec
 son mois (date) et son prix. N'invente aucun point : si tu n'as pas trouvé de prix daté, renvoie une liste vide.
 
+Et « message_negociation » : un message court (2-3 phrases), poli, naturel et prêt à copier-coller pour le
+vendeur (leboncoin/Vinted/Facebook), proposant un prix d'environ 90 % de ta revente typique, moins le coût de
+la réparation éventuelle, moins 30 € (ce qui laisse une marge nette à l'acheteur).
+
 Termine TOUJOURS par un unique bloc JSON, sans rien après :
 {"revente_basse": n, "revente_typique": n, "revente_haute": n, "confiance": "faible|moyenne|élevée",
  "sources": ["...", "..."], "resume": "une phrase", "pieges": "pièges éventuels en 8 mots max",
- "ventes": [{"date": "AAAA-MM", "prix": n, "source": "ebay|leboncoin|vinted|backmarket"}]}"""
+ "ventes": [{"date": "AAAA-MM", "prix": n, "source": "ebay|leboncoin|vinted|backmarket"}],
+ "message_negociation": "..."}"""
 
 WEB_SEARCH_USD = 0.01  # recherche web : 10 $ pour 1 000 recherches, facturée en plus des tokens
 WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5,
@@ -61,6 +66,34 @@ def _clamp(value: Any) -> float | None:
         return None
 
 
+def build_negotiation_message(ad: Ad, max_buy: float | None = None) -> str:
+    """Message de négociation poli, prêt à copier-coller, basé sur le prix conseillé."""
+    title = ad.title[:80].strip()
+    panne = str((ad.analysis or {}).get("panne_probable") or "").strip()
+    has_issue = bool(panne and panne.lower() != "aucune")
+    asked = ad.price
+
+    if max_buy is not None and max_buy > 0 and (asked is None or asked > max_buy):
+        target = int(round(max_buy))
+        if has_issue:
+            return (
+                f"Bonjour, votre annonce « {title} » est-elle toujours disponible ? "
+                f"Compte tenu de la réparation à prévoir ({panne.lower()}) et du coût des pièces, "
+                f"seriez-vous ouvert(e) à une offre à {target} € ? Je peux conclure rapidement. Merci !"
+            )
+        return (
+            f"Bonjour, votre annonce « {title} » est-elle toujours disponible ? "
+            f"Au vu des prix constatés sur ce modèle, seriez-vous d'accord pour {target} € ? "
+            f"Je peux procéder à l'achat rapidement. Merci d'avance !"
+        )
+
+    return (
+        f"Bonjour, votre annonce « {title} » est-elle toujours disponible ? "
+        f"Pouvez-vous me confirmer son état exact ainsi que la possibilité d'un envoi ou d'une remise "
+        f"en main propre rapide ? Merci d'avance !"
+    )
+
+
 def sanitize(raw: dict[str, Any], ad: Ad) -> dict[str, Any]:
     """Normalise la réponse et calcule un prix d'achat maximum conseillé (en Python)."""
     low = _clamp(raw.get("revente_basse"))
@@ -71,11 +104,14 @@ def sanitize(raw: dict[str, Any], ad: Ad) -> dict[str, Any]:
         confiance = "moyenne"
     piece = float((ad.analysis or {}).get("cout_piece_estime") or 0)
     sources = [str(s)[:80] for s in (raw.get("sources") or []) if str(s).strip()][:4]
+    limit = max_buy(typical, piece)
+    message = str(raw.get("message_negociation") or "").strip()[:500]
     return {
         "revente_basse": low, "revente_typique": typical, "revente_haute": high,
         "confiance": confiance, "sources": sources, "ventes": _sales(raw.get("ventes")),
         "resume": str(raw.get("resume", ""))[:300], "pieges": str(raw.get("pieges", ""))[:120],
-        "prix_achat_max": max_buy(typical, piece),
+        "prix_achat_max": limit,
+        "message_negociation": message or build_negotiation_message(ad, limit),  # repli sans IA
     }
 
 
