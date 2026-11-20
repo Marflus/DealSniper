@@ -1,0 +1,21 @@
+[project]
+name = "dealsniper"
+version = "3.0.0"
+description = "Veille de bonnes affaires d'électronique d'occasion en France, notées par Claude"
+requires-python = ">=3.11"
+readme = "README.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+# Connecteurs navigateur écrits à part (non maintenus avec le reste du code)
+extend-exclude = ["dealsniper/sites/leboncoin.py", "dealsniper/sites/vinted.py", "dealsniper/sites/facebook.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"dealsniper/analyzer.py" = ["E501"]  # consignes envoyées à l'IA : une règle par ligne

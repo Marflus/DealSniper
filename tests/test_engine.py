@@ -197,6 +197,7 @@ def test_leboncoin_image_formats():
 
 def test_known_ads_get_their_missing_image(tmp_path):
     import asyncio
+
     from dealsniper.db import Database
     from dealsniper.models import Ad
 
@@ -210,3 +211,11 @@ def test_known_ads_get_their_missing_image(tmp_path):
         return image
 
     assert asyncio.run(scenario()) == "https://img.leboncoin.fr/1.jpg"
+
+
+def test_only_sites_disables_the_others():
+    from dealsniper.cli import only_sites
+
+    config = {"sites": {"ebay": {"enabled": True}, "vinted": {"enabled": True}}}
+    only_sites(config, "ebay")
+    assert config["sites"]["ebay"]["enabled"] and not config["sites"]["vinted"]["enabled"]

@@ -1,4 +1,4 @@
-from dealsniper.filters import apply_filters, check
+from dealsniper.filters import check, priority
 from dealsniper.models import Ad
 
 
@@ -19,13 +19,15 @@ def test_budget_exclusions_and_france(config):
     assert check(ad("Xbox Series S", 1, mode="enchere"), config) is None
     assert "oxyde" in check(ad("PS4 Pro", 60, desc="Console OXYDÉE"), config)
     assert check(ad("Recherche PS5 HS", 50), config).startswith("annonce d'acheteur")
-    assert check(ad("ThinkPad T480", 90, desc="Lieu où se trouve l'objet : Allemagne"), config).startswith("hors de France")
+    abroad = ad("ThinkPad T480", 90, desc="Lieu où se trouve l'objet : Allemagne")
+    assert check(abroad, config).startswith("hors de France")
     assert "DOM-TOM" in check(ad("ThinkPad T480", 90, location="Saint-Denis 97400"), config)
 
 
 def test_sorting_prioritizes_signals(config):
-    kept, _ = apply_filters([ad("Dell Latitude 5490", 60), ad("Dell Latitude 5490 batterie HS", 80)], config)
-    assert kept[0].title.endswith("batterie HS")
+    ads = [ad("Dell Latitude 5490", 60), ad("Dell Latitude 5490 batterie HS", 80)]
+    assert all(check(a, config) is None for a in ads)
+    assert sorted(ads, key=priority)[0].title.endswith("batterie HS")
 
 
 def test_sold_or_reserved_ads_are_rejected(config):

@@ -46,19 +46,19 @@ def fetch_image(url: str) -> str | None:
         return None
     with _lock:
         try:
-            with httpx.Client(timeout=8, follow_redirects=True,
-                              headers={"User-Agent": USER_AGENT, "Accept-Language": "fr-FR,fr;q=0.9"}) as client:
-                with client.stream("GET", url) as resp:
-                    if resp.status_code in (401, 403, 429):
-                        _refused[host] = time.time() + REFUSED_PAUSE
-                        return None
-                    if resp.status_code != 200:
-                        return None
-                    head = b""
-                    for chunk in resp.iter_bytes():  # le <head> suffit : on s'arrête à 300 Ko
-                        head += chunk
-                        if len(head) > 300_000 or b"</head>" in head.lower():
-                            break
+            headers = {"User-Agent": USER_AGENT, "Accept-Language": "fr-FR,fr;q=0.9"}
+            with httpx.Client(timeout=8, follow_redirects=True, headers=headers) as client, \
+                    client.stream("GET", url) as resp:
+                if resp.status_code in (401, 403, 429):
+                    _refused[host] = time.time() + REFUSED_PAUSE
+                    return None
+                if resp.status_code != 200:
+                    return None
+                head = b""
+                for chunk in resp.iter_bytes():  # le <head> suffit : on s'arrête à 300 Ko
+                    head += chunk
+                    if len(head) > 300_000 or b"</head>" in head.lower():
+                        break
         except httpx.HTTPError:
             return None
     return og_image(head.decode("utf-8", "replace"), url)

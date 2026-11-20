@@ -83,7 +83,6 @@ class AnalysisResult:
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
-    api_calls: int = 0
 
 
 def _money(value: float | None) -> str:
@@ -195,7 +194,6 @@ class Analyzer:
             params["output_config"] = output_config
 
         response = self.client.messages.create(**params)
-        result.api_calls += 1
         result.input_tokens += response.usage.input_tokens
         result.output_tokens += response.usage.output_tokens
         result.cost_usd += (

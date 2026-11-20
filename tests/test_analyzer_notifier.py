@@ -30,8 +30,8 @@ def ads(n):
 
 
 def item(i, score=8):
-    return {"id": i, "type_affaire": "reparation", "score_rentabilite": score, "facilite_reparation": 9, "facilite_vente": 8,
-            "panne_probable": "SSD absent", "cout_piece_estime": 20, "valeur_revente_estimee": 200,
+    return {"id": i, "type_affaire": "reparation", "score_rentabilite": score, "facilite_reparation": 9,
+            "facilite_vente": 8, "panne_probable": "SSD absent", "cout_piece_estime": 20, "valeur_revente_estimee": 200,
             "marge_nette_estimee": 90}
 
 

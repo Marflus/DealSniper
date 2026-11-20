@@ -35,7 +35,6 @@ from .base import Site
 
 class TemplateSite(Site):
     name = "template"          # ← à changer : doit correspondre au bloc de config.yaml
-    reads_web_pages = True     # site lu en HTML (False pour une API)
 
     def is_configured(self) -> bool:
         return bool(self.cfg.get("list_url"))

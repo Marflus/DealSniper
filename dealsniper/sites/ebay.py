@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..config import env
@@ -65,7 +65,7 @@ def is_available(item: dict[str, Any]) -> bool:
     end = item.get("itemEndDate")
     if end:
         try:
-            return datetime.fromisoformat(end.replace("Z", "+00:00")) > datetime.now(timezone.utc)
+            return datetime.fromisoformat(end.replace("Z", "+00:00")) > datetime.now(UTC)
         except ValueError:
             pass
     return True

@@ -3,14 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields
-from datetime import datetime, timezone
 from typing import Any
 
 from .utils.urls import ad_uid
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 @dataclass
@@ -28,7 +23,6 @@ class Ad:
     seller: dict[str, Any] | None = None  # réputation du vendeur si la source la fournit (eBay)
     category: str | None = None         # renseigné par filters.py
     signals: list[str] = field(default_factory=list)  # mots-clés positifs (filters.py)
-    collected_at: str = field(default_factory=_now_iso)
     analysis: dict[str, Any] | None = None             # renseigné par analyzer.py
 
     @property
@@ -63,11 +57,6 @@ class Ad:
         if self.seller.get("since"):
             parts.append(f"membre depuis {str(self.seller['since'])[:7]}")
         return " · ".join(parts)
-
-    @property
-    def delivery_possible(self) -> bool:
-        """Vrai si l'annonce propose un envoi (frais de port connus)."""
-        return self.shipping is not None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Ad:

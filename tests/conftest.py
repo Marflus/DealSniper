@@ -15,7 +15,8 @@ def isolated_env(tmp_path, monkeypatch):
     """Base SQLite temporaire, aucun canal de notification réel, pas d'attente."""
     monkeypatch.setenv("DEALSNIPER_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("DEALSNIPER_CONFIG", str(TEST_CONFIG))
-    for var in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "DISCORD_WEBHOOK_URL", "EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET"):
+    secrets = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "DISCORD_WEBHOOK_URL", "EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET")
+    for var in secrets:
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr("dealsniper.notifier.time.sleep", lambda s: None)
 

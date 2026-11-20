@@ -7,10 +7,11 @@ Par passage : liste → nouvelles annonces → filtre → fiche détaillée → 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import random
 import signal
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from . import analyzer, filters, notifier
@@ -39,10 +40,13 @@ class Engine:
 
     async def sleep(self, seconds: float) -> None:
         """Pause interrompue proprement par un arrêt (Ctrl+C, systemd)."""
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(self.stopping.wait(), timeout=max(0.0, seconds))
-        except asyncio.TimeoutError:
-            pass
+
+    async def budget_left(self) -> float | None:
+        """Dollars encore disponibles aujourd'hui pour l'IA (None = pas de plafond)."""
+        cap = self.config["analyzer"]["max_daily_cost_usd"]
+        return None if cap is None else max(0.0, float(cap) - await self.db.cost_today())
 
     async def process(self, site: Site) -> dict[str, int]:
         """Un passage complet pour un site. Renvoie des compteurs pour les logs."""
@@ -64,6 +68,11 @@ class Engine:
         # Annonces déjà vues mais enregistrées sans photo : on complète avec celle de la liste (aucune requête).
         await self.db.fill_images({ad.uid: ad.image for ad in listed if ad.image and ad.uid not in new_uids})
         new_ads = list({ad.uid: ad for ad in listed if ad.uid in new_uids}.values())
+        if await self.budget_left() == 0:
+            # Budget IA du jour épuisé : les nouvelles annonces restent « non vues » et seront
+            # analysées demain ; inutile de lire leurs fiches maintenant.
+            show(site.label, f"{len(listed)} annonces · budget IA du jour atteint")
+            return {"listées": len(listed), "nouvelles": len(new_ads), "retenues": 0, "analysées": 0, "notifiées": 0}
 
         candidates = []
         for i, ad in enumerate(new_ads, 1):
@@ -94,9 +103,9 @@ class Engine:
             return stats
 
         show(site.label, f"{len(listed)} annonces · analyse IA de {len(candidates)}…")
+        candidates.sort(key=filters.priority)  # les plus prometteuses d'abord si le budget s'épuise
         async with self._ai_lock:
-            cap = self.config["analyzer"]["max_daily_cost_usd"]
-            budget = None if cap is None else max(0.0, cap - await self.db.cost_today())
+            budget = await self.budget_left()
             result = await asyncio.to_thread(analyzer.analyze, candidates, self.config, budget)
             await self.db.add_cost(result.cost_usd)
             self.progress.add_cost(site.label, result.cost_usd)
@@ -135,7 +144,7 @@ class Engine:
         while not self.stopping.is_set():
             await self.process_safely(site)
             paused = await self.db.paused_until(site.name)
-            wait = (paused - datetime.now(timezone.utc)).total_seconds() if paused else random.uniform(*site.interval)
+            wait = (paused - datetime.now(UTC)).total_seconds() if paused else random.uniform(*site.interval)
             next_run = (datetime.now() + timedelta(seconds=wait)).strftime("%H:%M")
             self.progress.append(site.label, f" · prochain passage à {next_run}")
             await self.sleep(wait)
@@ -171,10 +180,8 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
         try:
             if forever:
                 for sig in (signal.SIGINT, signal.SIGTERM):
-                    try:
+                    with contextlib.suppress(NotImplementedError):  # Windows
                         asyncio.get_running_loop().add_signal_handler(sig, engine.stopping.set)
-                    except NotImplementedError:  # Windows
-                        pass
                 log.info("Surveillance continue : %s", ", ".join(s.name for s in sites))
                 await asyncio.gather(*(engine.watch_site(s) for s in sites))
             else:

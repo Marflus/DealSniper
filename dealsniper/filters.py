@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import re
-from collections import Counter
 from typing import Any
 
 from .models import Ad
@@ -105,27 +104,6 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
     return None
 
 
-def apply_filters(ads: list[Ad], config: dict[str, Any]) -> tuple[list[Ad], list[tuple[Ad, str]]]:
-    """Sépare annonces retenues et rejetées (avec raison).
-
-    Les retenues sont triées (signaux d'abord, puis prix croissant) pour que
-    un éventuel `max_ads_per_run` garde les plus prometteuses.
-    """
-    kept: list[Ad] = []
-    rejected: list[tuple[Ad, str]] = []
-    for ad in ads:
-        try:
-            reason = check(ad, config)
-        except Exception as exc:  # une annonce bizarre ne doit pas arrêter le lot
-            reason = f"erreur de filtrage ({exc})"
-        if reason:
-            rejected.append((ad, reason))
-        else:
-            kept.append(ad)
-
-    kept.sort(key=lambda a: (-len(a.signals), a.total_price if a.total_price is not None else 1e9))
-    stats = Counter(reason.split(" (")[0].split(" :")[0] for _, reason in rejected)
-    log.info("Filtre : %d retenue(s), %d rejetée(s) %s", len(kept), len(rejected), dict(stats) if stats else "")
-    for ad, reason in rejected:
-        log.debug("  ✗ %-50.50s → %s", ad.title, reason)
-    return kept, rejected
+def priority(ad: Ad) -> tuple[int, float]:
+    """Ordre d'analyse : signaux d'abord, puis prix croissant (utile si le budget IA s'épuise en cours de lot)."""
+    return -len(ad.signals), ad.total_price if ad.total_price is not None else 1e9

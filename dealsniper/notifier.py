@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 
 TIMEOUT = 15
 MESSAGE_LIMIT = 3500  # Telegram : 4096 caractères max par message
+DISCORD_LIMIT = 1900  # Discord : 2000
 MAX_ATTEMPTS = 3
 
 
@@ -85,11 +86,11 @@ def _digest_line(ad: Ad, html_mode: bool) -> str:
     return f"• [{s['title'][:70]}]({s['url']})\n   Achat {s['buy']} · Revente {s['resale']} · {s['fault']}"
 
 
-def _chunks(header: str, lines: list[str]) -> list[str]:
+def _chunks(header: str, lines: list[str], limit: int = MESSAGE_LIMIT) -> list[str]:
     """Découpe un récapitulatif en messages de taille acceptable."""
     messages, current = [], header
     for line in lines:
-        if len(current) + len(line) + 2 > MESSAGE_LIMIT:
+        if len(current) + len(line) + 2 > limit:
             messages.append(current)
             current = header + " (suite)"
         current += "\n\n" + line
@@ -179,8 +180,8 @@ class Notifier:
                 ok |= self._telegram(message)
                 time.sleep(0.5)
         if "discord" in self.channels:
-            for message in _chunks(f"**{header}**", [_digest_line(a, False) for a in ads]):
-                ok |= self._discord(content=message[:2000])
+            for message in _chunks(f"**{header}**", [_digest_line(a, False) for a in ads], DISCORD_LIMIT):
+                ok |= self._discord(content=message)
         return ok
 
     def send_text(self, text: str) -> bool:
@@ -217,9 +218,7 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
         ease = ad.analysis.get("facilite_reparation")  # ne concerne que les objets à réparer
         if min_ease is not None and ad.deal_type == "reparation" and (ease or 0) < int(min_ease):
             return False
-        if min_sale is not None and (ad.analysis.get("facilite_vente") or 0) < int(min_sale):
-            return False
-        return True
+        return min_sale is None or (ad.analysis.get("facilite_vente") or 0) >= int(min_sale)
 
     analyzed = [a for a in ads if wanted(a)]
     good = _rank([a for a in analyzed if a.score >= min_score])

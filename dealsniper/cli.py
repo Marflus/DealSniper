@@ -75,10 +75,19 @@ def cmd_reset(args, config) -> int:
     return 0
 
 
+def only_sites(config: dict, names: str) -> None:
+    """Désactive les sites absents de la liste (GitHub Actions : eBay seul, les autres demandent un navigateur)."""
+    wanted = {n.strip().lower() for n in names.split(",") if n.strip()}
+    for name, site in config["sites"].items():
+        if name.lower() not in wanted:
+            site["enabled"] = False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="dealsniper", description="Veille de bonnes affaires électroniques")
     parser.add_argument("-c", "--config", help="chemin de config.yaml")
     parser.add_argument("-v", "--verbose", action="store_true", help="logs détaillés")
+    parser.add_argument("--sites", help="limite aux sites listés, ex. --sites ebay ou --sites ebay,vinted")
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("run", help="un passage de chaque site").set_defaults(func=cmd_run)
     sub.add_parser("watch", help="surveillance continue").set_defaults(func=cmd_watch)
@@ -111,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"config.yaml invalide{where} : {getattr(exc, 'problem', None) or exc}", file=sys.stderr)
             print("Vérifiez l'indentation autour de cette ligne (espaces, pas de tabulations).", file=sys.stderr)
             return 2
+        if args.sites:
+            only_sites(config, args.sites)
         return args.func(args, config)
     except KeyboardInterrupt:
         return 130

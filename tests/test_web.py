@@ -92,7 +92,8 @@ def test_og_image_parsing():
 
     html = '<head><meta property="og:title" content="x"><meta content="/img/1.jpg" property="og:image"></head>'
     assert og_image(html, "https://www.vinted.fr/items/1") == "https://www.vinted.fr/img/1.jpg"
-    assert og_image('<meta property="og:image" content="https://static.xx.fbcdn.net/rsrc.php/logo.png">', "https://f.x") is None
+    facebook_logo = '<meta property="og:image" content="https://static.xx.fbcdn.net/rsrc.php/logo.png">'
+    assert og_image(facebook_logo, "https://f.x") is None
 
 
 def test_image_endpoint_fetches_once(client, monkeypatch):

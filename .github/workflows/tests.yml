@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    paths: ["dealsniper/**", "tests/**", "config.example.yaml", "requirements.txt"]
+    paths: ["dealsniper/**", "tests/**", "config.example.yaml", "requirements.txt", "pyproject.toml"]
   pull_request:
 
 jobs:
@@ -14,5 +14,6 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r requirements.txt pytest
+      - run: pip install -r requirements.txt pytest ruff
+      - run: ruff check dealsniper tests
       - run: python -m pytest -q
