@@ -269,11 +269,18 @@ setInterval(() => {  // chrono et « buffering » animés entre deux rafraîchis
 const nearParam = () => ($("#f-near").value.trim() ? `&near=${encodeURIComponent($("#f-near").value.trim())}` : "");
 
 // Champs de la recherche ponctuelle reliés aux filtres (remise, zone) : une seule valeur, deux endroits.
+function syncMirrors() {  // après une restauration ou une réinitialisation des filtres (sans événement « change »)
+  document.querySelectorAll("[data-mirror]").forEach((el) => { el.value = $("#" + el.dataset.mirror).value; });
+}
 document.querySelectorAll("[data-mirror]").forEach((el) => {
   const target = $("#" + el.dataset.mirror);
   el.value = target.value;
-  el.addEventListener("change", () => { target.value = el.value; target.dispatchEvent(new Event("change", { bubbles: true })); });
-  target.addEventListener("change", () => { el.value = target.value; });
+  el.addEventListener("change", () => {
+    target.value = el.value;
+    // Le filtre écoute « input » (champ texte) ou « change » (liste) : on envoie l'événement qu'il attend.
+    target.dispatchEvent(new Event(target.tagName === "INPUT" ? "input" : "change", { bubbles: true }));
+  });
+  ["input", "change"].forEach((type) => target.addEventListener(type, () => { el.value = target.value; }));
 });
 
 // ---------- Annonces ----------
@@ -848,10 +855,15 @@ $("#pager").addEventListener("click", (e) => {
   $("#summary").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
+// Période et zone changent ce que renvoie le serveur (annonces, distances) : rechargement ;
+// la zone est un champ texte, donc on attend la fin de la saisie. Le reste se filtre sur place.
+let nearTimer = null;
 FILTER_IDS.forEach((id) =>
   $("#" + id).addEventListener($("#" + id).tagName === "INPUT" ? "input" : "change", () => {
     saveFilters();
-    if (id === "f-days") loadAds(); else renderAds();
+    if (id === "f-days") loadAds();
+    else if (id === "f-near") { clearTimeout(nearTimer); nearTimer = setTimeout(loadAds, 600); }
+    else renderAds();
   })
 );
 document.querySelectorAll("#f-status button").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.value)));
@@ -859,6 +871,7 @@ $("#reset-filters").addEventListener("click", () => {
   FILTER_IDS.forEach((id) => { const el = $("#" + id); el.value = el.tagName === "SELECT" ? el.options[0].value : ""; });
   $("#f-days").value = "7";
   selectedSites.clear();
+  syncMirrors();
   setStatus("analyzed");
 });
 
@@ -1729,6 +1742,7 @@ async function loadStatus() {
 }
 
 restoreFilters();
+syncMirrors();
 countActiveFilters();
 loadStatus();
 api("/api/preferences").then((d) => { preferences = d.categories || {}; renderAds(true); }).catch(() => {});
