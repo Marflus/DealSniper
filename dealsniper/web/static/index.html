@@ -224,6 +224,12 @@
                 <div><b>Limite quotidienne</b><small>Au-delà, les annonces attendent le lendemain. Vide = aucune limite.</small></div>
                 <span class="affix"><input id="a-cap" type="number" step="0.05" min="0" placeholder="aucune"><i>$</i></span>
               </div>
+              <div class="setting">
+                <div><b>Max d'annonces analysées par passage</b><small>Par site. Les plus prometteuses d'abord ;
+                  le reste est analysé au passage suivant. Vide = sans limite.</small></div>
+                <input id="a-maxads" type="number" min="1" class="num" placeholder="∞">
+              </div>
+              <p id="a-estimate" class="muted small" style="margin:-4px 0 0"></p>
               <div class="label">Modèle de notation</div>
               <div class="tiles two" id="a-model">
                 <label class="tile"><input type="radio" name="a-model" value="claude-haiku-5-5"><span>🪶</span><b>Haiku 5.5</b><small>recommandé · ≈ 0,0001 $ par annonce</small></label>

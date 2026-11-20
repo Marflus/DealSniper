@@ -115,7 +115,8 @@ def read_settings() -> dict[str, Any]:
         "location": _plain(doc.get("location") or {}),
         "notifier": _plain(doc.get("notifier") or {}),
         "analyzer": {k: _plain((doc.get("analyzer") or {}).get(k))
-                     for k in ("enabled", "model", "max_daily_cost_usd", "batch_size", "max_description_chars")},
+                     for k in ("enabled", "model", "max_daily_cost_usd", "max_ads_per_run",
+                               "batch_size", "max_description_chars")},
         "storage": _plain(doc.get("storage") or {}),
         "network": _plain(doc.get("network") or {}),
     }
@@ -217,7 +218,8 @@ def write_settings(new: dict[str, Any]) -> None:
     if "max_daily_cost_usd" in analyzer:
         cap = analyzer["max_daily_cost_usd"]
         target["max_daily_cost_usd"] = None if cap in (None, "") else float(str(cap).replace(",", "."))
-    _set_numbers(doc, "analyzer", analyzer, ("batch_size", "max_description_chars"))
+    _set_numbers(doc, "analyzer", analyzer, ("batch_size", "max_description_chars", "max_ads_per_run"),
+                 nullable=("max_ads_per_run",))
     _set_numbers(doc, "storage", new.get("storage") or {}, ("seen_retention_days",))
     _set_numbers(doc, "network", new.get("network") or {}, ("access_denied_pause_hours",))
 

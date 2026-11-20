@@ -996,6 +996,8 @@ async function loadSettings() {
   document.querySelector("#set-budget .panel").classList.toggle("ai-off", a.enabled === false);
   $("#a-batch").value = a.batch_size ?? 20;
   $("#a-desc").value = a.max_description_chars ?? 400;
+  $("#a-maxads").value = a.max_ads_per_run ?? "";
+  updateCostEstimate();
   $("#s-retention").value = (settings.storage || {}).seen_retention_days ?? 90;
   $("#s-pause").value = (settings.network || {}).access_denied_pause_hours ?? 6;
   syncRanges();
@@ -1068,7 +1070,8 @@ function collectSettings() {
                 deal_types: dealTypes, min_margin: $("#n-margin").value, min_ease: $("#n-ease").value,
                 min_sale: $("#n-sale").value },
     analyzer: { enabled: $("#a-enabled").checked, model: document.querySelector("[name=a-model]:checked")?.value,
-                max_daily_cost_usd: $("#a-cap").value, batch_size: $("#a-batch").value, max_description_chars: $("#a-desc").value },
+                max_daily_cost_usd: $("#a-cap").value, max_ads_per_run: $("#a-maxads").value,
+                batch_size: $("#a-batch").value, max_description_chars: $("#a-desc").value },
     storage: { seen_retention_days: $("#s-retention").value },
     network: { access_denied_pause_hours: $("#s-pause").value },
   };
@@ -1084,6 +1087,23 @@ $("#save").addEventListener("click", async () => {
     $("#save-status").textContent = "❌ " + e.message;
   }
 });
+// Estimation du coût IA par passage selon le modèle et le max d'annonces.
+const PER_AD_USD = { "claude-haiku-5-5": 0.0001, "claude-haiku-4-5": 0.001 };
+function updateCostEstimate() {
+  const model = document.querySelector("[name=a-model]:checked")?.value || "claude-haiku-5-5";
+  const per = PER_AD_USD[model] ?? 0.0005;
+  const max = Number($("#a-maxads").value);
+  const perAd = `≈ ${per.toLocaleString("fr-FR", { minimumFractionDigits: 4 })} $ / annonce`;
+  if (max > 0) {
+    const run = (max * per).toLocaleString("fr-FR", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    $("#a-estimate").textContent = `Estimation : ${perAd} → jusqu'à ${run} $ par passage et par site (${max} annonces max).`;
+  } else {
+    $("#a-estimate").textContent = `Estimation : ${perAd}. Le plafond quotidien reste votre vraie sécurité.`;
+  }
+}
+$("#a-maxads").addEventListener("input", updateCostEstimate);
+document.querySelectorAll("[name=a-model]").forEach((r) => r.addEventListener("change", updateCostEstimate));
+
 $("#a-enabled").addEventListener("change", () =>
   document.querySelector("#set-budget .panel").classList.toggle("ai-off", !$("#a-enabled").checked));
 

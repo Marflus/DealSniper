@@ -185,3 +185,11 @@ def test_site_health_records_and_clears_error(tmp_path):
     before, after = asyncio.run(scenario())
     assert before["ebay"]["last_count"] == 42 and before["vinted"]["last_error"] == "DataDome"
     assert after["vinted"]["last_error"] is None and after["vinted"]["last_count"] == 25
+
+
+def test_max_ads_per_run_saved(client):
+    c, path = client
+    settings = c.get("/api/settings").get_json()
+    settings["analyzer"]["max_ads_per_run"] = "25"
+    assert c.put("/api/settings", json=settings).get_json() == {"ok": True}
+    assert load_config(path)["analyzer"]["max_ads_per_run"] == 25

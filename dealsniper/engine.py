@@ -142,7 +142,12 @@ class Engine:
         if not candidates:
             return stats
 
-        candidates.sort(key=filters.priority)  # les plus prometteuses d'abord si le budget s'épuise
+        candidates.sort(key=filters.priority)  # les plus prometteuses d'abord
+        max_ads = self.config["analyzer"].get("max_ads_per_run")
+        if max_ads and len(candidates) > int(max_ads):
+            # On garde les plus prometteuses ; le reste n'est pas « vu » et sera analysé au prochain passage.
+            candidates = candidates[: int(max_ads)]
+            stats["retenues"] = len(candidates)
         if not self.config["analyzer"].get("enabled", True):
             return await self._process_without_ai(site, candidates, prints, stats)
 

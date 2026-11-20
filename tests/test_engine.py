@@ -417,3 +417,41 @@ def test_price_drop_detection(tmp_path):
     big, small, stored = asyncio.run(scenario())
     assert big and big[0]["pct"] == 25 and big[0]["to"] == 90
     assert small == [] and stored["price"] == 90 and stored["price_drop"]["from"] == 120
+
+
+def test_max_ads_per_run_caps_candidates(monkeypatch, config):
+    import asyncio
+
+    from dealsniper.db import Database
+    from dealsniper.engine import Engine
+    from dealsniper.models import Ad
+
+    cfg = {**config, "analyzer": {**config["analyzer"], "max_ads_per_run": 2}}
+
+    class FakeSite:
+        name, label, cfg = "ebay", "eBay", {"searches": [], "fetch_details": False}
+        on_progress = None
+
+        def report(self, *a): pass
+
+        async def list_recent(self, http):
+            return [Ad(title=f"ThinkPad {i}", url=f"https://www.ebay.fr/itm/{i}", source="ebay", price=50,
+                       category="PC portables pros") for i in range(6)]
+
+        async def fetch_detail(self, http, ad): return ad
+
+    sent = []
+
+    async def run():
+        import tempfile
+        db = Database(__import__("pathlib").Path(tempfile.mkdtemp()) / "cap.db")
+        engine = Engine(cfg, db, http=None)
+        monkeypatch.setattr("dealsniper.analyzer.analyze", lambda ads, c, b=None: sent.append(len(ads)) or __import__(
+            "dealsniper.analyzer", fromlist=["AnalysisResult"]).AnalysisResult(analyzed=list(ads)))
+        monkeypatch.setattr("dealsniper.notifier.notify", lambda ads, c: [])
+        stats = await engine.process(FakeSite())
+        db.close()
+        return stats
+
+    stats = asyncio.run(run())
+    assert sent == [2] and stats["retenues"] == 2  # seulement 2 envoyées à l'IA
