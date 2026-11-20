@@ -174,7 +174,8 @@ def make_realistic(analysis: dict[str, Any], ad: Ad, haircut: float = 0.9) -> di
         score = min(score, 4)
     elif margin < 40:
         score = min(score, 6)
-    return {**analysis, "valeur_revente_estimee": resale, "marge_nette_estimee": margin, "score_rentabilite": score}
+    return {**analysis, "valeur_revente_estimee": resale, "marge_nette_estimee": margin, "score_rentabilite": score,
+            "realiste": True}  # marque : garde-fou déjà appliqué
 
 
 class Analyzer:

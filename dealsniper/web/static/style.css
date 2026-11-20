@@ -369,3 +369,11 @@ dialog.details h3 { margin: 0 34px 14px 0; font-size: 17px; line-height: 1.35; }
 .d-questions ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
 .d-open { display: block; margin-top: 16px; text-align: center; text-decoration: none; padding: 10px; border-radius: 10px;
   background: var(--accent); color: #fff; font-weight: 600; }
+
+/* Téléphone : filtres repliables */
+.mobile-only { display: none; }
+@media (max-width: 700px) {
+  .mobile-only { display: inline-flex; }
+  .toolbar-row:first-child .search { flex: 1 1 0; min-width: 0; }
+  .toolbar:not(.open) .toolbar-row:not(:first-child), .toolbar:not(.open) #f-status, .toolbar:not(.open) #f-sort { display: none; }
+}

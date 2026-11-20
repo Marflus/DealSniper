@@ -214,6 +214,30 @@ def write_settings(new: dict[str, Any]) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _realistic(items: list[dict]) -> None:
+    """Annonces notées avant le garde-fou de prudence : même rabot et même calcul de marge, à l'affichage."""
+    from ..analyzer import make_realistic, sanitize_analysis
+    from ..models import Ad
+
+    try:
+        haircut = float(load_config(config_path())["analyzer"].get("resale_haircut", 0.9))
+    except Exception:
+        haircut = 0.9
+    for item in items:
+        analysis = item.get("analysis")
+        if not analysis or analysis.get("realiste") or not analysis.get("valeur_revente_estimee"):
+            continue
+        clean = make_realistic({**sanitize_analysis(analysis), **{k: v for k, v in analysis.items()
+                                                                 if k in ("facilite_reparation", "facilite_vente")}},
+                               Ad.from_dict(item), haircut)
+        if "facilite_reparation" not in analysis:  # notes absentes des anciennes analyses : on ne les invente pas
+            clean.pop("facilite_reparation")
+        if "facilite_vente" not in analysis:
+            clean.pop("facilite_vente")
+        item["analysis"] = clean
+        item["score"] = clean["score_rentabilite"]
+
+
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
     state = {"running": False, "error": None}
@@ -237,6 +261,7 @@ def create_app() -> Flask:
             status = request.args.get("status") or None
             days = int(request.args.get("days", 30))
             items = db.search(status=status if status in ("analyzed", "rejected") else None, days=days)
+            _realistic(items)
             cost = asyncio.run(db.cost_today())
         finally:
             db.close()

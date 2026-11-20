@@ -22,7 +22,8 @@ def client(tmp_path, monkeypatch, config):
     async def seed():
         db = Database(data_dir() / "dealsniper.db")
         good = Ad(title="ThinkPad T480 sans SSD", url="https://www.ebay.fr/itm/100000000001", source="ebay", price=90,
-                  category="PC portables pros", analysis={"score_rentabilite": 8, "marge_nette_estimee": 80})
+                  category="PC portables pros", analysis={"score_rentabilite": 8, "marge_nette_estimee": 80,
+                                                   "valeur_revente_estimee": 200, "cout_piece_estime": 20})
         bad = Ad(title="Canapé", url="https://www.ebay.fr/itm/100000000002", source="ebay", price=50)
         await db.remember(good, "analyzed", notified=True)
         await db.remember(bad, "rejected", reason="hors catégorie")
@@ -104,3 +105,12 @@ def test_image_endpoint_fetches_once(client, monkeypatch):
     assert c.get(f"/api/image/{uid}").get_json() == {"image": "https://img.x/1.jpg"}
     assert c.get(f"/api/image/{uid}").get_json() == {"image": "https://img.x/1.jpg"}
     assert len(calls) == 1  # mémorisé en base
+
+
+def test_old_analyses_get_the_realism_guard(client):
+    c, _ = client
+    ad = next(a for a in c.get("/api/ads").get_json()["ads"] if a["title"] == "ThinkPad T480 sans SSD")
+    a = ad["analysis"]
+    assert a["realiste"] and "facilite_vente" not in a  # ancienne analyse : pas de note inventée
+    assert a["valeur_revente_estimee"] == 180  # 200 € rabotés de 10 %
+    assert a["marge_nette_estimee"] == 180 - 90 - 20 - 18  # revente - prix - pièce - 10 % de frais

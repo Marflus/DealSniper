@@ -76,7 +76,20 @@ function saveFilters() {
 function restoreFilters() {
   try {
     const values = JSON.parse(localStorage.getItem("dealsniper-filters") || "{}");
-    FILTER_IDS.forEach((id) => { if (values[id] != null && values[id] !== "0") $("#" + id).value = values[id]; });
+    // Téléphone : filtres repliés derrière un bouton qui indique combien sont actifs.
+function countActiveFilters() {
+  const active = FILTER_IDS.filter((id) => id !== "f-sort" && id !== "f-days" && id !== "f-text" && $("#" + id).value).length
+    + (selectedSites.size ? 1 : 0);
+  $("#toggle-filters").textContent = active ? `⚙ Filtres (${active})` : "⚙ Filtres";
+}
+$("#toggle-filters").addEventListener("click", () => {
+  const open = $(".toolbar").classList.toggle("open");
+  $("#toggle-filters").setAttribute("aria-expanded", open);
+});
+document.querySelector(".toolbar").addEventListener("change", countActiveFilters);
+document.querySelector(".toolbar").addEventListener("click", () => setTimeout(countActiveFilters));
+
+FILTER_IDS.forEach((id) => { if (values[id] != null && values[id] !== "0") $("#" + id).value = values[id]; });
     if (values.status != null) setStatus(values.status, false);
     selectedSites = new Set(values.sites || []);
   } catch (e) { /* idem */ }
@@ -854,6 +867,7 @@ async function loadStatus() {
 }
 
 restoreFilters();
+countActiveFilters();
 loadStatus();
 try { showTab(localStorage.getItem("dealsniper-tab") || "ads"); } catch (e) { showTab("ads"); }
 loadAds();
