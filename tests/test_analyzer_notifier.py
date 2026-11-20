@@ -94,7 +94,7 @@ def test_sanitize_ease_score_and_schema():
 
 def test_notify_min_margin_and_ease(monkeypatch, config):
     monkeypatch.setattr("dealsniper.notifier.Notifier.send_ad", lambda self, ad: True)
-    monkeypatch.setattr("dealsniper.notifier.time.sleep", lambda s: None)
+    monkeypatch.setattr("dealsniper.notifier._pause", lambda s: None)
     cfg = {**config, "notifier": {**config["notifier"], "watch_score": None, "min_margin": 50, "min_ease": 7}}
     small, hard, direct = deal(8), deal(8), deal(8, "revente_directe")
     small.analysis["marge_nette_estimee"] = 20

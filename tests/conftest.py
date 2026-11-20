@@ -24,7 +24,7 @@ def isolated_env(tmp_path, monkeypatch):
     secrets = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "DISCORD_WEBHOOK_URL", "EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET")
     for var in secrets:
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr("dealsniper.notifier.time.sleep", lambda s: None)
+    monkeypatch.setattr("dealsniper.notifier._pause", lambda s: None)
 
 
 @pytest.fixture

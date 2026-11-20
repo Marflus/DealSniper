@@ -213,7 +213,7 @@ def test_search_now_applies_options(client, monkeypatch):
     assert c.post("/api/search-now", json=body).get_json()["ok"]
     start = time.time()
     while not seen and time.time() - start < 10:
-        __import__("threading").Event().wait(0.05)  # time.sleep est neutralisé dans les tests
+        time.sleep(0.05)
     config = seen[0]
     assert config["searches"] == [{"query": "raspberry pi", "condition": "used", "max_price": 80, "min_price": 20}]
     assert config["filters"]["min_price"] == 20 and "boitier seul" in config["filters"]["global_exclude_keywords"]

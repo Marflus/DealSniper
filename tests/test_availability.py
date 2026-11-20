@@ -1,5 +1,4 @@
 import asyncio
-import threading
 import time
 
 import httpx
@@ -57,9 +56,9 @@ def test_availability_saved_and_endpoint(client, monkeypatch, tmp_path):
     monkeypatch.setattr("dealsniper.availability.check_ads", fake_check)
     assert c.post("/api/check", json={"uids": []}).status_code == 400
     assert c.post("/api/check", json={"uids": ["ebay:100000000001"]}).get_json()["ok"]
-    deadline = time.monotonic() + 10  # time.sleep est neutralisé dans les tests : attente par horloge
+    deadline = time.monotonic() + 10
     while (state := c.get("/api/check").get_json())["running"] and time.monotonic() < deadline:
-        threading.Event().wait(0.05)
+        time.sleep(0.05)
     assert len(state["report"]["gone"]) == 1, state
     gone = [a for a in c.get("/api/ads").get_json()["ads"] if a["uid"] == "ebay:100000000001"]
     assert gone and gone[0]["gone"] is True

@@ -23,6 +23,11 @@ DISCORD_LIMIT = 1900  # Discord : 2000
 MAX_ATTEMPTS = 3
 
 
+def _pause(seconds: float) -> None:
+    """Attente entre deux envois (point unique, remplacé par un no-op dans les tests)."""
+    time.sleep(seconds)
+
+
 def _eur(value: float | None) -> str:
     if value is None:
         return "?"
@@ -107,7 +112,7 @@ def _post(url: str, payload: dict[str, Any], channel: str) -> bool:
             resp = requests.post(url, json=payload, timeout=TIMEOUT)
         except requests.RequestException as exc:
             log.warning("%s : erreur réseau (%s), tentative %d/%d", channel, exc, attempt, MAX_ATTEMPTS)
-            time.sleep(2 * attempt)
+            _pause(2 * attempt)
             continue
         if resp.status_code == 429:
             try:
@@ -115,12 +120,12 @@ def _post(url: str, payload: dict[str, Any], channel: str) -> bool:
                 wait = float(body.get("retry_after") or body.get("parameters", {}).get("retry_after") or 2)
             except ValueError:
                 wait = 2.0
-            time.sleep(min(wait, 30))
+            _pause(min(wait, 30))
             continue
         if resp.ok:
             return True
         if resp.status_code >= 500:
-            time.sleep(2 * attempt)
+            _pause(2 * attempt)
             continue
         # Le token n'apparaît jamais dans ce message (seul le code et la réponse du service).
         log.error("%s : échec HTTP %s — %s", channel, resp.status_code, resp.text[:200])
@@ -180,7 +185,7 @@ class Notifier:
         if "telegram" in self.channels:
             for message in _chunks(f"<b>{html.escape(header)}</b>", html_lines):
                 ok |= self._telegram(message)
-                time.sleep(0.5)  # Telegram : ~1 message/seconde par conversation
+                _pause(0.5)  # Telegram : ~1 message/seconde par conversation
         if "discord" in self.channels:
             for message in _chunks(f"**{header}**", text_lines, DISCORD_LIMIT):
                 ok |= self._discord(content=message)
@@ -259,7 +264,7 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
         try:
             if notifier.send_ad(ad):
                 sent.append(ad)
-            time.sleep(0.5)  # Telegram : ~1 message/seconde par conversation
+            _pause(0.5)  # Telegram : ~1 message/seconde par conversation
         except Exception as exc:
             log.error("Notification impossible pour « %s » : %s", ad.title[:50], exc)
     log.info("Notifications : %d immédiate(s), %d en récap, %d « à vérifier »", len(pepites), len(grouped), len(watch))

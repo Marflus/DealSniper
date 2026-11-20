@@ -356,7 +356,7 @@ def test_watched_ad_is_always_notified(monkeypatch, config):
     from dealsniper.notifier import notify
 
     monkeypatch.setattr("dealsniper.notifier.Notifier.send_ad", lambda self, ad: True)
-    monkeypatch.setattr("dealsniper.notifier.time.sleep", lambda s: None)
+    monkeypatch.setattr("dealsniper.notifier._pause", lambda s: None)
     cfg = {**config, "notifier": {**config["notifier"], "min_score": 9, "watch_score": None}}
     low = Ad(title="ThinkPad T480", url="https://e.x/1", source="t", price=90,
              analysis={"score_rentabilite": 3, "type_affaire": "reparation"})

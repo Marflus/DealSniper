@@ -28,6 +28,7 @@ from ..db import Database
 from ..geo import Geo
 from ..market import category_brands, model_key
 from ..utils.text import normalize
+from .security import protect, ui_token
 
 STATIC_DIR = Path(__file__).parent / "static"
 LIST_FIELDS = ("keywords", "exclude_keywords", "include_keywords")
@@ -270,6 +271,12 @@ def _realistic(items: list[dict]) -> None:
         item["score"] = clean["score_rentabilite"]
 
 
+def _json_body() -> dict[str, Any]:
+    """Corps JSON de la requête ; {} si absent, invalide, ou pas un objet (jamais d'exception)."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
 def _health(row: dict) -> dict:
     """Résumé de santé d'un site pour /api/status (dernière récolte, nombre, dernière erreur)."""
     return {"last_ok": row.get("last_ok"), "last_count": row.get("last_count"), "last_error": row.get("last_error")}
@@ -277,6 +284,7 @@ def _health(row: dict) -> dict:
 
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
+    protect(app, ui_token(data_dir()))  # anti-CSRF, anti-rebinding DNS, jeton pour le réseau local
     state = {"running": False, "error": None}
     lock = threading.Lock()
 
@@ -346,7 +354,7 @@ def create_app() -> Flask:
     @app.post("/api/ads/<uid>/mark")
     def mark_ad(uid: str):
         """Favori ou masquée : {"favorite": true} / {"hidden": true}."""
-        body = request.get_json(force=True) or {}
+        body = _json_body()
         with database() as db:
             found = db.mark(uid, favorite=body.get("favorite"), hidden=body.get("hidden"))
         return jsonify(ok=found), 200 if found else 404
@@ -414,7 +422,7 @@ def create_app() -> Flask:
     @app.post("/api/purchases")
     def add_purchase():
         """Depuis une annonce (« uid ») ou à la main (« title », « buy_price »)."""
-        body = request.get_json(force=True) or {}
+        body = _json_body()
         with database() as db:
             values: dict[str, Any] = {"title": str(body.get("title") or "").strip(),
                                       "buy_price": _number(body.get("buy_price"))}
@@ -435,7 +443,7 @@ def create_app() -> Flask:
 
     @app.put("/api/purchases/<int:purchase_id>")
     def update_purchase(purchase_id: int):
-        body = request.get_json(force=True) or {}
+        body = _json_body()
         values: dict[str, Any] = {}
         for key in ("buy_price", "repair_cost", "sold_price", "estimated_resale"):
             if key in body:
@@ -503,7 +511,7 @@ def create_app() -> Flask:
         from ..config import write_secrets
         from ..notifier import Notifier
 
-        updated = write_secrets(request.get_json(force=True) or {})
+        updated = write_secrets(_json_body())
         return jsonify(ok=True, updated=updated, anthropic=bool(env("ANTHROPIC_API_KEY")),
                        channels=Notifier().channels)
 
@@ -531,7 +539,7 @@ def create_app() -> Flask:
     @app.put("/api/settings")
     def put_settings():
         try:
-            write_settings(request.get_json(force=True) or {})
+            write_settings(_json_body())
             load_config(config_path())  # vérification complète (sans cache)
         except Exception as exc:
             return jsonify(ok=False, error=str(exc)), 400
@@ -566,7 +574,7 @@ def create_app() -> Flask:
     @app.post("/api/check")
     def start_check():
         """Lance la vérification des annonces données (uids) en arrière-plan."""
-        uids = [str(u) for u in (request.get_json(force=True) or {}).get("uids") or []][:500]
+        uids = [str(u) for u in _json_body().get("uids") or []][:500]
         if not uids:
             return jsonify(ok=False, error="Aucune annonce à vérifier"), 400
         with lock:
@@ -607,7 +615,7 @@ def create_app() -> Flask:
     @app.post("/api/ads/hide")
     def hide_many():
         """Masque plusieurs annonces d'un coup (ex. toutes celles qui ont disparu)."""
-        uids = [str(u) for u in (request.get_json(force=True) or {}).get("uids") or []]
+        uids = [str(u) for u in _json_body().get("uids") or []]
         with database() as db:
             for uid in uids:
                 db.mark(uid, hidden=True)
@@ -630,7 +638,7 @@ def create_app() -> Flask:
     @app.post("/api/search-now")
     def search_now():
         """Recherche ponctuelle : tous les sites cherchent CE terme en une fois, puis notation."""
-        body = request.get_json(force=True) or {}
+        body = _json_body()
         query = str(body.get("query") or "").strip()
         if not query:
             return jsonify(ok=False, error="Tapez ce que vous cherchez"), 400

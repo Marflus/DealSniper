@@ -40,6 +40,12 @@ def cmd_ui(args, config) -> int:
     url = f"http://{'127.0.0.1' if args.host == '0.0.0.0' else args.host}:{args.port}"
     banner = " [DÉMO : fausses données]" if args.demo else ""
     print(f"Deal Sniper : interface sur {url}{banner} (Ctrl+C pour arrêter)")
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        from .web.security import lan_ip, ui_token
+
+        # Autres appareils (téléphone…) : lien avec le jeton d'accès, à ouvrir une fois.
+        print(f"Sur votre téléphone (même Wi-Fi) : http://{lan_ip() or '<ip-du-pc>'}:{args.port}/"
+              f"?token={ui_token(data_dir())}")
     if args.open:
         import threading
         import webbrowser
