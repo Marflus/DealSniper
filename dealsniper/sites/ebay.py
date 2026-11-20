@@ -38,11 +38,12 @@ def _euros(amount: dict[str, Any] | None) -> float | None:
 
 
 def _seller(info: dict[str, Any]) -> dict[str, Any] | None:
-    """Réputation du vendeur : % d'avis positifs et nombre d'avis."""
+    """Réputation du vendeur : pseudo, % d'avis positifs et nombre d'évaluations (≈ nombre de ventes)."""
     pct, count = info.get("feedbackPercentage"), info.get("feedbackScore")
     if pct is None and count is None:
         return None
     return {
+        "name": info.get("username"),
         "positive_pct": float(pct) if pct is not None else None,
         "reviews": int(count) if count is not None else None,
     }

@@ -54,6 +54,8 @@ class Ad:
             parts.append(f"{float(self.seller['positive_pct']):.1f} % positifs".replace(".", ","))
         if self.seller.get("reviews") is not None:
             parts.append(f"{int(self.seller['reviews']):,} avis".replace(",", " "))
+        if self.seller.get("type"):
+            parts.append(str(self.seller["type"]))  # particulier / pro
         if self.seller.get("since"):
             parts.append(f"membre depuis {str(self.seller['since'])[:7]}")
         return " · ".join(parts)

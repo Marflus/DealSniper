@@ -26,7 +26,7 @@ def test_filter_and_conversion():
     assert "itemLocationCountry:FR" in f and "price:[0..120]" in f and "conditionIds:{7000}" in f
     ad = ebay.item_to_ad(ITEM)
     assert ad.uid == "ebay:123456789012" and ad.price == 85.0 and ad.shipping == 6.5
-    assert ad.location == "Lyon 69***" and ad.seller == {"positive_pct": 99.2, "reviews": 1534}
+    assert ad.location == "Lyon 69***" and ad.seller == {"name": None, "positive_pct": 99.2, "reviews": 1534}
     assert ad.image == "https://i.ebayimg.com/images/g/abc/s-l500.jpg"
     bid = {"value": "12", "currency": "EUR"}
     auction = ebay.item_to_ad({**ITEM, "buyingOptions": ["AUCTION"], "currentBidPrice": bid})

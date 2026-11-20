@@ -102,7 +102,7 @@ def format_ad(idx: int, ad: Ad, max_chars: int) -> str:
     parts = [f"#{idx} [{ad.category or '?'}] {ad.title}", price]
     if ad.signals:
         parts.append("signaux: " + ", ".join(ad.signals))
-    if ad.seller:
+    if ad.seller_summary:
         parts.append(f"vendeur: {ad.seller_summary}")
     description = truncate(ad.description.replace(ad.title, "").strip(), max_chars)
     if description:

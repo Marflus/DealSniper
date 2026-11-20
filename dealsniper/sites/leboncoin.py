@@ -118,6 +118,9 @@ class LeboncoinSite(Site):
                     loc = item.get("location") or {}
                     place = " ".join(p for p in (loc.get("city_label") or loc.get("city"), loc.get("zipcode")) if p)
                     image = ad_image(item)
+                    owner = item.get("owner") or {}
+                    seller = {"name": owner.get("name"),
+                              "type": "pro" if owner.get("type") == "pro" else "particulier" if owner else None}
 
                     ads.append(
                         Ad(
@@ -128,6 +131,7 @@ class LeboncoinSite(Site):
                             description=clean_html(item.get("body") or "")[:2000],
                             location=place or "France",
                             image=image,
+                            seller=seller if any(seller.values()) else None,
                         )
                     )
                     count += 1

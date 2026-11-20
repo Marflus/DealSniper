@@ -269,9 +269,6 @@ function adCard(ad) {
   const marginValue = a.marge_nette_estimee;
   const margin = marginValue == null ? "—" : `${marginValue >= 0 ? "+" : ""}${euros(marginValue)}`;
   const marginClass = marginValue == null ? "" : marginValue >= 0 ? "pos" : "neg";
-  const fault = !a.panne_probable ? "" : a.panne_probable.toLowerCase() === "aucune" ? "Aucune — revente en l'état" : a.panne_probable;
-  const saleType = ad.price_mode === "enchere" ? "Enchère" : "Prix fixe";
-  const place = cleanPlace(ad.location);
 
   return `<article class="ad ${ad.status}" data-uid="${esc(ad.uid)}" ${ad.image == null ? "data-need-image" : ""}>
     <a class="thumb" href="${esc(ad.url)}" target="_blank" rel="noopener">${image}</a>
@@ -283,15 +280,100 @@ function adCard(ad) {
         <div class="${marginClass}"><span>Marge</span><b>${margin}</b></div>
       </div>
       ${ad.analysis ? scoreRow(ad) : ""}
-      ${fault ? `<div class="fault">🩺 ${esc(fault)}</div>` : ""}
       ${ad.reason ? `<div class="reason">✗ ${esc(ad.reason)}</div>` : ""}
       <div class="meta">
-        <div>${place ? `📍 ${esc(place)} · ` : ""}${saleType}</div>
         <div class="site-line">${siteLogo(ad.source, 14)} ${esc(siteName(ad.source))}${ad.category ? ` · ${esc(ad.category)}` : ""}</div>
+        <button class="info" data-info="${esc(ad.uid)}" title="Détails, panne, ville, questions à poser">i</button>
       </div>
     </div>
   </article>`;
 }
+
+// ---------- Détails d'une annonce (bouton « i ») ----------
+const faultText = (a) => (!a.panne_probable ? "" : a.panne_probable.toLowerCase() === "aucune"
+  ? "Aucune — revente en l'état" : a.panne_probable);
+
+// Questions à poser au vendeur : générées ici selon la catégorie, sans appel à l'IA (gratuit).
+function sellerQuestions(ad) {
+  const a = ad.analysis || {};
+  const cat = `${ad.category || ""} ${ad.title || ""}`.toLowerCase();
+  const q = ["Pouvez-vous envoyer une photo de l'étiquette (modèle exact) et de l'appareil allumé ?"];
+  if (a.type_affaire === "revente_directe") {
+    q.push("Pourquoi le vendez-vous ? Avez-vous la facture ?", "Y a-t-il des rayures, chocs ou défauts, même petits ?");
+  } else {
+    q.push("Depuis quand la panne est-elle apparue, et comment ?",
+      "A-t-il pris l'eau, subi une chute, ou été ouvert / réparé ?");
+  }
+  if (/pc|portable|thinkpad|latitude|elitebook|macbook|surface|mini|thinkcentre|ordinateur/.test(cat)) {
+    q.push("Y a-t-il un mot de passe BIOS ou un verrouillage (iCloud, compte Microsoft, MDM) ?",
+      "Le chargeur est-il fourni ? Quel est l'état de la batterie ?");
+  }
+  if (/dyson|aspirateur|roborock|roomba/.test(cat)) {
+    q.push("La batterie est-elle d'origine ? Combien de temps tient-elle ?", "Le chargeur et les accessoires sont-ils fournis ?");
+  }
+  if (/sonos|bose|audio|enceinte|marshall|jbl/.test(cat)) {
+    q.push("L'appareil est-il bien retiré de votre compte (Sonos, Bose…) ?", "Le câble d'alimentation est-il fourni ?");
+  }
+  if (/tv|écran|ecran|moniteur|televiseur/.test(cat)) {
+    q.push("Y a-t-il du son sans image ? La dalle a-t-elle un choc ou une fissure ?", "La télécommande et le pied sont-ils fournis ?");
+  }
+  if (/makita|dewalt|milwaukee|outil|bosch/.test(cat)) {
+    q.push("La machine fonctionne-t-elle sur une batterie chargée ? Odeur de brûlé ou étincelles ?");
+  }
+  if (ad.price_mode === "enchere") q.push("Accepteriez-vous une vente immédiate avant la fin de l'enchère ?");
+  return q;
+}
+
+// Vendeur : ce que le site fournit (eBay : note + évaluations ; leboncoin : nom + particulier / pro).
+function sellerRows(seller, row) {
+  const s = seller || {};
+  const who = [s.name, s.type === "pro" ? "Professionnel" : s.type === "particulier" ? "Particulier" : ""].filter(Boolean).join(" · ");
+  const rating = s.positive_pct != null ? `${String(s.positive_pct).replace(".", ",")} % d'avis positifs` : "";
+  const sales = s.reviews != null ? `${Number(s.reviews).toLocaleString("fr-FR")} (≈ nombre de ventes)` : "";
+  if (!who && !rating && !sales) return row("👤 Vendeur", '<span class="muted">non fourni par ce site</span>');
+  return row("👤 Vendeur", esc(who)) + row("⭐ Note du vendeur", esc(rating)) + row("🧾 Évaluations", esc(sales))
+    + row("📅 Membre depuis", esc(s.since ? String(s.since).slice(0, 7) : ""));
+}
+
+function showDetails(uid) {
+  const ad = allAds.find((x) => x.uid === uid);
+  if (!ad) return;
+  const a = ad.analysis || {};
+  const row = (label, value) => (value ? `<div class="d-row"><span>${label}</span><b>${value}</b></div>` : "");
+  const seen = ad.seen_at ? new Date(ad.seen_at.endsWith("Z") || ad.seen_at.includes("+") ? ad.seen_at : ad.seen_at + "Z") : null;
+  const buy = ad.shipping ? `${euros(ad.price)} + ${euros(ad.shipping)} de port` : euros(ad.total_price ?? ad.price);
+  const desc = String(ad.description || "").trim();
+  $("#details-body").innerHTML = `
+    ${ad.image ? `<img class="d-photo" src="${esc(ad.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
+    <h3>${esc(ad.title)}</h3>
+    <div class="d-grid">
+      ${row("🩺 Panne probable", esc(faultText(a)))}
+      ${row("📍 Ville", esc(cleanPlace(ad.location)))}
+      ${row("🏷️ Type de vente", ad.price_mode === "enchere" ? "Enchère (prix provisoire)" : "Prix fixe")}
+      ${row("💶 Achat", buy)}
+      ${row("🔩 Pièce estimée", a.cout_piece_estime ? euros(a.cout_piece_estime) : "")}
+      ${row("📈 Revente estimée", a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "")}
+      ${row("🧮 Marge nette", a.marge_nette_estimee != null ? `${a.marge_nette_estimee >= 0 ? "+" : ""}${euros(a.marge_nette_estimee)}` : "")}
+      ${sellerRows(ad.seller, row)}
+      ${row("✨ Signaux repérés", esc((ad.signals || []).join(", ")))}
+      ${row("🛒 Site", `${siteLogo(ad.source, 14)} ${esc(siteName(ad.source))}${ad.category ? ` · ${esc(ad.category)}` : ""}`)}
+      ${row("🕒 Repérée", seen && !isNaN(seen) ? seen.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "")}
+      ${row("✗ Écartée", esc(ad.reason || ""))}
+    </div>
+    ${desc ? `<details class="d-desc"><summary>Description du vendeur</summary><p>${esc(desc.slice(0, 1200))}${desc.length > 1200 ? "…" : ""}</p></details>` : ""}
+    <div class="d-questions"><b>💬 Questions à poser au vendeur</b><ul>${sellerQuestions(ad).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
+    <a class="primary d-open" href="${esc(ad.url)}" target="_blank" rel="noopener">Voir l'annonce ↗</a>`;
+  $("#details").showModal();
+}
+
+$("#ads").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-info]");
+  if (button) showDetails(button.dataset.info);
+});
+$("#details").addEventListener("click", (e) => {
+  // Fermeture : bouton ✕ ou clic à côté de la fenêtre (Échap fonctionne d'office).
+  if (e.target.closest("[data-close-details]") || e.target === $("#details")) $("#details").close();
+});
 
 // ---------- Pages de 20 annonces ----------
 const PAGE_SIZE = 20;

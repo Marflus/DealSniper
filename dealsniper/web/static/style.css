@@ -70,9 +70,9 @@ main { max-width: 1400px; margin: 0 auto; padding: 18px 24px 64px; }
 .stats b { font-size: 16px; }
 .stats .pos b { color: var(--good); }
 .stats .neg b { color: var(--bad); }
-.fault { font-size: 13px; }
 .reason { color: var(--bad); font-size: 13px; }
-.meta { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; display: grid; gap: 2px; }
+.meta { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .meta div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .empty { grid-column: 1 / -1; padding: 60px 20px; text-align: center; color: var(--muted); }
 
@@ -345,3 +345,27 @@ button.add:hover { border-color: var(--accent); color: var(--accent); background
 .status-list li.ok::first-letter { color: var(--good); }
 .status-list li.ko { background: color-mix(in srgb, var(--mid) 12%, var(--card)); }
 .empty b { color: var(--fg); }
+
+/* Bouton « i » et fenêtre de détails */
+.meta .site-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.info { flex: none; width: 26px; height: 26px; padding: 0; border-radius: 50%; font: italic 700 14px Georgia, serif;
+  color: var(--accent); border: 1.5px solid color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--card); }
+button.info:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+dialog.details { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 22px; border: 1px solid var(--line);
+  border-radius: 16px; background: var(--card); color: var(--fg); box-shadow: 0 20px 60px rgba(0, 0, 0, .35); overflow-y: auto; }
+dialog.details::backdrop { background: rgba(10, 12, 18, .55); backdrop-filter: blur(2px); }
+dialog.details .close { position: absolute; top: 12px; right: 12px; }
+dialog.details .close:hover { background: var(--soft); }
+.d-photo { width: 100%; max-height: 260px; object-fit: contain; border-radius: 12px; background: var(--soft); margin-bottom: 12px; }
+dialog.details h3 { margin: 0 34px 14px 0; font-size: 17px; line-height: 1.35; }
+.d-grid { display: grid; gap: 2px; }
+.d-row { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.d-row span { color: var(--muted); white-space: nowrap; }
+.d-row b { text-align: right; font-weight: 600; }
+.d-desc { margin-top: 12px; font-size: 13px; }
+.d-desc summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.d-desc p { white-space: pre-wrap; color: var(--muted); }
+.d-questions { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 8%, var(--card)); font-size: 14px; }
+.d-questions ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.d-open { display: block; margin-top: 16px; text-align: center; text-decoration: none; padding: 10px; border-radius: 10px;
+  background: var(--accent); color: #fff; font-weight: 600; }
