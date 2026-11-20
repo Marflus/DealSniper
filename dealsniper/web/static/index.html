@@ -114,9 +114,18 @@
           et rangés aussi dans l'onglet Annonces.</p></div>
       <form id="quick-search" class="quick-search">
         <input id="qs-query" placeholder="🔎  Ex. : thinkpad x1 carbon, dyson v11, steam deck…" autocomplete="off">
-        <span class="affix"><input id="qs-price" type="number" min="0" placeholder="prix max"><i>€</i></span>
         <button id="qs-run" class="primary">Analyser maintenant</button>
       </form>
+      <div class="qs-options" id="qs-options">
+        <label>Prix <span class="affix"><input id="qs-min" type="number" min="0" placeholder="min"><i>€</i></span>
+          à <span class="affix"><input id="qs-price" type="number" min="0" placeholder="max"><i>€</i></span></label>
+        <label>État <select id="qs-condition">
+          <option value="any">Tous états</option><option value="used">Occasion (fonctionnel)</option>
+          <option value="parts">Pour pièces / HS</option></select></label>
+        <label>Exclure <input id="qs-exclude" placeholder="mots séparés par des virgules : coque, boîte vide…"></label>
+        <label>Analyse IA max <span class="affix"><input id="qs-max" type="number" min="1" placeholder="toutes"><i>annonces</i></span></label>
+        <label>Sites <span class="qs-sites" id="qs-sites"></span> <small>(aucun coché = tous)</small></label>
+      </div>
       <div id="search-live" class="progress" hidden></div>
       <div id="search-report" hidden></div>
       <div id="search-results" class="grid"></div>

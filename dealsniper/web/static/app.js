@@ -728,7 +728,10 @@ $("#quick-search").addEventListener("submit", async (e) => {
   $("#search-report").hidden = true;
   $("#search-results").innerHTML = "";
   try {
-    await api("/api/search-now", { method: "POST", body: JSON.stringify({ query, max_price: $("#qs-price").value }) });
+    const sites = [...document.querySelectorAll("#qs-sites .chip.on")].map((b) => b.dataset.site);
+    await api("/api/search-now", { method: "POST", body: JSON.stringify({
+      query, min_price: $("#qs-min").value, max_price: $("#qs-price").value, condition: $("#qs-condition").value,
+      exclude: $("#qs-exclude").value, max_ads: $("#qs-max").value, sites }) });
     if (!searchPoll) searchPoll = setInterval(pollSearch, 1200);
     pollSearch();
   } catch (e2) {
@@ -736,6 +739,18 @@ $("#quick-search").addEventListener("submit", async (e) => {
     $("#qs-run").disabled = false;
     $("#qs-run").textContent = "Analyser maintenant";
   }
+});
+
+// Choix des sites de la recherche ponctuelle : ceux qui sont prêts (aucun coché = tous).
+function renderSearchSites(sites) {
+  const ready = sites.filter((s) => s.ok && s.name);
+  $("#qs-sites").innerHTML = ready.length
+    ? ready.map((s) => `<button type="button" class="chip" data-site="${esc(s.name)}">${siteLogo(s.name, 14)} ${esc(s.label)}</button>`).join("")
+    : `<span class="muted">Aucun site prêt</span>`;
+}
+$("#qs-sites").addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-site]");
+  if (chip) chip.classList.toggle("on");
 });
 
 async function pollSearch() {
@@ -1373,6 +1388,7 @@ $("#st-days").addEventListener("change", loadStats);
 async function loadStatus() {
   const s = await api("/api/status").catch(() => null);
   if (!s) return;
+  renderSearchSites(s.sites || []);
   const items = [
     s.ai_enabled === false
       ? { ok: true, text: "Mode sans IA : tri et estimation par la cote du marché (aucune clé Anthropic requise)" }

@@ -73,8 +73,12 @@ def load_sites(config: dict[str, Any]) -> list[Site]:
     sites = []
     skipped.clear()
     common = config.get("searches") or []
+    for name in SITE_MODULES:  # connecteur fourni mais sans bloc dans config.yaml : on le dit
+        if name not in config["sites"]:
+            _skip(name, "absent de config.yaml (ajoutez son bloc sous sites:, voir config.example.yaml)")
     for name, cfg in config["sites"].items():
         if not (cfg or {}).get("enabled", True):
+            _skip(name, "désactivé (onglet Recherches ou enabled: false)")
             continue
         if name not in SITE_MODULES:
             _skip(name, "absent de SITE_MODULES (dealsniper/sites/__init__.py)")

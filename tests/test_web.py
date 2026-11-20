@@ -200,3 +200,22 @@ def test_search_now_validates_and_starts(client, monkeypatch):
     monkeypatch.setattr("dealsniper.engine.run_once", lambda config: None)
     assert c.post("/api/search-now", json={"query": ""}).status_code == 400
     assert c.post("/api/search-now", json={"query": "thinkpad x1", "max_price": "150"}).get_json()["ok"]
+
+
+def test_search_now_applies_options(client, monkeypatch):
+    import time
+
+    c, _ = client
+    seen = []
+    monkeypatch.setattr("dealsniper.engine.run_once", lambda config: seen.append(config))
+    body = {"query": "raspberry pi", "min_price": "20", "max_price": "80", "condition": "used",
+            "exclude": "boîtier seul, alim", "max_ads": "15", "sites": ["ebay"]}
+    assert c.post("/api/search-now", json=body).get_json()["ok"]
+    start = time.time()
+    while not seen and time.time() - start < 10:
+        time.sleep(0.05)
+    config = seen[0]
+    assert config["searches"] == [{"query": "raspberry pi", "condition": "used", "max_price": 80, "min_price": 20}]
+    assert config["filters"]["min_price"] == 20 and "boitier seul" in config["filters"]["global_exclude_keywords"]
+    assert config["analyzer"]["max_ads_per_run"] == 15
+    assert all(s.get("enabled") is False for name, s in config["sites"].items() if name != "ebay")

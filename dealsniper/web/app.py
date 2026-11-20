@@ -26,6 +26,7 @@ from ..config import DESIRABLE_BRANDS, config_file, data_dir, env, load_config
 from ..db import Database
 from ..geo import Geo
 from ..market import category_brands, model_key
+from ..utils.text import normalize
 
 STATIC_DIR = Path(__file__).parent / "static"
 LIST_FIELDS = ("keywords", "exclude_keywords", "include_keywords")
@@ -450,8 +451,9 @@ def create_app() -> Flask:
             loaded = load_sites(config)
             with database() as db:
                 health = db.site_health()
-            report["sites"] = [{"label": s.label, "ok": True, **_health(health.get(s.name, {}))} for s in loaded] + [
-                {"label": SITE_LABELS.get(name, name.capitalize()), "ok": False, "reason": reason}
+            report["sites"] = [{"name": s.name, "label": s.label, "ok": True, **_health(health.get(s.name, {}))}
+                               for s in loaded] + [
+                {"name": name, "label": SITE_LABELS.get(name, name.capitalize()), "ok": False, "reason": reason}
                 for name, reason in skipped]
         except Exception as exc:  # config.yaml illisible : affiché tel quel
             report["error"] = str(exc)
@@ -531,17 +533,32 @@ def create_app() -> Flask:
         query = str(body.get("query") or "").strip()
         if not query:
             return jsonify(ok=False, error="Tapez ce que vous cherchez"), 400
-        search: dict[str, Any] = {"query": query, "condition": "any"}
-        price = _number(body.get("max_price"))
-        if price is not None:
-            search["max_price"] = price
+        condition = body.get("condition") if body.get("condition") in ("parts", "used") else "any"
+        search: dict[str, Any] = {"query": query, "condition": condition}
+        min_price, max_price = _number(body.get("min_price")), _number(body.get("max_price"))
+        if max_price is not None:
+            search["max_price"] = max_price
+            if min_price is not None:
+                search["min_price"] = min_price  # eBay filtre la fourchette côté API
+        sites = {str(s) for s in body.get("sites") or []}  # vide = tous les sites actifs
+        exclude = [normalize(str(w)) for w in _words(body.get("exclude") or [])]
+        max_ads = _number(body.get("max_ads"))
 
         def prepare(config: dict[str, Any]) -> None:
             config["searches"] = [search]              # une seule recherche, commune à tous les sites
-            for site in config["sites"].values():
+            for name, site in config["sites"].items():
                 site["searches"] = []                  # on ignore les recherches habituelles
                 site["common_searches"] = True
-            config["filters"]["drop_uncategorized"] = False  # ne pas écarter un terme hors catégories
+                if sites and name not in sites:
+                    site["enabled"] = False            # sites décochés : pas interrogés
+            filters = config["filters"]
+            filters["drop_uncategorized"] = False      # ne pas écarter un terme hors catégories
+            if min_price is not None:
+                filters["min_price"] = min_price       # appliqué à tous les sites par le filtre
+            if exclude:
+                filters["global_exclude_keywords"] = [*filters.get("global_exclude_keywords", []), *exclude]
+            if max_ads:
+                config["analyzer"]["max_ads_per_run"] = int(max_ads)
 
         return start_run(prepare)
 
