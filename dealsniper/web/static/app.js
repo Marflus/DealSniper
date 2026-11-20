@@ -332,7 +332,7 @@ function adCard(ad) {
   return `<article class="ad ${ad.status}" data-uid="${esc(ad.uid)}" ${ad.image == null ? "data-need-image" : ""}>
     <a class="thumb" href="${esc(ad.url)}" target="_blank" rel="noopener">${image}</a>
     <div class="body">
-      <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${ad.watched ? '<span class="watch-badge" title="Correspond à une veille">🔭</span> ' : ""}${ad.price_drop ? `<span class="drop-badge" title="Prix passé de ${esc(euros(ad.price_drop.from))} à ${esc(euros(ad.price_drop.to))}">⬇ −${esc(euros(ad.price_drop.from - ad.price_drop.to))}</span> ` : ""}${esc(ad.title)}</a>
+      <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${ad.watched ? '<span class="watch-badge" title="Correspond à une veille">🔭</span> ' : ""}${brandOf(ad) ? `<span class="brand-badge" title="Marque recherchée : ${esc(brandOf(ad))}">⭐</span> ` : ""}${ad.price_drop ? `<span class="drop-badge" title="Prix passé de ${esc(euros(ad.price_drop.from))} à ${esc(euros(ad.price_drop.to))}">⬇ −${esc(euros(ad.price_drop.from - ad.price_drop.to))}</span> ` : ""}${esc(ad.title)}</a>
       <div class="stats">
         <div><span>Achat</span><b>${buy}</b></div>
         <div title="${a.source_revente === "cote" ? "D'après la cote réelle du modèle (prix des annonces en état de marche)" : "Estimation de l'IA, rabotée par prudence"}">
@@ -1041,6 +1041,7 @@ async function loadSettings() {
   const f = settings.filters, n = settings.notifier, a = settings.analyzer, l = settings.location;
   setTags("#g-exclude", f.global_exclude_keywords);
   setTags("#g-signals", f.deal_signals);
+  setTags("#g-brands", f.desirable_brands);
   setTags("#g-buyer", f.buyer_ad_keywords);
   setTags("#g-sold-title", f.sold_title_keywords);
   setTags("#g-sold-desc", f.sold_phrases);
@@ -1139,6 +1140,7 @@ function collectSettings() {
   return {
     searches: commonCard ? searchRows(commonCard) : settings.searches, sites, categories, watchlist,
     filters: { global_exclude_keywords: getTags("#g-exclude"), deal_signals: getTags("#g-signals"),
+      desirable_brands: getTags("#g-brands"),
                buyer_ad_keywords: getTags("#g-buyer"), min_price: $("#g-minprice").value,
                sold_title_keywords: getTags("#g-sold-title"), sold_phrases: getTags("#g-sold-desc"),
                drop_uncategorized: $("#g-uncat").checked, keep_unknown_price: $("#g-noprice").checked },
@@ -1317,6 +1319,12 @@ $("#p-add").addEventListener("submit", async (e) => {
 });
 
 // « il y a 5 min », « il y a 2 h », « hier »…
+// Marque recherchée repérée par le filtre (signal « marque recherchée : apple »), sinon "".
+function brandOf(ad) {
+  const s = (ad.signals || []).find((x) => x.startsWith("marque recherchée"));
+  return s ? s.split(":").slice(1).join(":").trim() : "";
+}
+
 function timeAgo(iso) {
   const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
   const sec = Math.max(0, (Date.now() - d.getTime()) / 1000);

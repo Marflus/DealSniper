@@ -164,6 +164,7 @@ kbd { font: 12px ui-monospace, monospace; padding: 1px 6px; border: 1px solid va
 .sec-head p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .sec-icon { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; }
 .sec-icon.blue { background: color-mix(in srgb, #2563eb 14%, transparent); }
+.sec-icon.gold { background: color-mix(in srgb, #ca8a04 16%, transparent); }
 .sec-icon.green { background: color-mix(in srgb, #16a34a 14%, transparent); }
 .sec-icon.red { background: color-mix(in srgb, #dc2626 14%, transparent); }
 .sec-icon.orange { background: color-mix(in srgb, #d97706 16%, transparent); }
@@ -240,7 +241,7 @@ details.advanced[open] summary { margin-bottom: 4px; }
 .tags:focus-within { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); }
 .tag { --c: var(--muted); display: inline-flex; align-items: center; gap: 2px; padding: 3px 4px 3px 10px; border-radius: 99px; font-size: 13px;
   background: color-mix(in srgb, var(--c) 13%, transparent); color: color-mix(in srgb, var(--c) 80%, var(--fg)); }
-.tags.blue .tag { --c: #2563eb; } .tags.green .tag { --c: #16a34a; } .tags.red .tag { --c: #dc2626; }
+.tags.gold .tag { --c: #ca8a04; } .tags.blue .tag { --c: #2563eb; } .tags.green .tag { --c: #16a34a; } .tags.red .tag { --c: #dc2626; }
 .tag button { border: 0; background: none; padding: 0 5px; font-size: 11px; color: inherit; opacity: .55; line-height: 1; }
 .tag button:hover { opacity: 1; }
 .tag-input { flex: 1 0 120px; border: 0 !important; outline: none !important; padding: 3px 4px; background: transparent; }
@@ -534,6 +535,7 @@ button.wide { width: 100%; }
 .watch-badge { font-size: 13px; }
 
 /* Baisse de prix */
+.brand-badge { font-size: 13px; }
 .drop-badge { font-size: 12px; font-weight: 700; color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent);
   padding: 1px 7px; border-radius: 99px; white-space: nowrap; }
 

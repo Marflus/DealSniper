@@ -15,6 +15,18 @@ import yaml
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
 # Valeurs par défaut : config.yaml ne précise que ce qui change.
+# Marques de qualité, à cote stable et très demandées en occasion (repérées dans le titre).
+DESIRABLE_BRANDS = [
+    "apple", "macbook", "iphone", "ipad", "imac", "mac mini", "airpods", "apple watch",
+    "thinkpad", "dell xps", "latitude", "surface", "framework",
+    "nintendo", "playstation", "ps5", "xbox series", "steam deck",
+    "sonos", "bose", "bang & olufsen", "sennheiser", "marshall", "jbl",
+    "dyson", "kitchenaid", "thermomix", "nespresso", "delonghi", "garmin",
+    "makita", "dewalt", "milwaukee", "festool", "bosch professional", "hilti",
+    "canon", "nikon", "sony alpha", "fujifilm", "gopro", "dji",
+    "samsung galaxy s", "pixel", "oled", "lg oled",
+]
+
 DEFAULTS: dict[str, Any] = {
     # Un bloc par site. `interval` = pause (secondes, tirée au hasard) entre deux passages en mode `watch`.
     "sites": {
@@ -32,7 +44,8 @@ DEFAULTS: dict[str, Any] = {
     "searches": [],  # recherches communes, lancées sur tous les sites
     "location": {"france_only": True, "exclude_overseas": True, "home": ""},
     "filters": {"drop_uncategorized": True, "keep_unknown_price": True, "min_price": 5, "price_drop_min_eur": 10,
-                "deal_signals": [], "buyer_ad_keywords": [], "global_exclude_keywords": [],
+                "deal_signals": [], "desirable_brands": DESIRABLE_BRANDS,
+                "buyer_ad_keywords": [], "global_exclude_keywords": [],
                 "sold_title_keywords": ["vendu", "reserve"],
                 "sold_phrases": ["deja vendu", "plus disponible", "n'est plus a vendre", "est reserve",
                                  "en cours de vente", "en cours d'achat", "vente en cours", "transaction en cours"]},

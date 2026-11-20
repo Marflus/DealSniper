@@ -44,3 +44,21 @@ def test_sold_or_reserved_ads_are_rejected(config):
     assert sold_problem(ad("Switch", available=False), f)
     assert not sold_problem(ad("iPhone 11 vendu pour pièces"), f)
     assert not sold_problem(ad("Écran soldé", "vendu avec son câble"), f)
+
+
+def test_desirable_brand_signal(config):
+    from dealsniper.filters import desirable_brand
+    from dealsniper.market import Quote, free_estimate
+
+    a = ad("Lenovo ThinkPad T480 sans SSD", 90)
+    assert check(a, config) is None and desirable_brand(a) == "thinkpad"
+    assert any(s.startswith("marque recherchée") for s in a.signals)
+    # La marque seule ne remplace pas un signal exigé par la catégorie
+    config["filters"]["desirable_brands"] = ["nobrand"]
+    b = ad("Lenovo ThinkPad T480 sans SSD", 90)
+    check(b, config)
+    assert desirable_brand(b) is None
+    # Mode sans IA : +1 au score pour une marque recherchée rentable
+    quote = Quote(model="thinkpad t480", median=200, count=5, source="test")
+    a.price_mode, b.price_mode = "fixe", "fixe"
+    assert free_estimate(a, quote)["score_rentabilite"] == free_estimate(b, quote)["score_rentabilite"] + 1

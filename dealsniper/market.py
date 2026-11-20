@@ -19,6 +19,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from .filters import desirable_brand
 from .models import Ad
 from .utils.text import first_keyword, normalize
 
@@ -146,6 +147,8 @@ def free_estimate(ad, quote, haircut: float = 0.9) -> dict:
     score = 5
     if margin is not None:
         score = 8 if margin >= 60 else 6 if margin >= 30 else 4 if margin >= 10 else 2
+    if margin is not None and margin >= 10 and desirable_brand(ad):
+        score = min(score + 1, 10)  # marque recherchée : se revend plus vite et plus sûrement
     broken = not is_working(f"{ad.title} {ad.description[:200]}")
     return {
         "type_affaire": "reparation" if broken else "revente_directe",

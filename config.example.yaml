@@ -135,6 +135,11 @@ filters:
     - "comme neuve"
     - "tres bon etat"
 
+  # Marques recherchées (qualité reconnue, cote stable, vente rapide), cherchées dans le TITRE :
+  # annonce priorisée, signalée à l'IA (facilité de vente et score revus à la hausse) et badge ⭐.
+  # Sans cette clé, une liste par défaut est utilisée (Apple, ThinkPad, Dyson, Sonos, Makita…).
+  # desirable_brands: ["apple", "thinkpad", "dyson", "sonos", "makita", "nintendo"]
+
   # Annonces d'acheteurs (cherchés dans le TITRE uniquement)
   buyer_ad_keywords:
     - "recherche"

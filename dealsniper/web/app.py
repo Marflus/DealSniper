@@ -21,7 +21,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 from .. import progress, purchases
-from ..config import config_file, data_dir, env, load_config
+from ..config import DESIRABLE_BRANDS, config_file, data_dir, env, load_config
 from ..db import Database
 from ..geo import Geo
 from ..market import model_key
@@ -111,7 +111,7 @@ def read_settings() -> dict[str, Any]:
         "sites": _plain(doc.get("sites") or {}),
         "categories": _plain(doc.get("categories") or []),
         "watchlist": _plain(doc.get("watchlist") or []),
-        "filters": _plain(doc.get("filters") or {}),
+        "filters": {"desirable_brands": DESIRABLE_BRANDS, **_plain(doc.get("filters") or {})},
         "location": _plain(doc.get("location") or {}),
         "notifier": _plain(doc.get("notifier") or {}),
         "analyzer": {k: _plain((doc.get("analyzer") or {}).get(k))
@@ -180,7 +180,7 @@ def write_settings(new: dict[str, Any]) -> None:
         doc["categories"] = old
 
     filters = doc.setdefault("filters", CommentedMap())
-    for field in ("global_exclude_keywords", "deal_signals", "buyer_ad_keywords"):
+    for field in ("global_exclude_keywords", "deal_signals", "desirable_brands", "buyer_ad_keywords"):
         if field in (new.get("filters") or {}):
             filters[field] = _seq(filters.get(field), _words(new["filters"][field]))
     for field in ("sold_title_keywords", "sold_phrases"):  # listes courtes : sur une ligne

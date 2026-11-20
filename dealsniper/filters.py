@@ -15,6 +15,8 @@ from .utils.location import foreign_country, is_overseas
 from .utils.prices import has_foreign_currency
 from .utils.text import first_keyword, normalize
 
+BRAND_SIGNAL = "marque recherchée :"
+
 log = logging.getLogger(__name__)
 
 
@@ -101,7 +103,15 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
     ad.signals = [k for k in dict.fromkeys(candidates) if first_keyword(full_n, [k])]
     if cat.get("require_include") and not ad.signals:
         return "aucun signal de panne simple ni de bonne affaire"
+    brand = first_keyword(title_n, filters.get("desirable_brands", []))
+    if brand:  # marque recherchée (qualité, cote stable) : se revend plus vite et plus cher
+        ad.signals.append(f"{BRAND_SIGNAL} {brand}")
     return None
+
+
+def desirable_brand(ad: Ad) -> str | None:
+    """La marque recherchée repérée dans le titre (signal posé par `check`), sinon None."""
+    return next((s.split(":", 1)[1].strip() for s in ad.signals if s.startswith(BRAND_SIGNAL)), None)
 
 
 def priority(ad: Ad) -> tuple[int, float]:
