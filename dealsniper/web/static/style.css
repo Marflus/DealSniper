@@ -424,3 +424,18 @@ button.mini.on { color: #f5a400; }
 .purchase-add input[name=title] { flex: 1 1 260px; }
 .home-input { width: 130px; }
 .purchase-add .affix input { width: 120px; }
+
+/* Analyse de marché approfondie */
+.d-deep { margin-top: 14px; }
+button.wide { width: 100%; }
+.d-deep.done { padding: 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--good) 35%, var(--line));
+  background: color-mix(in srgb, var(--good) 7%, var(--card)); }
+.deep-head { font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.conf { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+.conf.good { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.conf.mid { background: color-mix(in srgb, var(--mid) 16%, transparent); color: var(--mid); }
+.conf.low { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+.deep-summary { margin: 8px 0 4px; }
+.deep-warn { margin: 4px 0; color: var(--mid); font-size: 13px; }
+.deep-sources { margin: 6px 0; padding-left: 18px; font-size: 13px; color: var(--muted); display: grid; gap: 2px; }
+.deep-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }

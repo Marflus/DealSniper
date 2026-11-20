@@ -389,6 +389,7 @@ function showDetails(uid) {
       ${row("🕒 Repérée", seen && !isNaN(seen) ? seen.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "")}
       ${row("✗ Écartée", esc(ad.reason || ""))}
     </div>
+    ${deepBlock(ad)}
     ${desc ? `<details class="d-desc"><summary>Description du vendeur</summary><p>${esc(desc.slice(0, 1200))}${desc.length > 1200 ? "…" : ""}</p></details>` : ""}
     <div class="d-questions"><b>💬 Questions à poser au vendeur</b><ul>${sellerQuestions(ad).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
     ${repairLinks(ad)}
@@ -401,6 +402,44 @@ function showDetails(uid) {
 }
 
 // Liens utiles pour réparer : tutoriel iFixit et prix de la pièce (aucune requête, simples recherches).
+// Analyse de marché approfondie (gros modèle + recherche web) : bouton, puis résultat mémorisé.
+const CONF_LEVEL = { faible: "low", moyenne: "mid", "élevée": "good" };
+function deepBlock(ad) {
+  const d = ad.market_deep;
+  if (!d) {
+    return `<div class="d-deep"><button class="ghost wide" data-deep="${esc(ad.uid)}">
+      📊 Analyse du marché — prix réel vérifié sur le web <small>(~quelques centimes)</small></button></div>`;
+  }
+  const range = [d.revente_basse, d.revente_typique, d.revente_haute].every((x) => x != null)
+    ? `${euros(d.revente_basse)} – ${euros(d.revente_haute)} <span class="muted">(typique ${euros(d.revente_typique)})</span>` : "—";
+  return `<div class="d-deep done">
+    <div class="deep-head">📊 Analyse du marché <span class="conf ${CONF_LEVEL[d.confiance] || "mid"}">confiance ${esc(d.confiance)}</span></div>
+    <div class="d-row"><span>Revente réelle estimée</span><b>${range}</b></div>
+    ${d.prix_achat_max != null ? `<div class="d-row"><span>Acheter au maximum</span><b>${euros(d.prix_achat_max)} <span class="muted">(pour +30 € net)</span></b></div>` : ""}
+    ${d.resume ? `<p class="deep-summary">${esc(d.resume)}</p>` : ""}
+    ${d.pieges ? `<p class="deep-warn">⚠️ ${esc(d.pieges)}</p>` : ""}
+    ${(d.sources || []).length ? `<ul class="deep-sources">${d.sources.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
+    <div class="deep-foot"><small class="muted">${esc(d.model || "")} · ${d.cost_usd ? `${iaCost(d.cost_usd)}` : ""}</small>
+      <button class="link" data-deep="${esc(ad.uid)}">Refaire l'analyse</button></div>
+  </div>`;
+}
+
+async function deepMarket(uid) {
+  const ad = allAds.find((x) => x.uid === uid);
+  if (!ad) return;
+  const btn = $("#details-body").querySelector(`[data-deep]`);
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Recherche des prix réels sur le web… (10–30 s)"; }
+  try {
+    const data = await api(`/api/ads/${encodeURIComponent(uid)}/market-analysis`, { method: "POST" });
+    ad.market_deep = data.market_deep;
+    showDetails(uid);
+    renderAds(true);
+  } catch (e) {
+    toast("❌ " + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = "📊 Réessayer l'analyse du marché"; }
+  }
+}
+
 function repairLinks(ad) {
   const a = ad.analysis || {};
   if (a.type_affaire === "revente_directe") return "";
@@ -438,12 +477,13 @@ async function buyAd(uid) {
 }
 
 function onAdAction(e) {
-  const t = e.target.closest("[data-info],[data-fav],[data-hide],[data-buy]");
+  const t = e.target.closest("[data-info],[data-fav],[data-hide],[data-buy],[data-deep]");
   if (!t) return;
   if (t.dataset.info) showDetails(t.dataset.info);
   else if (t.dataset.fav) markAd(t.dataset.fav, { favorite: !allAds.find((x) => x.uid === t.dataset.fav)?.favorite });
   else if (t.dataset.hide) markAd(t.dataset.hide, { hidden: !allAds.find((x) => x.uid === t.dataset.hide)?.hidden });
   else if (t.dataset.buy) buyAd(t.dataset.buy);
+  else if (t.dataset.deep) deepMarket(t.dataset.deep);
 }
 $("#ads").addEventListener("click", onAdAction);
 $("#details-body").addEventListener("click", onAdAction);

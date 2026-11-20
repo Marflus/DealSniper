@@ -177,6 +177,15 @@ class Database:
             data["image"] = image or ""
             self._sql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(data, ensure_ascii=False), uid))
 
+    def patch_ad(self, uid: str, patch: dict) -> bool:
+        """Fusionne des champs dans l'annonce stockée (ex. résultat d'analyse de marché). False si inconnue."""
+        data = self.ad_data(uid)
+        if data is None:
+            return False
+        data.update(patch)
+        self._sql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(data, ensure_ascii=False), uid))
+        return True
+
     async def fill_images(self, images: dict[str, str]) -> None:
         """Ajoute la photo des annonces déjà en base qui n'en ont pas."""
         if not images:

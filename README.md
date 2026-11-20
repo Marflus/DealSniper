@@ -57,6 +57,10 @@ Au premier lancement, le script crée l'environnement Python (`.venv`), installe
 minutes), crée votre `config.yaml` et ouvre l'interface dans le navigateur. Les fois suivantes, il démarre en
 quelques secondes.
 
+> Pour **juste voir l'interface** (fausses données, aucune clé, aucun passage), double-cliquez sur **`demo.bat`**.
+> N'exécutez pas `python ...` directement : passez toujours par un `.bat`, qui utilise le `.venv` où les
+> dépendances sont installées (sinon `ModuleNotFoundError: No module named 'yaml'`).
+
 > **Linux / Mac / Raspberry Pi** : mêmes étapes avec `cp .env.example .env`, puis
 > `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m dealsniper ui --open`.
 
@@ -84,7 +88,7 @@ Gardez la fenêtre noire ouverte tant que vous utilisez l'interface : la fermer 
 
 | Onglet | Contenu |
 |---|---|
-| **Annonces** | toutes les annonces trouvées, 20 par page : photo, prix d'achat / revente / marge (« cote » quand la revente vient des prix réels), les 3 notes, distance. **☆** met en favori, **⊘** masque l'annonce, **i** ouvre le détail : panne, ville et distance, cote du marché et estimation de l'IA, coût de la pièce, vendeur (note et évaluations quand le site les donne), description, questions à poser au vendeur, liens de réparation (iFixit, pièce sur eBay / AliExpress) et « Je l'ai acheté ». Vues Notées / Écartées / Toutes / Favoris / Masquées ; filtres par texte, site, catégorie, notes, prix, marge, distance, période ; tri par date, note, marge, prix, facilité de vente ou distance ; **export CSV** pour Excel. Pendant un passage, une ligne par site montre l'avancement, la durée et le coût IA ; à la fin, le détail de chaque recherche reste affiché. |
+| **Annonces** | toutes les annonces trouvées, 20 par page : photo, prix d'achat / revente / marge (« cote » quand la revente vient des prix réels), les 3 notes, distance. **☆** met en favori, **⊘** masque l'annonce, **i** ouvre le détail : panne, ville et distance, cote du marché et estimation de l'IA, coût de la pièce, vendeur (note et évaluations quand le site les donne), description, questions à poser au vendeur, liens de réparation (iFixit, pièce sur eBay / AliExpress), « Je l'ai acheté », et **Analyse du marché** (un modèle plus puissant + recherche web va chercher les prix de vente réels pour une fourchette fiable, à la demande, quelques centimes). Vues Notées / Écartées / Toutes / Favoris / Masquées ; filtres par texte, site, catégorie, notes, prix, marge, distance, période ; tri par date, note, marge, prix, facilité de vente ou distance ; **export CSV** pour Excel. Pendant un passage, une ligne par site montre l'avancement, la durée et le coût IA ; à la fin, le détail de chaque recherche reste affiché. |
 | **Achats** | vos achats (ajoutés depuis une annonce ou à la main) : prix payé, réparation, prix de revente réel. Bénéfice, rentabilité, stock. Dès 3 ventes, Deal Sniper compare vos ventes réelles à ses estimations et ajuste sa prudence tout seul ; chaque vente réelle enrichit aussi la cote du modèle. |
 | **Recherches** | ce que chaque site cherche. La carte **🌐 Tous les sites** contient les recherches communes, lancées partout ; chaque site peut en ajouter. |
 | **Catégories** | familles d'objets (PC portables, mini-PC, Dyson…) : mots-clés du titre, budget maximum, exclusions, signaux positifs. Une annonce hors catégorie est écartée gratuitement. |
@@ -152,7 +156,7 @@ Tout se règle depuis l'interface ; `config.yaml` reste lisible et commenté si 
 | `sites` | un bloc par site : activé, rythme en surveillance continue, recherches propres, `fetch_details` |
 | `categories` | mots-clés, budget maximum, exclusions et signaux par famille d'objets |
 | `filters`, `location` | mots interdits, vendu / réservé, acheteurs, prix minimum, France uniquement, `home` (votre code postal) |
-| `analyzer` | modèle Claude, plafond de dépense quotidien, prudence (`resale_haircut`, `auto_calibrate`), seuil de la cote (`market_min_margin`) |
+| `analyzer` | modèle de notation, modèle de l'analyse approfondie (`deep_model`), plafond quotidien, prudence (`resale_haircut`, `auto_calibrate`), seuil de la cote (`market_min_margin`) |
 | `notifier` | note minimale pour un message, récapitulatif « à vérifier », marge / facilités minimales |
 | `network` | délai entre deux requêtes vers un même site, pause après un refus |
 
@@ -195,7 +199,7 @@ Les estimations de l'IA restent indicatives : vérifiez toujours l'annonce et le
 
 ```
 DealSniper/
-├── start_ui.bat / update.bat   lancer / mettre à jour (Windows)
+├── start_ui.bat / update.bat / demo.bat   lancer / mettre à jour / aperçu démo (Windows)
 ├── config.example.yaml         configuration de référence (copiée en config.yaml, personnel)
 ├── .env.example                modèle des clés (copié en .env, personnel)
 ├── dealsniper/
@@ -207,6 +211,8 @@ DealSniper/
 │   ├── market.py               cote du marché : modèle reconnu, prix réels, doublons
 │   ├── purchases.py            bénéfices et calibrage des estimations sur vos ventes réelles
 │   ├── geo.py                  distances (communes de geo.api.gouv.fr)
+│   ├── deep.py                 analyse de marché approfondie à la demande (gros modèle + web)
+│   ├── demo.py                 fausses données pour l'aperçu (ui --demo)
 │   ├── notifier.py             Telegram / Discord
 │   ├── db.py                   SQLite : annonces vues, coûts, pauses
 │   ├── http.py                 client HTTP poli (délais par site, robots.txt, 429, 403)

@@ -312,6 +312,31 @@ def create_app() -> Flask:
             db.close()
         return jsonify(ok=found), 200 if found else 404
 
+    @app.post("/api/ads/<uid>/market-analysis")
+    def market_analysis(uid: str):
+        """Analyse de marché approfondie d'une annonce (gros modèle + recherche web, à la demande)."""
+        from ..deep import analyze_market
+        from ..models import Ad
+
+        db = database()
+        try:
+            ad = db.ad_data(uid)
+        finally:
+            db.close()
+        if ad is None:
+            return jsonify(ok=False, error="Annonce inconnue"), 404
+        try:
+            result = analyze_market(Ad.from_dict(ad), load_config(config_path()))
+        except Exception as exc:  # clé manquante, API indisponible, recherche web refusée…
+            return jsonify(ok=False, error=str(exc)[:200]), 502
+        db = database()
+        try:
+            db.patch_ad(uid, {"market_deep": result})
+            asyncio.run(db.add_cost(result.get("cost_usd", 0)))
+        finally:
+            db.close()
+        return jsonify(ok=True, market_deep=result)
+
     # --- achats -------------------------------------------------------------------
     @app.get("/api/purchases")
     def list_purchases():
