@@ -338,3 +338,14 @@ def test_no_ai_mode_scores_from_cote(monkeypatch, config, tmp_path):
     stats, rows = asyncio.run(run())
     assert stats["analysées"] == 1 and rows and rows[0]["analysis"]["sans_ia"] is True
     assert rows[0]["analysis"]["valeur_revente_estimee"] == 198  # 220 × 0,9, sans aucun appel IA
+
+
+def test_tax_overview_thresholds():
+    from dealsniper.purchases import tax_overview
+
+    assert tax_overview([])["level"] == "ok"
+    many = [{"sold_price": 100, "sold_at": "2026-02-01", "buy_price": 50, "repair_cost": 0}] * 31
+    over = tax_overview(many, year=2026)
+    assert over["level"] == "depasse" and over["sales"] == 31 and over["revenue"] == 3100
+    # Ventes d'une autre année ignorées.
+    assert tax_overview([{"sold_price": 100, "sold_at": "2020-01-01"}], year=2026)["sales"] == 0

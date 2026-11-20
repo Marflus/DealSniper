@@ -498,3 +498,15 @@ button.wide { width: 100%; }
 #set-budget .panel.ai-off .tiles, #set-budget .panel.ai-off .advanced,
 #set-budget .panel.ai-off .setting:not(:first-of-type) { opacity: .4; pointer-events: none; }
 @media (max-width: 560px) { .secret-fields { grid-template-columns: 1fr; } }
+
+/* Suivi fiscal (onglet Achats) */
+.tax-box { padding: 14px 16px; border-radius: var(--radius); margin-bottom: 16px; border: 1px solid var(--line); background: var(--card); box-shadow: var(--shadow); }
+.tax-box.proche { border-color: color-mix(in srgb, var(--mid) 45%, var(--line)); }
+.tax-box.depasse { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.tax-head { font-weight: 700; margin-bottom: 10px; }
+.tax-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+.tax-kpis span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; display: block; }
+.tax-kpis b { font-size: 18px; } .tax-kpis small { font-size: 12px; color: var(--muted); font-weight: 500; }
+.tax-note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.tax-box.depasse .tax-note { color: var(--bad); }
+@media (max-width: 560px) { .tax-kpis { grid-template-columns: 1fr; gap: 4px; } }

@@ -10,11 +10,17 @@ from __future__ import annotations
 import copy
 import logging
 import statistics
+from datetime import date
 from typing import Any
 
 log = logging.getLogger(__name__)
 
 MIN_SALES = 3
+
+# Repères fiscaux France (achat-revente), à vérifier sur impots.gouv.fr — ils évoluent.
+DAC7_SALES = 30          # au-delà, les plateformes transmettent au fisc
+DAC7_REVENUE = 2000.0    # ou au-delà de ce montant de ventes / an / plateforme
+MICRO_CEILING = 188700.0  # plafond de chiffre d'affaires du micro-entrepreneur (achat-revente)
 
 
 def _cost(p: dict[str, Any]) -> float:
@@ -35,6 +41,31 @@ def summary(purchases: list[dict[str, Any]]) -> dict[str, Any]:
         "stock_value": round(sum(_cost(p) for p in stock), 2),
         "roi_pct": round(100 * profit / cost_sold, 1) if cost_sold else None,
     }
+
+
+def tax_overview(purchases: list[dict[str, Any]], year: int | None = None) -> dict[str, Any]:
+    """Repère fiscal de l'année : ventes et chiffre d'affaires, et proximité des seuils de déclaration.
+
+    Indicatif seulement — ce n'est pas un conseil fiscal. Vérifiez sur impots.gouv.fr / URSSAF.
+    """
+    year = year or date.today().year
+    sold = [p for p in purchases if p.get("sold_price") and str(p.get("sold_at") or "").startswith(str(year))]
+    revenue = sum(float(p["sold_price"]) for p in sold)
+    profit = sum(float(p["sold_price"]) - _cost(p) for p in sold)
+    reach = max(len(sold) / DAC7_SALES, revenue / DAC7_REVENUE) if (sold or revenue) else 0
+    if revenue >= DAC7_REVENUE or len(sold) >= DAC7_SALES:
+        level = "depasse"
+        note = "Seuil de transmission au fisc dépassé (DAC7). Activité à déclarer : statut micro-entrepreneur."
+    elif reach >= 0.8:
+        level = "proche"
+        note = "Vous approchez du seuil où les plateformes transmettent vos ventes au fisc."
+    else:
+        level = "ok"
+        note = "Sous les seuils de transmission des plateformes — mais acheter pour revendre reste à déclarer."
+    return {"year": year, "sales": len(sold), "revenue": round(revenue, 2), "profit": round(profit, 2),
+            "sales_threshold": DAC7_SALES, "revenue_threshold": DAC7_REVENUE,
+            "reach_pct": round(min(1, reach) * 100), "level": level, "note": note,
+            "micro_ceiling": MICRO_CEILING}
 
 
 def calibration(purchases: list[dict[str, Any]], base_haircut: float) -> dict[str, Any]:

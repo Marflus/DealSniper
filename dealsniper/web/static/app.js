@@ -1076,6 +1076,18 @@ async function loadPurchases() {
     + kpi("Investi", money(s.invested)) + kpi("Revendu", money(s.revenue))
     + kpi("Bénéfice", `${s.profit >= 0 ? "+" : ""}${money(s.profit)}`, s.profit >= 0 ? "pos" : "neg")
     + kpi("Rentabilité", s.roi_pct == null ? "—" : `${s.roi_pct.toLocaleString("fr-FR")} %`);
+  const t = data.tax;
+  const barCls = t.level === "depasse" ? "full" : t.level === "proche" ? "warn" : "";
+  $("#p-tax").className = `tax-box ${t.level}`;
+  $("#p-tax").innerHTML = `
+    <div class="tax-head">🧾 Suivi fiscal ${t.year} <span class="muted">— indicatif, pas un conseil fiscal</span></div>
+    <div class="tax-kpis">
+      <div><span>Ventes</span><b>${t.sales} <small>/ ${t.sales_threshold}</small></b></div>
+      <div><span>Chiffre d'affaires</span><b>${money(t.revenue)} <small>/ ${money(t.revenue_threshold)}</small></b></div>
+      <div><span>Bénéfice ${t.year}</span><b>${money(t.profit)}</b></div>
+    </div>
+    <div class="budget-bar big"><div class="${barCls}" style="width:${t.reach_pct}%"></div></div>
+    <p class="tax-note">${esc(t.note)}</p>`;
   $("#p-calibration").innerHTML = c.ratio == null
     ? `🎯 <b>Calibrage des estimations</b> : ${c.sales}/${c.needed} ventes avec estimation. Dès ${c.needed}, Deal Sniper compare
        vos prix de revente réels à ses estimations et ajuste sa prudence tout seul.`

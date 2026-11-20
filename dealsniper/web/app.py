@@ -351,7 +351,7 @@ def create_app() -> Flask:
             base = float(load_config(config_path())["analyzer"]["resale_haircut"])
         except Exception:
             base = 0.9
-        return jsonify(purchases=rows, summary=purchases.summary(rows),
+        return jsonify(purchases=rows, summary=purchases.summary(rows), tax=purchases.tax_overview(rows),
                        calibration={**purchases.calibration(rows, base), "base": base})
 
     @app.post("/api/purchases")
