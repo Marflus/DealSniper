@@ -35,6 +35,7 @@ Termine TOUJOURS par un unique bloc JSON, sans rien après :
  "sources": ["...", "..."], "resume": "une phrase", "pieges": "pièges éventuels en 8 mots max",
  "ventes": [{"date": "AAAA-MM", "prix": n, "source": "ebay|leboncoin|vinted|backmarket"}]}"""
 
+WEB_SEARCH_USD = 0.01  # recherche web : 10 $ pour 1 000 recherches, facturée en plus des tokens
 WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5,
                    "user_location": {"type": "approximate", "country": "FR"}}
 
@@ -69,15 +70,30 @@ def sanitize(raw: dict[str, Any], ad: Ad) -> dict[str, Any]:
     if confiance not in ("faible", "moyenne", "élevée"):
         confiance = "moyenne"
     piece = float((ad.analysis or {}).get("cout_piece_estime") or 0)
-    # Prix d'achat à ne pas dépasser pour viser +30 € net (revente basse − pièce − 10 % de frais − 30).
-    max_buy = round(low * 0.9 - piece - 30) if low else None
     sources = [str(s)[:80] for s in (raw.get("sources") or []) if str(s).strip()][:4]
     return {
         "revente_basse": low, "revente_typique": typical, "revente_haute": high,
         "confiance": confiance, "sources": sources, "ventes": _sales(raw.get("ventes")),
         "resume": str(raw.get("resume", ""))[:300], "pieges": str(raw.get("pieges", ""))[:120],
-        "prix_achat_max": max_buy,
+        "prix_achat_max": max_buy(typical, piece),
     }
+
+
+TARGET_PROFIT = 30  # bénéfice net visé (€) pour le prix d'achat maximum conseillé
+
+
+def max_buy(typical: float | None, piece: float = 0.0) -> float | None:
+    """Prix d'achat à ne pas dépasser pour viser +30 € net :
+    revente TYPIQUE − 10 % (frais, négociation) − pièce − 30 €.
+    (La revente basse servait de base avant : avec les 10 %, la prudence était comptée deux fois.)"""
+    return round(typical * 0.9 - piece - TARGET_PROFIT) if typical else None
+
+
+def refresh(deep: dict[str, Any], piece: float = 0.0) -> dict[str, Any]:
+    """Recalcule le prix d'achat max d'une analyse déjà enregistrée (formule à jour)."""
+    if not deep:
+        return deep
+    return {**deep, "prix_achat_max": max_buy(deep.get("revente_typique") or deep.get("revente_basse"), piece)}
 
 
 def _sales(rows: Any) -> list[dict[str, Any]]:
@@ -94,6 +110,15 @@ def _sales(rows: Any) -> list[dict[str, Any]]:
             out.append({"date": date.group(0), "prix": price,
                         "source": str(row.get("source", ""))[:20].lower()})
     return sorted(out, key=lambda v: v["date"])[:20]
+
+
+def _usage_cost(usage: Any, price_in: float, price_out: float, search_usd: float) -> float:
+    """Coût d'une réponse : tokens + recherches web (facturées à part, absentes des tokens)."""
+    if usage is None:
+        return 0.0
+    tokens = (usage.input_tokens * price_in + usage.output_tokens * price_out) / 1e6
+    searches = getattr(getattr(usage, "server_tool_use", None), "web_search_requests", 0) or 0
+    return tokens + searches * search_usd
 
 
 def analyze_market(ad: Ad, config: dict[str, Any], client: Any = None) -> dict[str, Any]:
@@ -118,9 +143,8 @@ def analyze_market(ad: Ad, config: dict[str, Any], client: Any = None) -> dict[s
         resp = client.messages.create(model=model, max_tokens=2000, system=SYSTEM_PROMPT,
                                       messages=messages, tools=[WEB_SEARCH_TOOL],
                                       output_config={"effort": "low"})
-        usage = getattr(resp, "usage", None)
-        if usage:
-            cost += (usage.input_tokens * price_in + usage.output_tokens * price_out) / 1e6
+        cost += _usage_cost(getattr(resp, "usage", None), price_in, price_out,
+                            float(cfg.get("web_search_usd", WEB_SEARCH_USD)))
         text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
         if getattr(resp, "stop_reason", "") == "pause_turn":
             messages.append({"role": "assistant", "content": resp.content})

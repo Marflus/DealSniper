@@ -250,6 +250,7 @@ def write_settings(new: dict[str, Any]) -> None:
 def _realistic(items: list[dict]) -> None:
     """Annonces notées avant le garde-fou de prudence : même rabot et même calcul de marge, à l'affichage."""
     from ..analyzer import make_realistic, sanitize_analysis
+    from ..deep import refresh
     from ..models import Ad
 
     try:
@@ -257,6 +258,9 @@ def _realistic(items: list[dict]) -> None:
     except Exception:
         haircut = 0.9
     for item in items:
+        if item.get("market_deep"):  # analyses approfondies : prix d'achat max à la formule actuelle
+            piece = float((item.get("analysis") or {}).get("cout_piece_estime") or 0)
+            item["market_deep"] = refresh(item["market_deep"], piece)
         analysis = item.get("analysis")
         if not analysis or analysis.get("realiste") or not analysis.get("valeur_revente_estimee"):
             continue
