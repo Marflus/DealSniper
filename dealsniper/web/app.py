@@ -252,6 +252,11 @@ def _realistic(items: list[dict]) -> None:
         item["score"] = clean["score_rentabilite"]
 
 
+def _health(row: dict) -> dict:
+    """Résumé de santé d'un site pour /api/status (dernière récolte, nombre, dernière erreur)."""
+    return {"last_ok": row.get("last_ok"), "last_count": row.get("last_count"), "last_error": row.get("last_error")}
+
+
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
     state = {"running": False, "error": None}
@@ -464,15 +469,19 @@ def create_app() -> Flask:
 
         report: dict[str, Any] = {"anthropic": bool(env("ANTHROPIC_API_KEY")), "channels": Notifier().channels,
                                   "sites": [], "error": None, "ai_enabled": True}
+        db = database()
         try:
             config = load_config(config_path())
             report["ai_enabled"] = bool(config["analyzer"].get("enabled", True))
             loaded = load_sites(config)
-            report["sites"] = [{"label": s.label, "ok": True} for s in loaded] + [
+            health = db.site_health()
+            report["sites"] = [{"label": s.label, "ok": True, **_health(health.get(s.name, {}))} for s in loaded] + [
                 {"label": SITE_LABELS.get(name, name.capitalize()), "ok": False, "reason": reason}
                 for name, reason in skipped]
         except Exception as exc:  # config.yaml illisible : affiché tel quel
             report["error"] = str(exc)
+        finally:
+            db.close()
         return jsonify(report)
 
     @app.post("/api/secrets")

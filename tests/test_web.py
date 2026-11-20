@@ -165,3 +165,23 @@ def test_preferences_from_favorites_and_hidden(client):
     c.post(f"/api/ads/{fav}/mark", json={"favorite": True})
     prefs = c.get("/api/preferences").get_json()["categories"]
     assert prefs.get("PC portables pros") == 1
+
+
+def test_site_health_records_and_clears_error(tmp_path):
+    import asyncio
+
+    from dealsniper.db import Database
+
+    async def scenario():
+        db = Database(tmp_path / "health.db")
+        await db.record_site_ok("ebay", 42)
+        await db.pause("vinted", 6, "DataDome")
+        before = db.site_health()
+        await db.record_site_ok("vinted", 25)  # une récolte réussie efface l'erreur
+        after = db.site_health()
+        db.close()
+        return before, after
+
+    before, after = asyncio.run(scenario())
+    assert before["ebay"]["last_count"] == 42 and before["vinted"]["last_error"] == "DataDome"
+    assert after["vinted"]["last_error"] is None and after["vinted"]["last_count"] == 25

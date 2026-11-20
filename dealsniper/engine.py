@@ -187,6 +187,7 @@ class Engine:
             return
         try:
             stats = await self.process(site)
+            await self.db.record_site_ok(site.name, stats["listées"])  # santé du connecteur
             log.info("%s : %s", site.name, stats)
             self.progress.done(site.label, f"{stats['listées']} annonces · {stats['nouvelles']} nouvelles · "
                                            f"{stats['analysées']} analysées · {stats['notifiées']} notifiées")

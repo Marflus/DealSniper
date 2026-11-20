@@ -64,6 +64,10 @@ class Database:
             if column not in existing:
                 self._conn.execute(f"ALTER TABLE seen ADD COLUMN {column} {kind}")
         self._conn.execute("CREATE INDEX IF NOT EXISTS seen_fingerprint ON seen (fingerprint)")
+        site_cols = {row[1] for row in self._conn.execute("PRAGMA table_info(sites)")}
+        for column, kind in (("last_ok", "TEXT"), ("last_count", "INTEGER")):
+            if column not in site_cols:
+                self._conn.execute(f"ALTER TABLE sites ADD COLUMN {column} {kind}")
         self._lock = threading.Lock()
 
     def _sql(self, query: str, params: tuple = ()) -> list[tuple]:
@@ -277,9 +281,22 @@ class Database:
 
     async def pause(self, site: str, hours: float, reason: str) -> datetime:
         until = _now() + timedelta(hours=hours)
-        await self._asql("INSERT OR REPLACE INTO sites (name, paused_until, last_error) VALUES (?, ?, ?)",
-                         (site, until.isoformat(timespec="seconds"), reason))
+        await self._asql("INSERT INTO sites (name, paused_until, last_error) VALUES (?, ?, ?) "
+                         "ON CONFLICT(name) DO UPDATE SET paused_until = excluded.paused_until, "
+                         "last_error = excluded.last_error", (site, until.isoformat(timespec="seconds"), reason))
         return until
+
+    async def record_site_ok(self, site: str, count: int) -> None:
+        """Dernière récolte réussie d'un site (pour l'indicateur de santé)."""
+        now = _now().isoformat(timespec="seconds")
+        await self._asql("INSERT INTO sites (name, last_ok, last_count, last_error) VALUES (?, ?, ?, NULL) "
+                         "ON CONFLICT(name) DO UPDATE SET last_ok = excluded.last_ok, "
+                         "last_count = excluded.last_count, last_error = NULL", (site, now, int(count)))
+
+    def site_health(self) -> dict:
+        rows = self._sql("SELECT name, last_ok, last_count, last_error, paused_until FROM sites")
+        return {name: {"last_ok": ok, "last_count": count, "last_error": err, "paused_until": paused}
+                for name, ok, count, err, paused in rows}
 
     # --- cote du marché -----------------------------------------------------------
     async def record_prices(self, rows: list[tuple[str, str, float, int, str]]) -> None:

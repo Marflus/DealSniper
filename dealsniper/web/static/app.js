@@ -1216,6 +1216,16 @@ $("#p-add").addEventListener("submit", async (e) => {
   } catch (err) { toast("❌ " + err.message); }
 });
 
+// « il y a 5 min », « il y a 2 h », « hier »…
+function timeAgo(iso) {
+  const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
+  const sec = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  if (sec < 90) return "à l'instant";
+  if (sec < 5400) return `il y a ${Math.round(sec / 60)} min`;
+  if (sec < 86400) return `il y a ${Math.round(sec / 3600)} h`;
+  return `il y a ${Math.round(sec / 86400)} j`;
+}
+
 // ---------- État de l'installation ----------
 async function loadStatus() {
   const s = await api("/api/status").catch(() => null);
@@ -1227,7 +1237,12 @@ async function loadStatus() {
           : "Clé Anthropic manquante : collez-la ci-dessous, ou passez en mode sans IA (Réglages → Budget IA)" },
     { ok: s.channels.length > 0, text: s.channels.length ? `Notifications : ${s.channels.join(" + ")}`
       : "Aucune notification : ajoutez TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (ou DISCORD_WEBHOOK_URL) dans .env" },
-    ...s.sites.map((site) => ({ ok: site.ok, text: site.ok ? `${site.label} : lancé à chaque passage` : `${site.label} ignoré : ${site.reason}` })),
+    ...s.sites.map((site) => {
+      if (!site.ok) return { ok: false, text: `${site.label} ignoré : ${site.reason}` };
+      const last = site.last_ok ? `dernière récolte ${timeAgo(site.last_ok)}${site.last_count != null ? ` · ${site.last_count} annonces` : ""}` : "jamais récolté encore";
+      const broken = site.last_error ? ` — ⚠️ dernière erreur : ${site.last_error}` : "";
+      return { ok: !site.last_error, text: `${site.label} : ${last}${broken}` };
+    }),
   ];
   if (s.error) items.push({ ok: false, text: `config.yaml illisible : ${s.error}` });
   $("#status-list").innerHTML = items.map((i) => `<li class="${i.ok ? "ok" : "ko"}">${i.ok ? "✓" : "⚠"} ${esc(i.text)}</li>`).join("");
