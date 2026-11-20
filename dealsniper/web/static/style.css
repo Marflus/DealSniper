@@ -538,3 +538,10 @@ button.wide { width: 100%; }
 /* Baisse de prix */
 .drop-badge { font-size: 12px; font-weight: 700; color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent);
   padding: 1px 7px; border-radius: 99px; white-space: nowrap; }
+
+/* Tableau de bord */
+.stat-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.stat-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.stat-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
+.stat-table td.pos { color: var(--good); font-weight: 600; }
+.stat-table th:not(:first-child), .stat-table td:not(:first-child) { text-align: right; }

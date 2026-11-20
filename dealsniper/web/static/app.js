@@ -52,8 +52,9 @@ async function api(url, options = {}) {
 function showTab(tab) {
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".page").forEach((p) => (p.hidden = p.id !== `tab-${tab}`));
-  $("#savebar").hidden = tab === "ads" || tab === "purchases";  // ces deux onglets n'éditent pas config.yaml
+  $("#savebar").hidden = ["ads", "purchases", "stats"].includes(tab);  // ces onglets n'éditent pas config.yaml
   if (tab === "purchases") loadPurchases();
+  else if (tab === "stats") loadStats();
   else if (tab !== "ads" && !settings) loadSettings();
   try { localStorage.setItem("dealsniper-tab", tab); } catch (e) { /* stockage indisponible */ }
 }
@@ -480,7 +481,8 @@ function deepBlock(ad) {
 function pointsChart(points, opts) {
   const pts = (points || []).filter((v) => v.prix != null && /^\d{4}-\d{2}/.test(v.date || ""));
   if (pts.length < 2) return "";
-  const { caption = "", band = null, line = false, aria = caption } = opts || {};
+  const { caption = "", band = null, line = false, aria = caption, fmt = (v) => `${Math.round(v)} €`,
+          dateFmt = { month: "short", year: "2-digit" } } = opts || {};
   const W = 320, H = 150, L = 38, R = 10, T = 10, B = 24;
   const toMs = (v) => Date.UTC(+v.date.slice(0, 4), +v.date.slice(5, 7) - 1, +(v.date.slice(8, 10) || 15));
   const xs = pts.map(toMs);
@@ -491,8 +493,8 @@ function pointsChart(points, opts) {
   const pad = (yMax - yMin) * 0.12 || 10; yMin = Math.max(0, yMin - pad); yMax += pad;
   const px = (ms) => L + ((ms - xMin) / (xMax - xMin || 1)) * (W - L - R);
   const py = (v) => T + (1 - (v - yMin) / (yMax - yMin || 1)) * (H - T - B);
-  const euro = (v) => `${Math.round(v)} €`;
-  const moisAn = (ms) => new Date(ms).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+  const euro = fmt;
+  const moisAn = (ms) => new Date(ms).toLocaleDateString("fr-FR", dateFmt);
 
   let bandSvg = "";
   if (band && band.low != null && band.high != null) {
@@ -514,7 +516,7 @@ function pointsChart(points, opts) {
   const sorted = [...pts].sort((a2, b2) => toMs(a2) - toMs(b2));
   const polyline = line ? `<polyline class="chart-trend" points="${sorted.map((v) => `${px(toMs(v)).toFixed(1)},${py(v.prix).toFixed(1)}`).join(" ")}"/>` : "";
   const dots = pts.map((v) => `<circle class="chart-dot" cx="${px(toMs(v)).toFixed(1)}" cy="${py(v.prix).toFixed(1)}" r="4.5">
-      <title>${moisAn(toMs(v))} · ${euro(v.prix)}${v.source ? ` · ${esc(v.source)}` : ""}${v.count ? ` · ${v.count} annonces` : ""}</title></circle>`).join("");
+      <title>${moisAn(toMs(v))} · ${euro(v.prix)}${v.source ? ` · ${esc(v.source)}` : ""}</title></circle>`).join("");
 
   return `<figure class="deep-chart">
     <figcaption>${esc(caption)}</figcaption>
@@ -1225,6 +1227,29 @@ function timeAgo(iso) {
   if (sec < 86400) return `il y a ${Math.round(sec / 3600)} h`;
   return `il y a ${Math.round(sec / 86400)} j`;
 }
+
+// ---------- Bilan / tableau de bord ----------
+async function loadStats() {
+  let data;
+  try { data = await api(`/api/stats?days=${$("#st-days").value}`); } catch (e) { toast("❌ " + e.message); return; }
+  const kpi = (label, value, cls = "") => `<div class="kpi ${cls}"><span>${label}</span><b>${value}</b></div>`;
+  $("#st-kpis").innerHTML = kpi("Annonces notées", data.total)
+    + kpi("Marge moyenne", data.avg_margin == null ? "—" : `${data.avg_margin >= 0 ? "+" : ""}${data.avg_margin} €`,
+          data.avg_margin >= 0 ? "pos" : "")
+    + kpi("Meilleure marge", data.best_margin == null ? "—" : `+${data.best_margin} €`, "pos")
+    + kpi("Note moyenne", data.avg_score == null ? "—" : `${String(data.avg_score).replace(".", ",")}/10`);
+  $("#st-activity").innerHTML = data.activity.length >= 2
+    ? pointsChart(data.activity, { caption: "Annonces notées par jour", line: true, fmt: (v) => Math.round(v),
+        dateFmt: { day: "2-digit", month: "short" }, aria: "Activité par jour" })
+    : '<p class="muted small">Pas encore assez de données.</p>';
+  $("#st-cats").innerHTML = data.categories.length
+    ? `<table class="stat-table"><thead><tr><th>Catégorie</th><th>Nb</th><th>Marge moy.</th><th>Note</th></tr></thead>
+       <tbody>${data.categories.map((c) => `<tr><td>${esc(c.name)}</td><td>${c.count}</td>
+         <td class="${c.avg_margin >= 0 ? "pos" : ""}">${c.avg_margin == null ? "—" : `${c.avg_margin} €`}</td>
+         <td>${c.avg_score == null ? "—" : `${String(c.avg_score).replace(".", ",")}`}</td></tr>`).join("")}</tbody></table>`
+    : '<p class="muted small">Aucune annonce notée sur la période.</p>';
+}
+$("#st-days").addEventListener("change", loadStats);
 
 // ---------- État de l'installation ----------
 async function loadStatus() {

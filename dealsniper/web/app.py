@@ -314,6 +314,14 @@ def create_app() -> Flask:
         return jsonify(ads=items, cost_today=round(cost, 4), cost_cap=cap, running=state["running"],
                        error=state["error"], progress=progress.current.snapshot(), geo=geo_state, home=home)
 
+    @app.get("/api/stats")
+    def stats():
+        db = database()
+        try:
+            return jsonify(db.stats(int(request.args.get("days", 30))))
+        finally:
+            db.close()
+
     @app.get("/api/preferences")
     def preferences():
         """Goûts appris (par catégorie) pour le tri « Recommandé »."""

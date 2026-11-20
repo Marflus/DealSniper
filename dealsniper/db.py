@@ -257,6 +257,39 @@ class Database:
     def mark_reminded(self, uid: str) -> None:
         self.patch_ad(uid, {"reminded": True})
 
+    def stats(self, days: int = 30) -> dict:
+        """Bilan pour le tableau de bord : totaux, catégories, activité par jour (annonces notées)."""
+        import statistics as _stats
+
+        since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
+        rows = self._sql("SELECT data, score, seen_at FROM seen WHERE status = 'analyzed' AND seen_at >= ?", (since,))
+        by_cat: dict[str, dict] = {}
+        by_day: dict[str, int] = {}
+        margins, scores = [], []
+        for data, score, seen_at in rows:
+            ad = json.loads(data or "{}")
+            cat = ad.get("category") or "Autre"
+            margin = (ad.get("analysis") or {}).get("marge_nette_estimee")
+            entry = by_cat.setdefault(cat, {"count": 0, "margins": [], "scores": []})
+            entry["count"] += 1
+            if margin is not None:
+                entry["margins"].append(margin)
+                margins.append(margin)
+            if score is not None:
+                entry["scores"].append(score)
+                scores.append(score)
+            by_day[seen_at[:10]] = by_day.get(seen_at[:10], 0) + 1
+        categories = sorted(
+            [{"name": c, "count": e["count"],
+              "avg_margin": round(_stats.mean(e["margins"])) if e["margins"] else None,
+              "avg_score": round(_stats.mean(e["scores"]), 1) if e["scores"] else None} for c, e in by_cat.items()],
+            key=lambda x: (x["avg_margin"] is not None, x["avg_margin"] or 0, x["count"]), reverse=True)
+        activity = [{"date": d, "prix": n} for d, n in sorted(by_day.items())]
+        return {"days": days, "total": len(rows), "avg_margin": round(_stats.mean(margins)) if margins else None,
+                "avg_score": round(_stats.mean(scores), 1) if scores else None,
+                "best_margin": round(max(margins)) if margins else None,
+                "categories": categories, "activity": activity}
+
     def analyzed_since(self, hours: int) -> list[Ad]:
         """Annonces notées par Claude ces dernières `hours` heures (meilleures d'abord)."""
         since = (_now() - timedelta(hours=hours)).isoformat(timespec="seconds")
