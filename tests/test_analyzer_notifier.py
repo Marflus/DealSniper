@@ -204,3 +204,60 @@ def test_post_retries_rate_limits_and_server_errors(monkeypatch):
     assert run([requests.ConnectionError("coupé"), R(200)]) is True  # réseau : réessayé
     assert run([R(400)]) is False and len(calls) == 1  # requête refusée : pas d'insistance
     assert run([R(500), R(500), R(500)]) is False and len(calls) == notifier.MAX_ATTEMPTS
+
+
+def test_api_errors_are_deferred_failed_or_retried(monkeypatch, config):
+    """Chaque erreur de l'API mène au bon sort : reportée (pas la faute de l'annonce), échec compté,
+    ou nouvel essai avec une requête adaptée au modèle."""
+    import anthropic
+    import httpx
+
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+
+    def error(cls, status, message):
+        return cls(message, response=httpx.Response(status, request=request), body=None)
+
+    def analyzer_with(effects):
+        an = make_analyzer(monkeypatch, config, [])
+        calls = []
+
+        def create(**params):
+            calls.append(params)
+            effect = effects.pop(0)
+            if isinstance(effect, Exception):
+                raise effect
+            stop, data = effect
+            text = data if isinstance(data, str) else json.dumps(data)
+            return SimpleNamespace(content=[SimpleNamespace(type="text", text=text)], stop_reason=stop,
+                                   usage=SimpleNamespace(input_tokens=100, output_tokens=20))
+
+        an.client = SimpleNamespace(messages=SimpleNamespace(create=create))
+        return an, calls
+
+    # Clé refusée : toute l'analyse s'arrête, tout est reporté (pas un échec de l'annonce).
+    an, _ = analyzer_with([error(anthropic.AuthenticationError, 401, "invalid x-api-key")])
+    res = an.analyze(ads(3))
+    assert len(res.deferred) == 3 and not res.failed
+
+    # Crédit épuisé : idem.
+    an, _ = analyzer_with([error(anthropic.BadRequestError, 400, "Your credit balance is too low")])
+    assert len(an.analyze(ads(2)).deferred) == 2
+
+    # Réseau : reporté.
+    an, _ = analyzer_with([anthropic.APIConnectionError(request=request)])
+    assert len(an.analyze(ads(2)).deferred) == 2
+
+    # Schéma JSON refusé par le modèle : nouvel essai en JSON simple, et ça marche.
+    an, calls = analyzer_with([error(anthropic.BadRequestError, 400, "output_config.format not supported"),
+                               ("end_turn", {"annonces": [item(1), item(2)]})])
+    res = an.analyze(ads(2))
+    assert len(res.analyzed) == 2 and "format" not in calls[1].get("output_config", {})
+
+    # Réponse illisible : échec compté (l'annonce sera abandonnée après quelques essais).
+    an, _ = analyzer_with([("end_turn", "pas du json")])
+    res = an.analyze(ads(2))
+    assert len(res.failed) == 2 and not res.deferred
+
+    # Refus du modèle : échec compté.
+    an, _ = analyzer_with([("refusal", {})])
+    assert len(an.analyze(ads(1)).failed) == 1
