@@ -498,3 +498,22 @@ def test_rank_tolerates_missing_margin():
     a = Ad(title="a", url="https://x/1", source="t", analysis={"score_rentabilite": 7, "marge_nette_estimee": None})
     b = Ad(title="b", url="https://x/2", source="t", analysis={"score_rentabilite": 7, "marge_nette_estimee": 30})
     assert [x.title for x in _rank([a, b])] == ["b", "a"]
+
+
+def test_cancel_stops_before_saving(monkeypatch, config):
+    """Annulation : la liste est lue, mais rien n'est enregistré ni envoyé à l'IA (tout revient ensuite)."""
+    calls = []
+    monkeypatch.setattr(engine.analyzer, "analyze", lambda *a: calls.append(a))
+
+    async def go():
+        db = Database(data_dir() / "c.db")
+        async with client() as http:
+            eng = engine.Engine(config, db, http)
+            eng.stopping.set()
+            stats = await eng.process(FakeSite(config))
+        unseen = await db.unseen(["ebay:100000000001"])
+        db.close()
+        return stats, unseen
+
+    stats, unseen = asyncio.run(go())
+    assert stats["listées"] == 3 and stats["analysées"] == 0 and not calls and unseen == {"ebay:100000000001"}

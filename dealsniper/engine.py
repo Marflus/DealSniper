@@ -11,6 +11,7 @@ import contextlib
 import logging
 import random
 import signal
+import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -30,6 +31,10 @@ from .sites import skipped as skipped_sites
 SITE_LABELS = {"ebay": "eBay", "leboncoin": "Leboncoin", "vinted": "Vinted", "facebook": "Facebook"}
 
 log = logging.getLogger(__name__)
+
+# Annulation demandée depuis l'interface (bouton « Annuler ») : le passage s'arrête proprement au
+# prochain point de contrôle (après la liste, entre deux annonces, avant l'analyse IA).
+CANCEL = threading.Event()
 
 
 class Engine:
@@ -87,6 +92,8 @@ class Engine:
 
         site.on_progress = on_search
         listed = await site.list_recent(self.http)
+        if self.stopping.is_set():  # annulé pendant la recherche : rien n'est enregistré
+            return {"listées": len(listed), "nouvelles": 0, "retenues": 0, "analysées": 0, "notifiées": 0}
         new_uids = await self.db.unseen([ad.uid for ad in listed])
         # Annonces déjà vues mais enregistrées sans photo : on complète avec celle de la liste (aucune requête).
         await self.db.fill_images({ad.uid: ad.image for ad in listed if ad.image and ad.uid not in new_uids})
@@ -104,7 +111,7 @@ class Engine:
         candidates = await self._select(site, listed, new_ads, prints)
         stats = {"listées": len(listed), "nouvelles": len(new_ads), "retenues": len(candidates),
                  "analysées": 0, "notifiées": 0}
-        if not candidates:
+        if not candidates or self.stopping.is_set():  # annulé : les retenues seront revues au prochain passage
             return stats
 
         candidates.sort(key=filters.priority)  # les plus prometteuses d'abord
@@ -149,6 +156,8 @@ class Engine:
         """Tri des nouvelles annonces : doublons, filtre, cote, puis fiche détaillée et second filtre."""
         candidates = []
         for i, ad in enumerate(new_ads, 1):
+            if self.stopping.is_set():
+                break  # annulé : les annonces restantes ne sont pas « vues », elles reviendront
             self.progress.update(site.label, f"{len(listed)} annonces · tri des nouvelles {i}/{len(new_ads)}")
             prints[ad.uid] = fingerprint(ad, self.brands)
             ad.watched = watchlist_match.matches(ad, self.config.get("watchlist") or [])
@@ -204,6 +213,10 @@ class Engine:
             stats = await self.process(site)
             await self.db.record_site_ok(site.name, stats["listées"])  # santé du connecteur
             log.info("%s : %s", site.name, stats)
+            if CANCEL.is_set():
+                self.progress.done(site.label, f"annulé · {stats['listées']} annonces vues, "
+                                               f"{stats['analysées']} analysées")
+                return
             self.progress.done(site.label, f"{stats['listées']} annonces · {stats['nouvelles']} nouvelles · "
                                            f"{stats['analysées']} analysées · {stats['notifiées']} notifiées")
         except AccessDenied as exc:
@@ -251,6 +264,16 @@ def _live_logging(progress: Progress) -> None:
     root.addHandler(LiveLogHandler(progress))
 
 
+async def _watch_cancel(engine: Engine) -> None:
+    """Relaie le bouton « Annuler » de l'interface (autre thread) vers l'arrêt du moteur."""
+    while not engine.stopping.is_set():
+        if CANCEL.is_set():
+            log.info("Passage annulé depuis l'interface")
+            engine.stopping.set()
+            return
+        await asyncio.sleep(0.3)
+
+
 async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> None:
     progress = Progress(live=live)
     progress_module.current = progress
@@ -273,6 +296,8 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
         sampler = (lambda query: ebay.sample_prices(http, query)) if ebay else None
         engine = Engine(config, db, http, progress, Market(db, config, sampler))
         spinner = asyncio.create_task(progress.animate()) if progress.live else None
+        CANCEL.clear()
+        canceller = asyncio.create_task(_watch_cancel(engine))
         try:
             if forever:
                 for sig in (signal.SIGINT, signal.SIGTERM):
@@ -287,6 +312,7 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
                 # Sites en parallèle : chacun garde son propre rythme, seul le total est plus court.
                 await asyncio.gather(*(engine.process_safely(site) for site in sites))
         finally:
+            canceller.cancel()
             if spinner:
                 spinner.cancel()
                 progress.render()

@@ -30,10 +30,14 @@ selon le nombre de prix réels trouvés, et 2 à 4 sources courtes au format « 
 Donne aussi « ventes » : jusqu'à 12 ventes ou annonces RÉELLEMENT observées pendant ta recherche, chacune avec
 son mois (date) et son prix. N'invente aucun point : si tu n'as pas trouvé de prix daté, renvoie une liste vide.
 
+Donne enfin « questions » : 3 à 5 questions courtes à poser au vendeur AVANT d'acheter, propres à CE modèle et
+à SA panne (points faibles connus du modèle, verrouillages, pièces manquantes, état de la batterie…).
+
 Termine TOUJOURS par un unique bloc JSON, sans rien après :
 {"revente_basse": n, "revente_typique": n, "revente_haute": n, "confiance": "faible|moyenne|élevée",
  "sources": ["...", "..."], "resume": "une phrase", "pieges": "pièges éventuels en 8 mots max",
- "ventes": [{"date": "AAAA-MM", "prix": n, "source": "ebay|leboncoin|vinted|backmarket"}]}"""
+ "ventes": [{"date": "AAAA-MM", "prix": n, "source": "ebay|leboncoin|vinted|backmarket"}],
+ "questions": ["...", "..."]}"""
 
 WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5,
                    "user_location": {"type": "approximate", "country": "FR"}}
@@ -77,6 +81,7 @@ def sanitize(raw: dict[str, Any], ad: Ad) -> dict[str, Any]:
         "confiance": confiance, "sources": sources, "ventes": _sales(raw.get("ventes")),
         "resume": str(raw.get("resume", ""))[:300], "pieges": str(raw.get("pieges", ""))[:120],
         "prix_achat_max": max_buy,
+        "questions": [str(q).strip()[:160] for q in (raw.get("questions") or []) if str(q).strip()][:5],
     }
 
 

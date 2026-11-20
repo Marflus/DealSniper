@@ -522,6 +522,16 @@ def create_app() -> Flask:
         threading.Thread(target=worker, daemon=True).start()
         return jsonify(ok=True)
 
+    @app.post("/api/cancel")
+    def cancel_run():
+        """Bouton « Annuler » : arrêt propre du passage en cours (au prochain point de contrôle)."""
+        from ..engine import CANCEL
+
+        if not state["running"]:
+            return jsonify(ok=False, message="Aucun passage en cours."), 409
+        CANCEL.set()
+        return jsonify(ok=True)
+
     @app.post("/api/run")
     def run_now():
         return start_run()

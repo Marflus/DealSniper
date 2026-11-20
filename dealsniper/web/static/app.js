@@ -31,6 +31,8 @@ let preferences = {};  // goût appris par catégorie (favoris − masquées)
 let status = "analyzed";
 let selectedSites = new Set();  // vide = tous les sites
 let settings = null;
+let running = false;  // un passage (ou une recherche ponctuelle) est en cours
+let searchQuery = "", searchPoll = null, searchResults = [];  // recherche ponctuelle
 
 // Préférences du navigateur (onglet, thème, filtres…) : le stockage peut être indisponible
 // (navigation privée, données bloquées) ; l'interface fonctionne alors sans mémoire.
@@ -63,7 +65,17 @@ async function api(url, options = {}) {
 
 // ---------- Onglets ----------
 // Tous les onglets sauf « Annonces » modifient config.yaml et partagent le bouton Enregistrer.
+// Une seule barre de filtres : elle suit l'onglet (Annonces, ou résultats de la Recherche ponctuelle).
+const toolbarHome = document.createComment("filtres");
+document.querySelector(".toolbar").before(toolbarHome);
+function placeToolbar(tab) {
+  const bar = document.querySelector(".toolbar");
+  if (tab === "search") $("#search-filters").prepend(bar);
+  else if (tab === "ads") toolbarHome.after(bar);
+}
+
 function showTab(tab) {
+  placeToolbar(tab);
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".page").forEach((p) => (p.hidden = p.id !== `tab-${tab}`));
   $("#savebar").hidden = ["ads", "search", "purchases", "stats"].includes(tab);  // n'éditent pas config.yaml
@@ -193,6 +205,8 @@ function renderProgress(data) {
 function drawProgress() {
   const box = $("#progress");
   const p = progress;
+  const mirror = $("#search-live");  // même affichage animé dans l'onglet Recherche
+  mirror.hidden = !(searchPoll && p && (p.sites || []).length);
   if (!p || !(p.sites || []).length || (p.done && progressClosed)) { box.hidden = true; return; }
   box.hidden = false;
   const live = (secs, done) => duration(done ? secs : secs + (Date.now() - progressAt) / 1000);
@@ -214,13 +228,14 @@ function drawProgress() {
     ${rows}
     <div class="prog-row total"><b>Total</b><span></span><span class="prog-time">⏱ ${live(p.elapsed, p.done)}</span>
       <span class="prog-cost">${iaCost(p.cost)}</span><span></span></div>`;
+  if (!mirror.hidden) mirror.innerHTML = box.innerHTML;
 }
 setInterval(() => {  // chrono et « buffering » animés entre deux rafraîchissements
   if (!progress || progress.done) return;
   spin = (spin + 1) % SPINNER.length;
   drawProgress();
 }, 150);
-$("#progress").addEventListener("click", (e) => {
+["#progress", "#search-live"].forEach((sel) => $(sel).addEventListener("click", (e) => {
   if (e.target.closest("[data-close-progress]")) { progressClosed = true; drawProgress(); return; }
   const row = e.target.closest(".prog-row.expandable");
   if (row) {
@@ -228,7 +243,7 @@ $("#progress").addEventListener("click", (e) => {
     openedSites.has(site) ? openedSites.delete(site) : openedSites.add(site);
     drawProgress();
   }
-});
+}));
 
 // ---------- Annonces ----------
 let runPoll = null;
@@ -239,8 +254,7 @@ async function loadAds() {
     geoState = data.geo;
     allAds = data.ads;
     renderBudget(data.cost_today, data.cost_cap);
-    $("#run").disabled = data.running;
-    $("#run").textContent = data.running ? "⏳ Passage en cours…" : "▶ Lancer un passage";
+    setRunning(data.running);
     if (data.error) toast("Dernier passage en erreur : " + data.error);
     renderProgress(data.progress);
     if (data.running && !runPoll) runPoll = setInterval(loadAds, 1500);  // suivi rapide pendant un passage
@@ -253,7 +267,7 @@ async function loadAds() {
   }
 }
 
-function filteredAds() {
+function filteredAds(source = allAds) {
   const text = $("#f-text").value.trim().toLowerCase();
   const category = $("#f-category").value, type = $("#f-type").value;
   const minScore = Number($("#f-score").value || 0);
@@ -264,7 +278,7 @@ function filteredAds() {
   const maxDistance = $("#f-distance").value === "" ? null : Number($("#f-distance").value);
   const deliveryMode = $("#f-delivery").value;
 
-  const ads = allAds.filter((ad) => {
+  const ads = source.filter((ad) => {
     const a = ad.analysis || {};
     if (status === "fav" ? !ad.favorite : status === "hidden" ? !ad.hidden : ad.hidden) return false;
     if (maxDistance != null && (ad.distance_km ?? Infinity) > maxDistance) return false;
@@ -359,7 +373,7 @@ function adCard(ad) {
         <div class="card-actions">
           <button class="mini ${ad.favorite ? "on" : ""}" data-fav="${esc(ad.uid)}" title="${ad.favorite ? "Retirer des favoris" : "Mettre en favori"}">${ad.favorite ? "★" : "☆"}</button>
           <button class="mini" data-hide="${esc(ad.uid)}" title="${ad.hidden ? "Ne plus masquer" : "Masquer cette annonce"}">${ad.hidden ? "↺" : "⊘"}</button>
-          <button class="info" data-info="${esc(ad.uid)}" title="Détails, panne, ville, questions à poser">i</button>
+          <button class="info" data-info="${esc(ad.uid)}" title="Détails, estimation, vendeur, analyse approfondie">i</button>
         </div>
       </div>
     </div>
@@ -417,74 +431,114 @@ function showDetails(uid) {
   if (!ad) return;
   const a = ad.analysis || {};
   const row = (label, value) => (value ? `<div class="d-row"><span>${label}</span><b>${value}</b></div>` : "");
+  const card = (title, rows) => (rows.trim() ? `<section class="d-card"><h4>${title}</h4>${rows}</section>` : "");
   const seen = ad.seen_at ? new Date(ad.seen_at.endsWith("Z") || ad.seen_at.includes("+") ? ad.seen_at : ad.seen_at + "Z") : null;
-  const buy = ad.shipping ? `${euros(ad.price)} + ${euros(ad.shipping)} de port` : euros(ad.total_price ?? ad.price);
   const desc = String(ad.description || "").trim();
+  const margin = a.marge_nette_estimee;
+  const tile = (label, value, cls = "", sub = "") =>
+    `<div class="d-tile ${cls}"><span>${label}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
+  const risks = riskFlags(ad);
+  const score = ad.score != null ? `<span class="d-score s${Math.round(ad.score)}">${ad.score}/10</span>` : "";
+
   $("#details-body").innerHTML = `
-    ${ad.image ? `<img class="d-photo" src="${esc(ad.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
-    <h3>${esc(ad.title)}</h3>
-    <div class="d-grid">
-      ${row("🩺 Panne probable", esc(faultText(a)))}
-      ${row("📍 Ville", esc(cleanPlace(ad.location)) + (ad.distance_km != null ? ` <span class="muted">(à ${ad.distance_km} km de chez vous)</span>` : ""))}
-      ${row("🏷️ Type de vente", ad.price_mode === "enchere" ? "Enchère (prix provisoire)" : "Prix fixe")}
-      ${ad.price_drop ? row("⬇ Baisse de prix", `${euros(ad.price_drop.from)} → <b>${euros(ad.price_drop.to)}</b> (−${euros(ad.price_drop.from - ad.price_drop.to)})`) : ""}
-      ${row("📦 Remise", `${delivery(ad).icon} ${delivery(ad).label}`)}
-      ${row("💶 Achat", buy)}
-      ${row("🔩 Pièce estimée", a.cout_piece_estime ? euros(a.cout_piece_estime) : "")}
-      ${row("📊 Cote du marché", ad.market ? `${euros(ad.market.median)} <span class="muted">(${esc(ad.market.model)}, ${ad.market.count} ${ad.market.source === "ebay" ? "occasions eBay" : "annonces"})</span>` : "")}
-      ${row("🤖 Estimation de l'IA", a.valeur_revente_ia != null ? euros(a.valeur_revente_ia) : "")}
-      ${row("📈 Revente retenue", a.valeur_revente_estimee != null ? `${euros(a.valeur_revente_estimee)} <span class="muted">(prudence −10 %)</span>` : "")}
-      ${row("🧮 Marge nette", a.marge_nette_estimee != null ? `${a.marge_nette_estimee >= 0 ? "+" : ""}${euros(a.marge_nette_estimee)}` : "")}
-      ${sellerRows(ad.seller, row)}
-      ${row("✨ Signaux repérés", esc((ad.signals || []).join(", ")))}
-      ${row("🛒 Site", `${siteLogo(ad.source, 14)} ${esc(siteName(ad.source))}${ad.category ? ` · ${esc(ad.category)}` : ""}`)}
-      ${row("🕒 Repérée", seen && !isNaN(seen) ? seen.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "")}
-      ${row("✗ Écartée", esc(ad.reason || ""))}
+    <header class="d-head">
+      <div class="d-badges">${siteLogo(ad.source, 16)} <span>${esc(siteName(ad.source))}</span>
+        ${ad.category ? `<span class="d-pill">${esc(ad.category)}</span>` : ""}
+        ${a.type_affaire ? `<span class="d-pill">${a.type_affaire === "revente_directe" ? "Revente directe" : "À réparer"}</span>` : ""}
+        ${brandOf(ad) ? `<span class="d-pill gold">⭐ ${esc(brandOf(ad))}</span>` : ""}
+        ${ad.watched ? '<span class="d-pill">🔭 Veille</span>' : ""}</div>
+      <h3>${esc(ad.title)} ${score}</h3>
+    </header>
+    <div class="d-layout">
+      <aside class="d-side">
+        ${ad.image ? `<img class="d-photo" src="${esc(ad.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">`
+          : '<div class="d-photo empty">📦</div>'}
+        <div class="d-tiles">
+          ${tile("Achat", euros(ad.total_price ?? ad.price), "", ad.shipping ? `dont ${euros(ad.shipping)} de port` : ad.price_mode === "enchere" ? "enchère en cours" : "")}
+          ${tile("Revente", a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "—", "", a.source_revente === "cote" ? "d'après la cote" : "prudence −10 %")}
+          ${tile("Marge nette", margin == null ? "—" : `${margin >= 0 ? "+" : ""}${euros(margin)}`, margin == null ? "" : margin >= 0 ? "pos" : "neg")}
+          ${tile("Notes", `${a.facilite_reparation ?? "—"} · ${a.facilite_vente ?? "—"}`, "", "réparation · vente /10")}
+        </div>
+        <div class="d-actions">
+          <button class="ghost" data-fav="${esc(ad.uid)}">${ad.favorite ? "★ En favori" : "☆ Favori"}</button>
+          <button class="ghost" data-buy="${esc(ad.uid)}">🛒 Acheté</button>
+        </div>
+        <a class="primary d-open" href="${esc(ad.url)}" target="_blank" rel="noopener">Voir l'annonce ↗</a>
+      </aside>
+      <div class="d-main">
+        ${risks.length ? `<div class="d-risk"><b>⚠️ Points de vigilance</b><ul>${risks.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+        <div class="d-cards">
+          ${card("🧮 Estimation", `
+            ${row("🩺 Panne probable", esc(faultText(a)))}
+            ${row("🔩 Pièce estimée", a.cout_piece_estime ? euros(a.cout_piece_estime) : "")}
+            ${row("📊 Cote du marché", ad.market ? `${euros(ad.market.median)} <span class="muted">(${ad.market.count} ${ad.market.source === "ebay" ? "occasions eBay" : "annonces"})</span>` : "")}
+            ${row("🤖 Avis brut de l'IA", a.valeur_revente_ia != null ? euros(a.valeur_revente_ia) : "")}
+            ${ad.price_drop ? row("⬇ Baisse de prix", `${euros(ad.price_drop.from)} → ${euros(ad.price_drop.to)}`) : ""}
+            ${row("✨ Signaux", esc((ad.signals || []).join(", ")))}
+            ${row("✗ Écartée", esc(ad.reason || ""))}`)}
+          ${card("📍 Annonce", `
+            ${row("Ville", esc(cleanPlace(ad.location)) + (ad.distance_km != null ? ` <span class="muted">· ${ad.distance_km} km</span>` : ""))}
+            ${row("Remise", `${delivery(ad).icon} ${delivery(ad).label}`)}
+            ${row("Vente", ad.price_mode === "enchere" ? "Enchère (prix provisoire)" : "Prix fixe")}
+            ${row("Repérée", seen && !isNaN(seen) ? seen.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "")}`)}
+          ${card("👤 Vendeur", sellerRows(ad.seller, row))}
+        </div>
+        ${desc ? `<details class="d-desc"><summary>Description du vendeur</summary><p>${esc(desc.slice(0, 1500))}${desc.length > 1500 ? "…" : ""}</p></details>` : ""}
+      </div>
     </div>
-    ${ad.history_chart || '<div id="d-history"></div>'}
-    ${deepBlock(ad)}
-    ${desc ? `<details class="d-desc"><summary>Description du vendeur</summary><p>${esc(desc.slice(0, 1200))}${desc.length > 1200 ? "…" : ""}</p></details>` : ""}
-    ${(() => { const r = riskFlags(ad); return r.length ? `<div class="d-risk"><b>⚠️ Points de vigilance</b><ul>${r.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""; })()}
-    <div class="d-questions"><b>💬 Questions à poser au vendeur</b><ul>${sellerQuestions(ad).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
-    ${repairLinks(ad)}
-    <div class="d-actions">
-      <button class="ghost" data-fav="${esc(ad.uid)}">${ad.favorite ? "★ En favori" : "☆ Favori"}</button>
-      <button class="ghost" data-buy="${esc(ad.uid)}">🛒 Je l'ai acheté</button>
-    </div>
-    <a class="primary d-open" href="${esc(ad.url)}" target="_blank" rel="noopener">Voir l'annonce ↗</a>`;
-  $("#details").showModal();
-  // Cote du modèle dans le temps : chargée une fois, à partir des prix déjà en base (gratuit).
-  if (ad.history_chart === undefined) {
-    api(`/api/ads/${encodeURIComponent(ad.uid)}/history`).then((data) => {
-      ad.history_chart = historyChart(data.history) || "";
-      const slot = $("#d-history");
-      if (slot && ad.history_chart) slot.outerHTML = ad.history_chart;
-    }).catch(() => { ad.history_chart = ""; });
-  }
+    ${deepBlock(ad)}`;
+  if (!$("#details").open) $("#details").showModal();
+  if (ad.market_deep) loadHistory(ad);
 }
 
-// Liens utiles pour réparer : tutoriel iFixit et prix de la pièce (aucune requête, simples recherches).
-// Analyse de marché approfondie (gros modèle + recherche web) : bouton, puis résultat mémorisé.
+// Cote du modèle dans le temps (prix déjà en base, gratuit) : affichée dans l'analyse approfondie.
+function loadHistory(ad) {
+  const put = () => { const slot = $("#d-history"); if (slot) slot.innerHTML = ad.history_chart || ""; };
+  if (ad.history_chart !== undefined) return put();
+  api(`/api/ads/${encodeURIComponent(ad.uid)}/history`).then((data) => {
+    ad.history_chart = historyChart(data.history) || "";
+    put();
+  }).catch(() => { ad.history_chart = ""; });
+}
+
+// Analyse approfondie (gros modèle + recherche web) : tout le « payant » est ici, à la demande —
+// prix réels, graphique des ventes, questions sur mesure ; plus les liens de réparation.
 const CONF_LEVEL = { faible: "low", moyenne: "mid", "élevée": "good" };
 function deepBlock(ad) {
   const d = ad.market_deep;
   if (!d) {
-    return `<div class="d-deep"><button class="ghost wide" data-deep="${esc(ad.uid)}">
-      📊 Analyse du marché — prix réel vérifié sur le web <small>(~quelques centimes)</small></button></div>`;
+    return `<section class="d-deep">
+      <div class="deep-cta">
+        <div><b>🔬 Analyse approfondie</b>
+          <ul><li>Prix de revente <b>réels</b> vérifiés sur le web</li><li>Graphique des dernières ventes et de la cote</li>
+            <li>Questions à poser au vendeur, sur mesure</li><li>Tutoriels et pièces pour réparer</li></ul></div>
+        <button class="deep-btn" data-deep="${esc(ad.uid)}"><span>Lancer l'analyse</span><small>≈ quelques centimes · 10–30 s</small></button>
+      </div></section>`;
   }
   const range = [d.revente_basse, d.revente_typique, d.revente_haute].every((x) => x != null)
-    ? `${euros(d.revente_basse)} – ${euros(d.revente_haute)} <span class="muted">(typique ${euros(d.revente_typique)})</span>` : "—";
-  return `<div class="d-deep done">
-    <div class="deep-head">📊 Analyse du marché <span class="conf ${CONF_LEVEL[d.confiance] || "mid"}">confiance ${esc(d.confiance)}</span></div>
-    <div class="d-row"><span>Revente réelle estimée</span><b>${range}</b></div>
-    ${d.prix_achat_max != null ? `<div class="d-row"><span>Acheter au maximum</span><b>${euros(d.prix_achat_max)} <span class="muted">(pour +30 € net)</span></b></div>` : ""}
-    ${salesChart(d)}
-    ${d.resume ? `<p class="deep-summary">${esc(d.resume)}</p>` : ""}
-    ${d.pieges ? `<p class="deep-warn">⚠️ ${esc(d.pieges)}</p>` : ""}
-    ${(d.sources || []).length ? `<ul class="deep-sources">${d.sources.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
-    <div class="deep-foot"><small class="muted">${esc(d.model || "")} · ${d.cost_usd ? `${iaCost(d.cost_usd)}` : ""}</small>
-      <button class="link" data-deep="${esc(ad.uid)}">Refaire l'analyse</button></div>
-  </div>`;
+    ? `${euros(d.revente_basse)} – ${euros(d.revente_haute)}` : "—";
+  const questions = (d.questions || []).length ? d.questions : sellerQuestions(ad);
+  return `<section class="d-deep done">
+    <div class="deep-head">🔬 Analyse approfondie <span class="conf ${CONF_LEVEL[d.confiance] || "mid"}">confiance ${esc(d.confiance)}</span>
+      <span class="deep-meta">${esc(d.model || "")}${d.cost_usd ? ` · ${iaCost(d.cost_usd)}` : ""}
+        <button class="link" data-deep="${esc(ad.uid)}">↻ Refaire</button></span></div>
+    <div class="deep-grid">
+      <div>
+        <div class="d-tiles">
+          <div class="d-tile pos"><span>Revente réelle</span><b>${range}</b>${d.revente_typique != null ? `<small>typique ${euros(d.revente_typique)}</small>` : ""}</div>
+          ${d.prix_achat_max != null ? `<div class="d-tile"><span>Acheter au max</span><b>${euros(d.prix_achat_max)}</b><small>pour +30 € net</small></div>` : ""}
+        </div>
+        ${d.resume ? `<p class="deep-summary">${esc(d.resume)}</p>` : ""}
+        ${d.pieges ? `<p class="deep-warn">⚠️ ${esc(d.pieges)}</p>` : ""}
+        ${(d.sources || []).length ? `<ul class="deep-sources">${d.sources.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+      </div>
+      <div class="deep-charts">${salesChart(d) || '<p class="muted small">Aucune vente datée trouvée sur le web pour tracer le graphique.</p>'}<div id="d-history"></div></div>
+    </div>
+    <div class="deep-grid">
+      <div class="d-questions"><b>💬 Questions à poser au vendeur</b><ul>${questions.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
+      ${repairLinks(ad)}
+    </div>
+  </section>`;
 }
 
 // Nuage de points « prix × date de vente » (une série : les ventes observées sur le web).
@@ -555,7 +609,7 @@ async function deepMarket(uid) {
   const ad = allAds.find((x) => x.uid === uid);
   if (!ad) return;
   const btn = $("#details-body").querySelector(`[data-deep]`);
-  if (btn) { btn.disabled = true; btn.textContent = "⏳ Recherche des prix réels sur le web… (10–30 s)"; }
+  if (btn) { btn.disabled = true; btn.classList.add("loading"); btn.innerHTML = "<span>⏳ Recherche des prix réels…</span><small>10–30 s</small>"; }
   try {
     const data = await api(`/api/ads/${encodeURIComponent(uid)}/market-analysis`, { method: "POST" });
     ad.market_deep = data.market_deep;
@@ -563,7 +617,7 @@ async function deepMarket(uid) {
     renderAds(true);
   } catch (e) {
     toast("❌ " + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = "📊 Réessayer l'analyse du marché"; }
+    if (btn) { btn.disabled = false; btn.classList.remove("loading"); btn.innerHTML = "<span>↻ Réessayer</span>"; }
   }
 }
 
@@ -575,10 +629,10 @@ function repairLinks(ad) {
   const part = ["batterie", "écran", "ecran", "clavier", "ssd", "chargeur", "ventilateur", "charnière", "nappe", "alimentation",
     "carte", "port", "moteur", "dalle"].find((w) => fault.includes(w)) || "";
   const q = encodeURIComponent(`${model} ${part}`.trim());
-  return `<div class="d-links"><b>🔧 Réparer</b>
+  return `<div class="d-links"><b>🔧 Réparer</b><div>
     <a href="https://www.ifixit.com/Search?query=${q}" target="_blank" rel="noopener">Tutoriels iFixit ↗</a>
     <a href="https://www.ebay.fr/sch/i.html?_nkw=${q}" target="_blank" rel="noopener">Pièce sur eBay ↗</a>
-    <a href="https://fr.aliexpress.com/w/wholesale-${q}.html" target="_blank" rel="noopener">Pièce sur AliExpress ↗</a></div>`;
+    <a href="https://fr.aliexpress.com/w/wholesale-${q}.html" target="_blank" rel="noopener">Pièce sur AliExpress ↗</a></div></div>`;
 }
 
 async function markAd(uid, change) {
@@ -641,6 +695,7 @@ function renderAds(keepPage = false) {
       : '<div class="empty"><b>Aucune annonce pour l\'instant.</b><br>Cliquez sur <b>▶ Lancer un passage</b> en haut à droite pour lancer une première recherche.</div>';
   renderPager(pages);
   loadMissingImages();
+  if (searchResults.length) renderSearchResults();  // mêmes filtres sur les résultats de la recherche ponctuelle
 }
 
 // Annonces sans photo : on demande l'aperçu de leur lien (une à la fois, mémorisé côté serveur).
@@ -707,7 +762,22 @@ $("#reset-filters").addEventListener("click", () => {
   setStatus("analyzed");
 });
 
+// Pendant un passage, « Lancer » devient « Annuler » (en haut et dans l'onglet Recherche).
+function setRunning(on) {
+  running = !!on;
+  $("#run").classList.toggle("danger", running);
+  $("#run").textContent = running ? "■ Annuler le passage" : "▶ Lancer un passage";
+  $("#qs-run").classList.toggle("danger", running);
+  $("#qs-run").textContent = running ? "■ Annuler la recherche" : "Analyser maintenant";
+}
+async function cancelRun() {
+  $("#run").textContent = $("#qs-run").textContent = "⏳ Annulation…";
+  try { await api("/api/cancel", { method: "POST" }); toast("Annulation demandée : arrêt au prochain point de contrôle"); }
+  catch (e) { toast(e.message); }
+}
+
 $("#run").addEventListener("click", async () => {
+  if (running) return cancelRun();
   try {
     await api("/api/run", { method: "POST" });
     toast("Passage lancé…");
@@ -716,16 +786,17 @@ $("#run").addEventListener("click", async () => {
 });
 
 // ---------- Recherche ponctuelle (onglet dédié) ----------
-let searchQuery = "", searchPoll = null;
 
 $("#quick-search").addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (running) return cancelRun();
   const query = $("#qs-query").value.trim();
   if (!query) return;
   searchQuery = query;
-  $("#qs-run").disabled = true;
-  $("#qs-run").textContent = "⏳ Recherche en cours…";
+  searchResults = [];
+  setRunning(true);
   $("#search-report").hidden = true;
+  $("#search-filters").hidden = true;
   $("#search-results").innerHTML = "";
   try {
     const sites = [...document.querySelectorAll("#qs-sites .chip.on")].map((b) => b.dataset.site);
@@ -736,8 +807,7 @@ $("#quick-search").addEventListener("submit", async (e) => {
     pollSearch();
   } catch (e2) {
     toast(e2.message);
-    $("#qs-run").disabled = false;
-    $("#qs-run").textContent = "Analyser maintenant";
+    setRunning(false);
   }
 });
 
@@ -757,20 +827,11 @@ async function pollSearch() {
   let data;
   try { data = await api(`/api/ads?status=analyzed&days=1`); } catch (e) { return; }
   const p = data.progress;
-  // Progression en direct pendant la recherche.
-  const box = $("#search-live");
-  box.hidden = !(data.running && p && (p.sites || []).length);
-  if (!box.hidden) {
-    box.innerHTML = (p.sites || []).map((l) => `<div class="prog-row ${l.done ? "done" : ""}">
-      <b>${esc(l.site)}</b><span class="prog-text">${esc(l.text)}</span>
-      <span class="prog-time">⏱ ${duration(l.elapsed)}</span><span class="prog-cost">${l.cost ? iaCost(l.cost) : "—"}</span>
-      <span class="spin">${l.done ? "✓" : "…"}</span></div>`).join("");
-  }
+  setRunning(data.running);
+  renderProgress(p);  // progression animée (chrono, « buffering »), comme dans l'onglet Annonces
   if (data.running) return;
   // Terminé : compte rendu + résultats.
   if (searchPoll) { clearInterval(searchPoll); searchPoll = null; }
-  $("#qs-run").disabled = false;
-  $("#qs-run").textContent = "Analyser maintenant";
   $("#search-live").hidden = true;
   renderSearchReport(p, data.ads || []);
 }
@@ -781,6 +842,7 @@ function renderSearchReport(p, ads) {
     .filter((a) => normalizeFr(`${a.title} ${a.description || ""}`).includes(q))
     .sort((x, y) => (y.score ?? -1) - (x.score ?? -1));
   results.forEach((r) => { if (!allAds.find((a) => a.uid === r.uid)) allAds.push(r); });  // pour le « i », favoris…
+  searchResults = results.map((r) => allAds.find((a) => a.uid === r.uid) || r);
   const found = (p.sites || []).reduce((n, s) => n + (s.searches || []).reduce((m, x) => m + (x.found || 0), 0), 0);
   const kpi = (label, value) => `<div class="kpi"><span>${label}</span><b>${value}</b></div>`;
   const perSite = (p.sites || []).map((s) => `<div class="prog-row done">
@@ -799,9 +861,22 @@ function renderSearchReport(p, ads) {
       <div class="report-sites">${perSite || '<p class="muted small">Aucun site n\'a répondu.</p>'}</div>
       ${results.length ? "" : '<p class="muted small">Aucune annonce retenue pour ce terme (essayez un prix max plus haut ou un terme plus large).</p>'}
     </div>`;
-  $("#search-results").innerHTML = results.slice(0, 30).map(adCard).join("");
+  renderSearchResults();
+}
+
+// Résultats de la recherche ponctuelle : filtres de l'onglet Annonces + mots exclus, en temps réel.
+function renderSearchResults() {
+  const excluded = $("#qs-exclude").value.split(",").map((w) => normalizeFr(w).trim()).filter(Boolean);
+  const ads = filteredAds(searchResults)
+    .filter((a) => !excluded.some((w) => normalizeFr(`${a.title} ${a.description || ""}`).includes(w)));
+  $("#search-filters").hidden = !searchResults.length;
+  $("#search-count").textContent = `${ads.length} résultat(s) affiché(s) sur ${searchResults.length}`
+    + (ads.length > 60 ? " · 60 premiers" : "");
+  $("#search-results").innerHTML = ads.length ? ads.slice(0, 60).map(adCard).join("")
+    : searchResults.length ? '<div class="empty">Aucun résultat avec ces filtres.</div>' : "";
   loadMissingImagesIn("#search-results");
 }
+$("#qs-exclude").addEventListener("input", () => { if (searchResults.length) renderSearchResults(); });
 $("#search-results").addEventListener("click", onAdAction);
 
 $("#test-notif").addEventListener("click", async () => {
