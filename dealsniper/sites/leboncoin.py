@@ -90,6 +90,8 @@ class LeboncoinSite(Site):
                     price = float(prices[0]) if prices else None
                     loc = item.get("location") or {}
                     place = " ".join(p for p in (loc.get("city_label") or loc.get("city"), loc.get("zipcode")) if p)
+                    images = item.get("images") or {}
+                    image = (images.get("urls") or [None])[0] or images.get("small_url") or images.get("thumb_url")
 
                     ads.append(
                         Ad(
@@ -99,11 +101,13 @@ class LeboncoinSite(Site):
                             price=price,
                             description=clean_html(item.get("body") or "")[:2000],
                             location=place or "France",
+                            image=image,
                         )
                     )
                     count += 1
 
                 log.info("leboncoin : %d annonce(s) trouvée(s) pour « %s »", count, search["query"])
+                self.report(search["query"], count)
                 await asyncio.sleep(random.uniform(5.0, 9.0))
 
             await context.close()

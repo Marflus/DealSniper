@@ -12,6 +12,17 @@ from ..http import PoliteClient
 from ..models import Ad
 
 
+async def link_image(link) -> str | None:
+    """Vignette d'une annonce dans une page de résultats (lien Playwright) : <img> du lien, sinon de son bloc."""
+    for scope in (link, link.locator("xpath=..")):
+        img = scope.locator("img").first
+        if await img.count():
+            src = await img.get_attribute("src") or await img.get_attribute("data-src")
+            if src and src.startswith("http"):
+                return src
+    return None
+
+
 class Site:
     name = "site"                 # clé du site dans config.yaml > sites
     label = ""                    # nom affiché (par défaut : name avec une majuscule)

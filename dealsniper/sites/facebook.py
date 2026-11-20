@@ -20,7 +20,7 @@ from ..http import PoliteClient
 from ..models import Ad
 from ..utils.prices import parse_amount
 from ..utils.text import clean_html
-from .base import Site
+from .base import Site, link_image
 
 _ITEM_ID_RE = re.compile(r"/marketplace/item/(\d+)")
 
@@ -86,10 +86,12 @@ class FacebookMarketplaceSite(Site):
                             source=self.name,
                             price=parse_amount(price_m.group(0)) if price_m else None,
                             location=lines[2] if len(lines) > 2 else self.city,
+                            image=await link_image(link),
                         )
                     )
                     count += 1
 
+                self.report(search["query"], count)
                 await asyncio.sleep(2.5)
 
             await context.close()

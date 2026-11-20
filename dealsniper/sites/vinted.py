@@ -17,7 +17,7 @@ from ..http import PoliteClient
 from ..models import Ad
 from ..utils.prices import extract_price
 from ..utils.text import clean_html
-from .base import Site
+from .base import Site, link_image
 
 log = logging.getLogger(__name__)
 
@@ -87,11 +87,13 @@ class VintedSite(Site):
                             source=self.name,
                             price=price,
                             location="France",
+                            image=await link_image(link),
                         )
                     )
                     count += 1
 
                 log.info("Vinted : %d annonce(s) trouvée(s) pour « %s »", count, search["query"])
+                self.report(search["query"], count)
                 await asyncio.sleep(random.uniform(2.0, 4.0))
 
             await context.close()
