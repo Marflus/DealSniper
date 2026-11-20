@@ -156,6 +156,11 @@
             <div class="panel">
               <div class="sec-head"><span class="sec-icon green">💳</span><div><h2>Budget IA</h2>
                 <p>Chaque annonce retenue par les filtres est notée par Claude.</p></div></div>
+              <div class="setting">
+                <div><b>Utiliser l'IA</b><small>Désactivé = mode sans IA : tri et estimation par la cote du marché,
+                  gratuit, aucune clé ni dépense. Activé = notation par Claude (plus fine, panne détectée).</small></div>
+                <label class="switch"><input id="a-enabled" type="checkbox"><span></span></label>
+              </div>
               <div class="spend">
                 <div class="spend-top"><span>Aujourd'hui</span><b id="budget-today"></b></div>
                 <div class="budget-bar big"><div id="budget-fill-2"></div></div>
@@ -239,6 +244,20 @@
               <div class="sec-head"><span class="sec-icon blue">🩺</span><div><h2>État de l'installation</h2>
                 <p>Clés du fichier <code>.env</code> et sites réellement lancés.</p></div></div>
               <ul id="status-list" class="status-list"></ul>
+              <div class="label">Clés (fichier <code>.env</code>)</div>
+              <p class="muted small">Collez vos clés puis « Enregistrer » : elles sont écrites dans le fichier
+                <code>.env</code> local, sur cette machine. Jamais envoyées ailleurs (ignoré par git), utilisées
+                seulement pour appeler l'API correspondante. Laissez vide ce que vous ne changez pas.</p>
+              <div class="secret-fields">
+                <label>Clé Anthropic (IA)<input id="k-ANTHROPIC_API_KEY" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
+                <label>eBay — Client ID<input id="k-EBAY_CLIENT_ID" type="password" autocomplete="off"></label>
+                <label>eBay — Client Secret<input id="k-EBAY_CLIENT_SECRET" type="password" autocomplete="off"></label>
+                <label>Telegram — Bot Token<input id="k-TELEGRAM_BOT_TOKEN" type="password" autocomplete="off"></label>
+                <label>Telegram — Chat ID<input id="k-TELEGRAM_CHAT_ID" type="text" autocomplete="off"></label>
+                <label>Discord — Webhook URL<input id="k-DISCORD_WEBHOOK_URL" type="password" autocomplete="off"></label>
+              </div>
+              <div><button id="save-secrets" class="primary">Enregistrer les clés</button>
+                <span id="secrets-status" class="muted small"></span></div>
             </div>
           </section>
 

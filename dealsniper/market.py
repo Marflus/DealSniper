@@ -135,6 +135,27 @@ class Quote:
 Sampler = Callable[[str], Awaitable[list[tuple[str, float]]]]
 
 
+def free_estimate(ad, quote, haircut: float = 0.9) -> dict:
+    """Estimation SANS IA, à partir de la cote du marché seule (mode sans IA).
+
+    Pas de diagnostic de panne ni de facilité : juste une revente et une marge fondées sur les prix réels.
+    """
+    resale = round(quote.median * haircut)
+    repair = ad.price_mode == "enchere" or ad.total_price is None
+    margin = None if repair else round(resale - ad.total_price - 0.10 * resale)
+    score = 5
+    if margin is not None:
+        score = 8 if margin >= 60 else 6 if margin >= 30 else 4 if margin >= 10 else 2
+    broken = not is_working(f"{ad.title} {ad.description[:200]}")
+    return {
+        "type_affaire": "reparation" if broken else "revente_directe",
+        "score_rentabilite": score, "panne_probable": "" if broken else "aucune",
+        "valeur_revente_estimee": float(resale), "valeur_revente_ia": None,
+        "marge_nette_estimee": None if margin is None else float(margin),
+        "cout_piece_estime": 0.0, "source_revente": "cote", "sans_ia": True, "realiste": True,
+    }
+
+
 class Market:
     def __init__(self, db, config: dict[str, Any], sampler: Sampler | None = None, samples_per_pass: int = 10):
         self.db = db

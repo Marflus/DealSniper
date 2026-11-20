@@ -93,7 +93,7 @@ class Engine:
         new_ads = list({ad.uid: ad for ad in listed if ad.uid in new_uids}.values())
         if self.market:
             await self.market.observe(listed)  # cote : chaque prix vu enrichit la référence (gratuit)
-        if await self.budget_left() == 0:
+        if self.config["analyzer"].get("enabled", True) and await self.budget_left() == 0:
             # Budget IA du jour épuisé : les nouvelles annonces restent « non vues » et seront
             # analysées demain ; inutile de lire leurs fiches maintenant.
             show(site.label, f"{len(listed)} annonces · budget IA du jour atteint")
@@ -131,8 +131,11 @@ class Engine:
         if not candidates:
             return stats
 
-        show(site.label, f"{len(listed)} annonces · analyse IA de {len(candidates)}…")
         candidates.sort(key=filters.priority)  # les plus prometteuses d'abord si le budget s'épuise
+        if not self.config["analyzer"].get("enabled", True):
+            return await self._process_without_ai(site, candidates, prints, stats)
+
+        show(site.label, f"{len(listed)} annonces · analyse IA de {len(candidates)}…")
         async with self._ai_lock:
             budget = await self.budget_left()
             result = await asyncio.to_thread(analyzer.analyze, candidates, self.config, budget)
@@ -143,6 +146,25 @@ class Engine:
         for ad in result.analyzed:
             await self.db.remember(ad, "analyzed", notified=ad.uid in sent_uids, fingerprint=prints.get(ad.uid))
         stats.update(analysées=len(result.analyzed), notifiées=len(sent))
+        return stats
+
+    async def _process_without_ai(self, site, candidates, prints, stats) -> dict[str, int]:
+        """Mode sans IA : estimation par la cote du marché, notifications sur la marge, zéro appel Claude."""
+        from .market import free_estimate
+
+        haircut = float(self.config["analyzer"]["resale_haircut"])
+        estimated = []
+        for ad in candidates:
+            if ad.market and ad.market.get("median"):
+                ad.analysis = free_estimate(ad, type("Q", (), {"median": ad.market["median"]}), haircut)
+                estimated.append(ad)
+        self.progress.update(site.label, f"{stats['listées']} annonces · cote du marché (sans IA)")
+        async with self._ai_lock:
+            sent = await asyncio.to_thread(notifier.notify, estimated, self.config)
+        sent_uids = {ad.uid for ad in sent}
+        for ad in candidates:  # on garde toutes les retenues, notées ou non par la cote
+            await self.db.remember(ad, "analyzed", notified=ad.uid in sent_uids, fingerprint=prints.get(ad.uid))
+        stats.update(analysées=len(estimated), notifiées=len(sent))
         return stats
 
     async def process_safely(self, site: Site) -> None:

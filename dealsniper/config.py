@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import logging
 import os
@@ -36,7 +37,8 @@ DEFAULTS: dict[str, Any] = {
                 "sold_phrases": ["deja vendu", "plus disponible", "n'est plus a vendre", "est reserve",
                                  "en cours de vente", "en cours d'achat", "vente en cours", "transaction en cours"]},
     "categories": [],
-    "analyzer": {"model": "claude-haiku-5-5", "effort": None, "batch_size": 20, "max_description_chars": 400,
+    "analyzer": {"enabled": True, "model": "claude-haiku-5-5", "effort": None, "batch_size": 20,
+                 "max_description_chars": 400,
                  "max_tokens": 4096, "max_daily_cost_usd": 1.00, "resale_haircut": 0.9, "auto_calibrate": True,
                  "deep_model": "claude-sonnet-5-5", "market_min_margin": 15, "max_retries": 4, "timeout_seconds": 90,
                  "structured_output": True, "pricing": {}},
@@ -86,6 +88,41 @@ def load_env() -> None:
 def env(name: str, default: str | None = None) -> str | None:
     """Variable d'environnement (une valeur vide compte comme absente)."""
     return os.getenv(name) or default
+
+
+# Clés acceptées depuis l'interface (écrites dans .env, jamais renvoyées ni journalisées).
+SECRET_KEYS = ("ANTHROPIC_API_KEY", "EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET",
+               "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "DISCORD_WEBHOOK_URL")
+
+
+def write_secrets(values: dict[str, str]) -> list[str]:
+    """Écrit/actualise des clés dans le .env local (en gardant le reste) ; renvoie les noms modifiés.
+
+    Le fichier .env est ignoré par git : les valeurs restent sur cette machine et ne servent qu'à
+    appeler les API correspondantes. Les valeurs ne sont jamais renvoyées ni écrites dans les logs.
+    """
+    path = PROJECT_DIR / ".env"
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    updated: list[str] = []
+    for key, raw in (values or {}).items():
+        if key not in SECRET_KEYS:
+            continue
+        value = str(raw or "").splitlines()[0].strip() if raw else ""  # une seule ligne, pas d'injection
+        if not value:
+            continue
+        for i, line in enumerate(lines):
+            if line.strip().startswith(f"{key}="):
+                lines[i] = f"{key}={value}"
+                break
+        else:
+            lines.append(f"{key}={value}")
+        os.environ[key] = value  # prise en compte immédiate, sans redémarrer
+        updated.append(key)
+    if updated:
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        with contextlib.suppress(OSError):
+            path.chmod(0o600)  # lisible par vous seul
+    return updated
 
 
 def setup_logging(verbose: bool = False) -> None:

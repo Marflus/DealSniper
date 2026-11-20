@@ -71,13 +71,21 @@ Elles se mettent dans le fichier **`.env`** (jamais envoyé sur GitHub). Après 
 
 | Clé | Obligatoire ? | Où l'obtenir |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | **oui** (notation des annonces) | [console.anthropic.com](https://console.anthropic.com/settings/keys) → *Create Key*. Ajoutez quelques dollars de crédit. |
+| `ANTHROPIC_API_KEY` | pour la notation IA (sinon **mode sans IA**) | [console.anthropic.com](https://console.anthropic.com/settings/keys) → *Create Key*. Ajoutez quelques dollars de crédit. |
 | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` | **oui** pour eBay | [developer.ebay.com](https://developer.ebay.com) → compte gratuit → *Application Keys* → jeu **Production** : *App ID* = CLIENT_ID, *Cert ID* = CLIENT_SECRET. Pour la question sur la suppression des comptes, choisissez l'exemption *« Not persisting eBay data »*. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | conseillé | Sur Telegram, écrivez à **@BotFather** → `/newbot` → il donne le token. Envoyez un message à votre bot, puis ouvrez `https://api.telegram.org/bot<TOKEN>/getUpdates` : le nombre après `"chat":{"id":` est le CHAT_ID. |
 | `DISCORD_WEBHOOK_URL` | facultatif | Paramètres du salon → *Intégrations* → *Webhooks* → *Nouveau webhook* → *Copier l'URL*. |
 
 Sans canal de notification, les bonnes affaires restent visibles dans l'interface.
-Ne collez jamais ces clés dans un message ou un fichier public.
+
+Vous pouvez aussi **coller ces clés directement dans l'interface** : Réglages → Installation → « Clés
+(fichier .env) » → *Enregistrer*. Elles sont écrites dans le `.env` local (ignoré par git, jamais envoyé
+ailleurs) et prises en compte tout de suite. Ne collez jamais ces clés dans un message ou un fichier public.
+
+**Mode sans IA** : Réglages → Budget IA → décochez « Utiliser l'IA ». Deal Sniper trie alors les annonces et
+estime leur revente à partir de la **cote du marché** (prix réels des annonces vues), sans aucun appel à Claude,
+sans clé et sans dépense. Vous perdez le diagnostic de panne et les notes de réparation, mais gardez le
+repérage, la marge estimée et les alertes sur les grosses marges.
 
 ## 3. Utilisation
 
@@ -156,7 +164,7 @@ Tout se règle depuis l'interface ; `config.yaml` reste lisible et commenté si 
 | `sites` | un bloc par site : activé, rythme en surveillance continue, recherches propres, `fetch_details` |
 | `categories` | mots-clés, budget maximum, exclusions et signaux par famille d'objets |
 | `filters`, `location` | mots interdits, vendu / réservé, acheteurs, prix minimum, France uniquement, `home` (votre code postal) |
-| `analyzer` | modèle de notation, modèle de l'analyse approfondie (`deep_model`), plafond quotidien, prudence (`resale_haircut`, `auto_calibrate`), seuil de la cote (`market_min_margin`) |
+| `analyzer` | `enabled` (IA ou mode sans IA), modèle de notation, modèle de l'analyse approfondie (`deep_model`), plafond quotidien, prudence (`resale_haircut`, `auto_calibrate`), seuil de la cote (`market_min_margin`) |
 | `notifier` | note minimale pour un message, récapitulatif « à vérifier », marge / facilités minimales |
 | `network` | délai entre deux requêtes vers un même site, pause après un refus |
 

@@ -114,7 +114,7 @@ def read_settings() -> dict[str, Any]:
         "location": _plain(doc.get("location") or {}),
         "notifier": _plain(doc.get("notifier") or {}),
         "analyzer": {k: _plain((doc.get("analyzer") or {}).get(k))
-                     for k in ("model", "max_daily_cost_usd", "batch_size", "max_description_chars")},
+                     for k in ("enabled", "model", "max_daily_cost_usd", "batch_size", "max_description_chars")},
         "storage": _plain(doc.get("storage") or {}),
         "network": _plain(doc.get("network") or {}),
     }
@@ -205,6 +205,8 @@ def write_settings(new: dict[str, Any]) -> None:
 
     analyzer = new.get("analyzer") or {}
     target = doc.setdefault("analyzer", CommentedMap())
+    if "enabled" in analyzer:
+        target["enabled"] = bool(analyzer["enabled"])
     if analyzer.get("model"):
         target["model"] = str(analyzer["model"]).strip()
     if "max_daily_cost_usd" in analyzer:
@@ -434,15 +436,27 @@ def create_app() -> Flask:
         from ..sites import load_sites, skipped
 
         report: dict[str, Any] = {"anthropic": bool(env("ANTHROPIC_API_KEY")), "channels": Notifier().channels,
-                                  "sites": [], "error": None}
+                                  "sites": [], "error": None, "ai_enabled": True}
         try:
-            loaded = load_sites(load_config(config_path()))
+            config = load_config(config_path())
+            report["ai_enabled"] = bool(config["analyzer"].get("enabled", True))
+            loaded = load_sites(config)
             report["sites"] = [{"label": s.label, "ok": True} for s in loaded] + [
                 {"label": SITE_LABELS.get(name, name.capitalize()), "ok": False, "reason": reason}
                 for name, reason in skipped]
         except Exception as exc:  # config.yaml illisible : affiché tel quel
             report["error"] = str(exc)
         return jsonify(report)
+
+    @app.post("/api/secrets")
+    def save_secrets():
+        """Enregistre des clés dans le .env local. Les valeurs ne sont jamais renvoyées."""
+        from ..config import write_secrets
+        from ..notifier import Notifier
+
+        updated = write_secrets(request.get_json(force=True) or {})
+        return jsonify(ok=True, updated=updated, anthropic=bool(env("ANTHROPIC_API_KEY")),
+                       channels=Notifier().channels)
 
     @app.get("/api/settings")
     def get_settings():

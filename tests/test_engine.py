@@ -293,3 +293,48 @@ def test_demo_seed_populates_once(tmp_path):
     assert all(a["image"] == "" for a in ads)  # pas de photo = aucune requête d'aperçu
     assert len(db.purchases()) == 3
     db.close()
+
+
+def test_no_ai_mode_scores_from_cote(monkeypatch, config, tmp_path):
+    import asyncio
+
+    from dealsniper.db import Database
+    from dealsniper.engine import Engine
+    from dealsniper.market import Quote
+    from dealsniper.models import Ad
+
+    config = {**config, "analyzer": {**config["analyzer"], "enabled": False}}
+
+    class FakeMarket:
+        brands = ["thinkpad"]
+
+        async def observe(self, ads): pass
+
+        async def quote(self, ad):
+            return Quote("thinkpad t480", 220, 12, "annonces")
+
+    class FakeSite:
+        name, label, cfg = "ebay", "eBay", {"searches": [], "fetch_details": False}
+        on_progress = None
+
+        def report(self, *a): pass
+
+        async def list_recent(self, http):
+            return [Ad(title="ThinkPad T480 sans SSD", url="https://www.ebay.fr/itm/1", source="ebay", price=90)]
+
+        async def fetch_detail(self, http, ad):
+            return ad
+
+    async def run():
+        db = Database(tmp_path / "noai.db")
+        engine = Engine(config, db, http=None, market=FakeMarket())
+        notified = []
+        monkeypatch.setattr("dealsniper.notifier.notify", lambda ads, cfg: notified.extend(ads) or list(ads))
+        stats = await engine.process(FakeSite())
+        rows = db.search(status="analyzed")
+        db.close()
+        return stats, rows
+
+    stats, rows = asyncio.run(run())
+    assert stats["analysées"] == 1 and rows and rows[0]["analysis"]["sans_ia"] is True
+    assert rows[0]["analysis"]["valeur_revente_estimee"] == 198  # 220 × 0,9, sans aucun appel IA

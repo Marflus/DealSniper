@@ -135,3 +135,15 @@ def test_market_analysis_endpoint(client, monkeypatch):
     ad = next(a for a in c.get("/api/ads").get_json()["ads"] if a["uid"] == uid)
     assert ad["market_deep"]["confiance"] == "élevée" and ad["market_deep"]["ventes"][0]["prix"] == 190
     assert c.post("/api/ads/inconnue/market-analysis").status_code == 404
+
+
+def test_secrets_written_to_env(client, tmp_path, monkeypatch):
+    c, _ = client
+    import dealsniper.config as cfg
+    monkeypatch.setattr(cfg, "PROJECT_DIR", tmp_path)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    body = {"ANTHROPIC_API_KEY": "sk-ant-test123", "INCONNU": "x", "EBAY_CLIENT_ID": ""}
+    data = c.post("/api/secrets", json=body).get_json()
+    assert data["ok"] and data["updated"] == ["ANTHROPIC_API_KEY"] and data["anthropic"]
+    env_text = (tmp_path / ".env").read_text()
+    assert "ANTHROPIC_API_KEY=sk-ant-test123" in env_text and "INCONNU" not in env_text  # seules les clés connues

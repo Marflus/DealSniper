@@ -936,6 +936,8 @@ async function loadSettings() {
   }
   document.querySelector(`[name=a-model][value="${CSS.escape(model)}"]`).checked = true;
   $("#a-cap").value = a.max_daily_cost_usd ?? "";
+  $("#a-enabled").checked = a.enabled !== false;
+  document.querySelector("#set-budget .panel").classList.toggle("ai-off", a.enabled === false);
   $("#a-batch").value = a.batch_size ?? 20;
   $("#a-desc").value = a.max_description_chars ?? 400;
   $("#s-retention").value = (settings.storage || {}).seen_retention_days ?? 90;
@@ -986,8 +988,8 @@ function collectSettings() {
     notifier: { min_score: $("#n-min").value, watch_score: $("#n-watch-on").checked ? $("#n-watch").value : "",
                 deal_types: dealTypes, min_margin: $("#n-margin").value, min_ease: $("#n-ease").value,
                 min_sale: $("#n-sale").value },
-    analyzer: { model: document.querySelector("[name=a-model]:checked")?.value, max_daily_cost_usd: $("#a-cap").value,
-                batch_size: $("#a-batch").value, max_description_chars: $("#a-desc").value },
+    analyzer: { enabled: $("#a-enabled").checked, model: document.querySelector("[name=a-model]:checked")?.value,
+                max_daily_cost_usd: $("#a-cap").value, batch_size: $("#a-batch").value, max_description_chars: $("#a-desc").value },
     storage: { seen_retention_days: $("#s-retention").value },
     network: { access_denied_pause_hours: $("#s-pause").value },
   };
@@ -1003,6 +1005,24 @@ $("#save").addEventListener("click", async () => {
     $("#save-status").textContent = "❌ " + e.message;
   }
 });
+$("#a-enabled").addEventListener("change", () =>
+  document.querySelector("#set-budget .panel").classList.toggle("ai-off", !$("#a-enabled").checked));
+
+// Enregistrer les clés dans .env (valeurs jamais relues depuis le serveur).
+$("#save-secrets").addEventListener("click", async () => {
+  const keys = ["ANTHROPIC_API_KEY", "EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "DISCORD_WEBHOOK_URL"];
+  const body = {};
+  keys.forEach((k) => { const v = $("#k-" + k).value.trim(); if (v) body[k] = v; });
+  if (!Object.keys(body).length) { toast("Aucune clé saisie"); return; }
+  $("#secrets-status").textContent = "Enregistrement…";
+  try {
+    const data = await api("/api/secrets", { method: "POST", body: JSON.stringify(body) });
+    keys.forEach((k) => ($("#k-" + k).value = ""));  // on n'affiche jamais une clé enregistrée
+    $("#secrets-status").textContent = `✅ ${data.updated.length} clé(s) enregistrée(s) dans .env`;
+    loadStatus();
+  } catch (e) { $("#secrets-status").textContent = "❌ " + e.message; }
+});
+
 $("#reset-config").addEventListener("click", async () => {
   if (!confirm("Remplacer votre configuration (recherches, catégories, filtres, réglages) par la configuration d'exemple ?\n\nUne copie de l'actuelle est gardée dans le dossier du projet.")) return;
   try {
@@ -1112,8 +1132,10 @@ async function loadStatus() {
   const s = await api("/api/status").catch(() => null);
   if (!s) return;
   const items = [
-    { ok: s.anthropic, text: s.anthropic ? "Clé Anthropic présente : les annonces sont notées par l'IA"
-      : "Clé Anthropic manquante : ajoutez ANTHROPIC_API_KEY dans .env, sinon aucune annonce n'est notée" },
+    s.ai_enabled === false
+      ? { ok: true, text: "Mode sans IA : tri et estimation par la cote du marché (aucune clé Anthropic requise)" }
+      : { ok: s.anthropic, text: s.anthropic ? "Clé Anthropic présente : les annonces sont notées par l'IA"
+          : "Clé Anthropic manquante : collez-la ci-dessous, ou passez en mode sans IA (Réglages → Budget IA)" },
     { ok: s.channels.length > 0, text: s.channels.length ? `Notifications : ${s.channels.join(" + ")}`
       : "Aucune notification : ajoutez TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (ou DISCORD_WEBHOOK_URL) dans .env" },
     ...s.sites.map((site) => ({ ok: site.ok, text: site.ok ? `${site.label} : lancé à chaque passage` : `${site.label} ignoré : ${site.reason}` })),

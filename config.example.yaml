@@ -246,6 +246,7 @@ categories:
 #  Analyse IA (Anthropic)
 # -----------------------------------------------------------------------------
 analyzer:
+  enabled: true               # false = mode sans IA : tri + estimation par la cote du marché, aucun appel Claude
   # claude-haiku-5-5 : 0,10 $ / 0,50 $ par million de tokens (10 fois moins que claude-haiku-4-5).
   # Effort « low » et réflexion désactivée automatiquement : la notation n'en a pas besoin.
   model: "claude-haiku-5-5"
