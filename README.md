@@ -1,7 +1,7 @@
 # 🎯 Deal Sniper
 
-Deal Sniper surveille les petites annonces d'**électronique d'occasion en France** et vous prévient quand une
-affaire vaut le coup :
+Deal Sniper surveille les petites annonces d'**occasion en France** (surtout l'électronique, mais aussi le sport,
+l'outillage…) et vous prévient quand une affaire vaut le coup :
 
 - **à réparer** : PC vendu sans SSD, aspirateur Dyson à la batterie HS, TV sans image (rétroéclairage)… ;
 - **à revendre en l'état** : objet fonctionnel vendu nettement sous sa cote.
@@ -61,8 +61,10 @@ quelques secondes.
 > N'exécutez pas `python ...` directement : passez toujours par un `.bat`, qui utilise le `.venv` où les
 > dépendances sont installées (sinon `ModuleNotFoundError: No module named 'yaml'`).
 
-> **Sur téléphone** : ouvrez `http://<ip-du-pc>:5000` (lancez l'interface avec `--host 0.0.0.0`), puis
-> « Ajouter à l'écran d'accueil » : Deal Sniper s'installe comme une application plein écran.
+> **Sur téléphone** : lancez l'interface avec `--host 0.0.0.0` ; la fenêtre affiche alors un lien
+> `http://<ip-du-pc>:5000/?token=…` à ouvrir **une fois** sur le téléphone (même Wi-Fi). Le jeton est ensuite
+> mémorisé ; sans lui, les autres appareils du réseau n'ont pas accès. Puis « Ajouter à l'écran d'accueil » :
+> Deal Sniper s'installe comme une application plein écran.
 
 > **Linux / Mac / Raspberry Pi** : mêmes étapes avec `cp .env.example .env`, puis
 > `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m dealsniper ui --open`.
@@ -99,15 +101,18 @@ Gardez la fenêtre noire ouverte tant que vous utilisez l'interface : la fermer 
 
 | Onglet | Contenu |
 |---|---|
-| **Recherche** | recherche ponctuelle : tapez un objet précis, tous les sites le cherchent en une fois et un compte rendu s'affiche (trouvées, notées, durée, coût IA, résultats). |
-| **Annonces** | toutes les annonces trouvées, 20 par page : photo, prix d'achat / revente / marge (« cote » quand la revente vient des prix réels), les 3 notes, distance. **☆** met en favori, **⊘** masque l'annonce, **i** ouvre le détail : panne, ville et distance, cote du marché et estimation de l'IA, coût de la pièce, vendeur (note et évaluations quand le site les donne), description, questions à poser au vendeur, **points de vigilance** (vendeur douteux, prix trop bas, enchère…), **mode de remise** (🚚 envoi / 🤝 main propre), **historique de la cote** du modèle, liens de réparation (iFixit, pièce sur eBay / AliExpress), « Je l'ai acheté », et **Analyse du marché** (un modèle plus puissant + recherche web va chercher les prix de vente réels, affiche une fourchette fiable **et un graphique des ventes par date**, à la demande, quelques centimes). Vues Notées / Écartées / Toutes / Favoris / Masquées ; filtres par texte, site, catégorie, notes, prix, marge, distance, période ; tri par date, note, marge, prix, facilité de vente ou distance ; filtre **remise** (envoi / sur place) ; **export CSV** pour Excel. Pendant un passage, une ligne par site montre l'avancement, la durée et le coût IA ; à la fin, le détail de chaque recherche reste affiché. |
+| **Recherche** | recherche ponctuelle : tapez un objet précis, tous les sites le cherchent en une fois. **Critères éliminatoires** choisis avant de lancer (appliqués avant l'IA, donc gratuits) : prix min / max, état, livraison obligatoire, vendeur particulier ou pro, zone (ville + rayon en km), mots exclus, nombre maximum d'annonces analysées. Les annonces déjà écartées par d'autres critères sont réévaluées. Compte rendu final : trouvées, notées, **écartées avec leur raison**, durée, coût IA ; les résultats se filtrent ensuite comme dans l'onglet Annonces (les mots exclus s'appliquent en direct). |
+| **Annonces** | toutes les annonces trouvées, 20 par page : photo, prix d'achat / revente / marge (« cote » quand la revente vient des prix réels), les 3 notes, distance. **☆** met en favori, **⊘** masque l'annonce, **i** ouvre le détail : achat / revente / marge / notes, panne, cote du marché, ville et distance, mode de remise, vendeur, **points de vigilance**, description, « Je l'ai acheté ». **Analyse approfondie** (à la demande, quelques centimes : un modèle plus puissant + recherche web) : **verdict final** (✅ à acheter, 🤝 à négocier avec le prix à proposer, ❌ à laisser passer), revente réelle, prix d'achat maximum, **graphique des dernières ventes** et de la cote, liens de réparation, et sur un bouton séparé des **questions à poser au vendeur** propres au modèle. Badges : ⭐ marque recherchée, PRO (vendeur professionnel), ⬇ baisse de prix, ❌ plus en ligne. Vues Notées / Écartées / Toutes / Favoris / Masquées ; filtres par texte, site, catégorie, notes, prix, marge, **zone** (ville ou code postal + rayon), remise, vendeur (particulier / pro), période ; tri par date, note, marge, prix, facilité de vente ou distance ; **🔄 Encore en ligne ?** vérifie les annonces affichées et liste celles qui ont disparu (gratuit ; leboncoin et Facebook ne sont pas vérifiables) ; **export CSV** pour Excel. Pendant un passage, une ligne par site montre l'avancement, la durée et le coût IA, et **■ Annuler** l'arrête proprement (rien n'est perdu : les annonces non traitées reviennent au passage suivant). |
 | **Achats** | vos achats (ajoutés depuis une annonce ou à la main) : prix payé, réparation, prix de revente réel. Bénéfice, rentabilité, stock. Dès 3 ventes, Deal Sniper compare vos ventes réelles à ses estimations et ajuste sa prudence tout seul ; chaque vente réelle enrichit aussi la cote du modèle. **Suivi fiscal** : ventes et chiffre d'affaires de l'année, proximité des seuils de déclaration (indicatif). |
 | **Recherches** | ce que chaque site cherche. La carte **🌐 Tous les sites** contient les recherches communes, lancées partout ; chaque site peut en ajouter. |
 | **Catégories** | familles d'objets (PC portables, mini-PC, Dyson…) : mots-clés du titre, budget maximum, exclusions, signaux positifs. Une annonce hors catégorie est écartée gratuitement. |
-| **Filtres** | quatre blocs symétriques : mots interdits, signaux « bonne affaire », déjà vendue / réservée, annonces d'acheteurs. |
+| **Filtres** | mots interdits, signaux « bonne affaire », **marques recherchées** (qualité reconnue, cote stable : annonce priorisée et mieux notée), déjà vendue / réservée, annonces d'acheteurs. |
 | **Réglages** | menu à gauche : Notifications (seuil + **message immédiat** pour les pépites, le reste en récap groupé), **Veille** (modèles précis repérés en priorité), Budget IA (**mode sans IA** possible), Localisation et prix, Fonctionnement, Installation (clés `.env`), Apparence. |
 
 Tout est enregistré dans votre `config.yaml` (bouton **Enregistrer** ou **Ctrl+S**) et appliqué au passage suivant.
+
+Un seul passage tourne à la fois, même entre programmes : si une surveillance continue (`watch`) tourne déjà,
+« Lancer un passage » l'indique au lieu de doubler les requêtes et les notifications.
 
 **Les 3 notes** (sur 10) :
 
@@ -147,6 +152,7 @@ sauvegardée dans un fichier `config.<date>.bak.yaml`).
 2. *Actions → Deal Sniper → Run workflow* pour un lancement manuel (`run`, `test-notif` ou `recap`).
 
 GitHub retarde ou saute parfois des passages planifiés. Seul eBay y tourne : les autres sites demandent un navigateur.
+Sans clé eBay dans les secrets, les passages planifiés s'arrêtent donc tout de suite (rien à faire là-bas).
 
 **Raspberry Pi / serveur Linux** (24 h/24, plus réactif) : installez comme en section 1, puis
 
@@ -167,8 +173,8 @@ Tout se règle depuis l'interface ; `config.yaml` reste lisible et commenté si 
 | `searches` | recherches communes à tous les sites (`condition` : `parts` = pour pièces, `used` = occasion, `any` ; seul eBay l'utilise) |
 | `sites` | un bloc par site : activé, rythme en surveillance continue, recherches propres, `fetch_details` |
 | `categories` | mots-clés, budget maximum, exclusions et signaux par famille d'objets |
-| `filters`, `location` | mots interdits, vendu / réservé, acheteurs, prix minimum, France uniquement, `home` (votre code postal) |
-| `analyzer` | `enabled` (IA ou mode sans IA), modèle de notation, modèle de l'analyse approfondie (`deep_model`), plafond quotidien, max d'annonces analysées par passage (`max_ads_per_run`), prudence (`resale_haircut`, `auto_calibrate`), seuil de la cote (`market_min_margin`) |
+| `filters`, `location` | mots interdits, marques recherchées (`desirable_brands`), vendu / réservé, acheteurs, prix minimum, France uniquement, `home` (votre code postal) |
+| `analyzer` | `enabled` (IA ou mode sans IA), modèle de notation, modèle de l'analyse approfondie (`deep_model`), plafond quotidien, max d'annonces analysées par passage (`max_ads_per_run`), prudence (`resale_haircut`, `auto_calibrate`), seuil de la cote (`market_min_margin`), prix d'une recherche web (`web_search_usd`, 0,01 $) |
 | `watchlist` | veille : modèles précis repérés en priorité (notifiés d'office) |
 | `notifier` | seuil de notification, seuil du message immédiat (`instant_min_score`), récap « à vérifier », rappel de fin d'enchère (`auction_reminder_minutes`) |
 | `network` | délai entre deux requêtes vers un même site, pause après un refus |
@@ -185,15 +191,23 @@ Tout se règle depuis l'interface ; `config.yaml` reste lisible et commenté si 
    au prix médian des annonces de ce modèle **en état de marche** vues ces 60 derniers jours. S'il n'y en a pas assez,
    un échantillon d'occasions fonctionnelles est demandé à l'API eBay (gardé 7 jours). Une annonce dont la marge est
    impossible même sans réparation est écartée **sans appel à l'IA** ;
-5. **fiche détaillée** des annonces retenues, puis nouveau filtre sur la description ;
+5. **fiche détaillée** des annonces retenues, les plus prometteuses d'abord et dans la limite du nombre maximum
+   d'annonces analysées (les autres ne sont pas lues et reviennent au passage suivant), puis nouveau filtre sur la
+   description ;
 6. **notation par Claude** par lots. Garde-fous en Python : la revente retenue est la plus basse entre la cote et
    l'estimation de l'IA, rabotée de 10 % (ou selon vos ventes réelles), et la marge est recalculée
-   (revente − prix − pièce − 10 % de frais) ;
+   (revente − prix − pièce − 10 % de frais). Une annonce que l'IA n'arrive pas à noter (refus, réponse illisible)
+   est réessayée, puis abandonnée au 3e échec pour ne pas la repayer à chaque passage ;
 7. **notification** des meilleures annonces.
+
+Les annonces déjà vues dont le prix baisse sont signalées (« ⬇ Baisses de prix ») avec leur marge et leur note
+recalculées au nouveau prix, sans nouvel appel à l'IA.
 
 **Coût IA** : environ 0,0001 $ par annonce notée avec Claude Haiku 5.5 (modèle par défaut, réflexion désactivée).
 La cote du marché évite en plus d'envoyer à l'IA les annonces sans marge possible. Un plafond quotidien (1 $ par
-défaut) bloque toute surprise : une fois atteint, les annonces attendent le lendemain.
+défaut) bloque toute surprise : une fois atteint, les annonces attendent le lendemain. L'analyse approfondie
+(à la demande) coûte ses tokens plus 0,01 $ par recherche web (5 au maximum) ; le bouton affiche la moyenne de
+vos analyses précédentes.
 
 **Distances** : avec votre code postal (onglet Filtres), chaque annonce affiche sa distance. Les coordonnées des
 communes viennent de l'API officielle geo.api.gouv.fr, téléchargées une fois dans `data/communes.json`.
@@ -225,6 +239,8 @@ DealSniper/
 │   ├── purchases.py            bénéfices et calibrage des estimations sur vos ventes réelles
 │   ├── geo.py                  distances (communes de geo.api.gouv.fr)
 │   ├── deep.py                 analyse de marché approfondie à la demande (gros modèle + web)
+│   ├── availability.py         « Encore en ligne ? » : annonces vendues ou supprimées
+│   ├── runlock.py              un seul passage à la fois (verrou partagé entre programmes)
 │   ├── demo.py                 fausses données pour l'aperçu (ui --demo)
 │   ├── notifier.py             Telegram / Discord
 │   ├── db.py                   SQLite : annonces vues, coûts, pauses
@@ -232,7 +248,7 @@ DealSniper/
 │   ├── config.py, models.py    configuration, modèle d'annonce
 │   ├── sites/                  un fichier par site (base.py = interface, _template.py = modèle)
 │   ├── utils/                  prix, texte, localisation, URL
-│   └── web/                    interface : app.py (API Flask), preview.py (photos), static/
+│   └── web/                    interface : app.py (API Flask), security.py, preview.py (photos), static/
 ├── tests/                      pytest
 ├── deploy/dealsniper.service   service systemd
 └── .github/workflows/          passage planifié + tests
@@ -254,4 +270,8 @@ python -m pytest -q
 `tests/test_ui_smoke.py` ouvre l'interface dans un navigateur et vérifie qu'aucun onglet ne déclenche d'erreur
 JavaScript (ignoré si Playwright et son navigateur ne sont pas installés).
 
-L'interface n'a pas de mot de passe : ne l'exposez pas sur Internet (`--host 0.0.0.0` uniquement sur votre Wi-Fi).
+**Sécurité de l'interface** (`web/security.py`) : les requêtes qui modifient quelque chose doivent venir de
+l'interface elle-même (une page d'un autre site ne peut pas réécrire vos clés ni lancer d'analyse), les noms
+d'hôte autres que `localhost` et les adresses IP sont refusés (rebinding DNS ; exceptions dans
+`DEALSNIPER_ALLOWED_HOSTS`), et les autres appareils du réseau doivent présenter le jeton de `data/ui_token`.
+Ne l'exposez pas pour autant sur Internet : `--host 0.0.0.0` uniquement sur votre Wi-Fi.
