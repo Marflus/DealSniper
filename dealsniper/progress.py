@@ -79,19 +79,22 @@ class Progress:
     @property
     def total_elapsed(self) -> float:
         """Durée du passage, figée quand tous les sites ont fini."""
-        states = list(self.sites.values())
+        states = list(self.sites.values())  # copie : l'interface lit pendant que le moteur écrit
         if states and all(s["done"] for s in states):
             return max(s["end"] for s in states) - self.started
         return time.monotonic() - self.started
 
     @property
     def total_cost(self) -> float:
-        return sum(s["cost"] for s in self.sites.values())
+        return sum(s["cost"] for s in list(self.sites.values()))
 
     def snapshot(self) -> dict:
         """État pour l'interface web (durées en secondes)."""
+        # Lu par l'interface (autre thread) pendant que le moteur ajoute des sites et des recherches :
+        # on parcourt des copies (copie de dict/list faite d'un bloc, sans changement de thread au milieu).
         sites = [{"site": name, "text": s["text"], "done": s["done"], "elapsed": round(self.elapsed(s), 1),
-                  "cost": round(s["cost"], 5), "searches": s["searches"]} for name, s in self.sites.items()]
+                  "cost": round(s["cost"], 5), "searches": list(s["searches"])}
+                 for name, s in list(self.sites.items())]
         return {"sites": sites, "elapsed": round(self.total_elapsed, 1),
                 "cost": round(self.total_cost, 5), "done": bool(sites) and all(s["done"] for s in sites)}
 

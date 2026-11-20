@@ -149,7 +149,6 @@ button.danger { color: var(--bad); border-color: transparent; background: transp
 .page-head h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -.01em; }
 .page-head p { margin: 0; color: var(--muted); max-width: 760px; }
 kbd { font: 12px ui-monospace, monospace; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--card); }
-.page-grid .panel.wide { grid-column: 1 / -1; }
 .panel { display: grid; gap: 14px; align-content: start; padding: 18px; }
 
 .sec-head { display: flex; gap: 12px; align-items: flex-start; }
@@ -604,6 +603,7 @@ button.mini.on { color: #f5a400; }
 
 .d-links div { display: flex; flex-wrap: wrap; gap: 8px 14px; }
 @media (max-width: 860px) {
+  .d-photo.empty { height: 72px; font-size: 32px; }
   .d-layout, .deep-grid { grid-template-columns: 1fr; }
   .d-side { position: static; }
   .deep-cta ul { grid-template-columns: 1fr; }
