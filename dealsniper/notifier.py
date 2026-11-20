@@ -222,27 +222,40 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
             return False
         return min_sale is None or (ad.analysis.get("facilite_vente") or 0) >= int(min_sale)
 
+    instant_score = int(cfg.get("instant_min_score") or min_score)
+    instant_margin = cfg.get("instant_min_margin")
+
+    def is_pepite(ad: Ad) -> bool:
+        """Pépite = message immédiat. Le reste part dans un récap groupé, pour éviter le spam."""
+        if getattr(ad, "watched", False):
+            return True
+        if ad.score < instant_score:
+            return False
+        margin = (ad.analysis or {}).get("marge_nette_estimee")
+        return instant_margin is None or (margin is not None and margin >= float(instant_margin))
+
     analyzed = [a for a in ads if wanted(a)]
     good = _rank([a for a in analyzed if a.score >= min_score or getattr(a, "watched", False)])
     watch = _rank([a for a in analyzed if watch_score is not None and int(watch_score) <= a.score < min_score])
+    pepites = [a for a in good if is_pepite(a)]
+    grouped = [a for a in good if not is_pepite(a)]  # bonnes affaires, mais regroupées
     notifier = Notifier()
 
     if watch:
         header = f"👀 À vérifier ({len(watch)} annonce(s) notée(s) {watch_score}-{min_score - 1}/10)"
         notifier.send_digest(header, watch)
-    if not good:
-        log.info("Aucune annonce ≥ %d/10 ; %d « à vérifier ».", min_score, len(watch))
-        return []
+    if grouped:
+        notifier.send_digest(f"💡 Bonnes affaires ({len(grouped)} annonce(s) ≥ {min_score}/10)", grouped)
 
-    sent: list[Ad] = []
-    for ad in good:
+    sent: list[Ad] = list(grouped)  # marquées notifiées (envoyées dans le récap)
+    for ad in pepites:  # pépites et veilles : un message chacune
         try:
             if notifier.send_ad(ad):
                 sent.append(ad)
             time.sleep(0.5)  # Telegram : ~1 message/seconde par conversation
         except Exception as exc:
             log.error("Notification impossible pour « %s » : %s", ad.title[:50], exc)
-    log.info("Notifications : %d envoyée(s) via %s", len(sent), ", ".join(notifier.channels) or "console")
+    log.info("Notifications : %d immédiate(s), %d en récap, %d « à vérifier »", len(pepites), len(grouped), len(watch))
     return sent
 
 

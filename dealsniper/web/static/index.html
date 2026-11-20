@@ -133,8 +133,13 @@
               <div class="sec-head"><span class="sec-icon blue">🔔</span><div><h2>Notifications</h2>
                 <p>Ce qui déclenche un message Telegram / Discord.</p></div></div>
               <div class="setting">
-                <div><b>Message immédiat</b><small>Une annonce notée au moins…</small></div>
+                <div><b>Notifier à partir de</b><small>En dessous, rien n'est envoyé</small></div>
                 <div class="range"><input id="n-min" type="range" min="1" max="10"><output data-for="n-min"></output></div>
+              </div>
+              <div class="setting">
+                <div><b>Message immédiat (pépite)</b><small>Au-dessus : un message par annonce. Entre les deux :
+                  un seul récap « bonnes affaires » (anti-spam)</small></div>
+                <div class="range"><input id="n-instant" type="range" min="1" max="10"><output data-for="n-instant"></output></div>
               </div>
               <div class="setting">
                 <div><b>Récap « à vérifier »</b><small>Annonces juste en dessous, regroupées en un seul message</small></div>

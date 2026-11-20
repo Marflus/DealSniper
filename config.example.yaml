@@ -268,6 +268,8 @@ analyzer:
 notifier:
   min_score: 8                # bonne affaire : un message Telegram par annonce
   watch_score: 6              # « à vérifier » (5-6/10) : regroupées dans un seul message par passage (null = désactivé)
+  instant_min_score: 8        # message immédiat seulement au-dessus de cette note ; le reste part dans un récap groupé
+  instant_min_margin: null    # et, si fixé, marge nette minimale (€) pour un message immédiat (null = pas de condition)
   # types d'affaires à notifier : reparation (objet en panne) / revente_directe (fonctionnel sous la cote)
   deal_types: ["reparation", "revente_directe"]
   min_margin: null            # marge nette minimale (€) pour être notifié (null = pas de minimum)

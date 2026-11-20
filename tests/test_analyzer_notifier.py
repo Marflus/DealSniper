@@ -131,3 +131,16 @@ def test_market_quote_caps_the_ai_resale():
     assert clean["valeur_revente_estimee"] == 180 and clean["source_revente"] == "cote"  # 200 € × 0,9
     assert clean["valeur_revente_ia"] == 350
     assert "cote 200 €" in analyzer.format_ad(1, ad, 400)
+
+
+def test_only_pepites_get_an_instant_message(monkeypatch, config):
+    sent_ad, digests = [], []
+    monkeypatch.setattr("dealsniper.notifier.Notifier.send_ad", lambda self, ad: sent_ad.append(ad.score) or True)
+    monkeypatch.setattr("dealsniper.notifier.Notifier.send_digest",
+                        lambda self, header, ads: digests.append((header, [a.score for a in ads])) or True)
+    cfg = {**config, "notifier": {**config["notifier"], "min_score": 7, "instant_min_score": 9, "watch_score": None}}
+    from dealsniper.notifier import notify
+    sent = notify([deal(9), deal(8), deal(7), deal(4)], cfg)
+    assert sent_ad == [9]  # seule la pépite (≥9) en message immédiat
+    assert any(h.startswith("💡 Bonnes affaires") and s == [8, 7] for h, s in digests)  # 7-8 regroupées
+    assert {a.score for a in sent} == {9, 8, 7}

@@ -201,8 +201,10 @@ def write_settings(new: dict[str, Any]) -> None:
 
     notifier = new.get("notifier") or {}
     target = doc.setdefault("notifier", CommentedMap())
-    _set_numbers(doc, "notifier", notifier, ("min_score", "watch_score", "min_margin", "min_ease", "min_sale"),
-                 nullable=("watch_score", "min_margin", "min_ease", "min_sale"))
+    notifier_keys = ("min_score", "watch_score", "instant_min_score", "instant_min_margin",
+                     "min_margin", "min_ease", "min_sale")
+    _set_numbers(doc, "notifier", notifier, notifier_keys,
+                 nullable=("watch_score", "instant_min_margin", "min_margin", "min_ease", "min_sale"))
     if "deal_types" in notifier:
         target["deal_types"] = _seq(target.get("deal_types"), _words(notifier["deal_types"]), flow=True)
 
