@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS purchases (
     uid TEXT, title TEXT NOT NULL, url TEXT, source TEXT, category TEXT, model TEXT,
     bought_at TEXT NOT NULL, buy_price REAL, repair_cost REAL,
     estimated_resale REAL,            -- revente estimée au moment de l'achat
-    sold_at TEXT, sold_price REAL, notes TEXT
+    sold_at TEXT, sold_price REAL, notes TEXT,
+    hours_spent REAL                  -- temps passé (réparation + revente) pour le €/h
 );
 """
 
@@ -46,7 +47,7 @@ CREATE TABLE IF NOT EXISTS purchases (
 SEEN_COLUMNS = {"reason": "TEXT", "favorite": "INTEGER NOT NULL DEFAULT 0", "hidden": "INTEGER NOT NULL DEFAULT 0",
                 "fingerprint": "TEXT"}
 PURCHASE_FIELDS = ("title", "buy_price", "repair_cost", "estimated_resale", "sold_at", "sold_price", "notes",
-                   "bought_at")
+                   "bought_at", "hours_spent")
 
 
 def _now() -> datetime:
@@ -82,6 +83,9 @@ class Database:
         for column, kind in (("last_ok", "TEXT"), ("last_count", "INTEGER")):
             if column not in site_cols:
                 self._conn.execute(f"ALTER TABLE sites ADD COLUMN {column} {kind}")
+        purchase_cols = {row[1] for row in self._conn.execute("PRAGMA table_info(purchases)")}
+        if "hours_spent" not in purchase_cols:
+            self._conn.execute("ALTER TABLE purchases ADD COLUMN hours_spent REAL")
         self._lock = threading.Lock()
 
     def _sql(self, query: str, params: tuple = ()) -> list[tuple]:
@@ -276,7 +280,6 @@ class Database:
         """Enchères notées qui se terminent dans la fenêtre à venir et pas encore rappelées."""
         now = _now()
         until = now + timedelta(minutes=minutes)
-        # Filtre JSON côté SQLite : seules les enchères sont décodées (vérifié toutes les 2 minutes).
         rows = self._sql("SELECT data FROM seen WHERE status = 'analyzed' "
                          "AND json_extract(data, '$.price_mode') = 'enchere'")
         out = []

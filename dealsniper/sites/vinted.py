@@ -1,4 +1,4 @@
-"""Vinted — Playwright (lit directement les cartes d'annonces dans la page)."""
+"""Vinted — Playwright (pagination multi-pages + défilement + extraction fiabilisée)."""
 
 from __future__ import annotations
 
@@ -22,6 +22,18 @@ from .base import Site, link_image
 log = logging.getLogger(__name__)
 
 _ITEM_URL_RE = re.compile(r"https://www\.vinted\.fr/items/\d+[^?\"'\s]*")
+_VINTED_META_RE = re.compile(
+    r",\s*(?:marque|état|etat|taille|prix|brand|size|condition)\s*:.*$",
+    re.IGNORECASE,
+)
+_VINTED_PRICE_TAIL_RE = re.compile(r",\s*\d[\d\s\u00a0\u202f.,]*€.*$")
+
+
+def _clean_vinted_title(raw: str) -> str:
+    """Retire les métadonnées Vinted en fin d'attribut `title` sans couper les virgules du vrai titre."""
+    text = _VINTED_META_RE.sub("", raw or "")
+    text = _VINTED_PRICE_TAIL_RE.sub("", text)
+    return clean_html(text)[:200]
 
 
 class VintedSite(Site):
@@ -37,7 +49,8 @@ class VintedSite(Site):
         return bool(self.cfg.get("searches"))
 
     async def list_recent(self, http: PoliteClient) -> list[Ad]:
-        limit = int(self.cfg.get("limit", 25))
+        limit = int(self.cfg.get("limit", 60))
+        default_pages = max(1, int(self.cfg.get("max_pages", 3)))
         ads: list[Ad] = []
         seen_urls: set[str] = set()
 
@@ -52,48 +65,83 @@ class VintedSite(Site):
             page = await context.new_page()
 
             for search in self.cfg["searches"]:
-                log.info("Vinted : recherche « %s »...", search["query"])
-                url = f"{self.BASE_URL}/catalog?search_text={quote_plus(search['query'])}&order=newest_first"
-                if search.get("max_price") is not None:
-                    url += f"&price_to={int(search['max_price'])}"
+                query = search["query"]
+                want = int(search.get("limit", limit))
+                max_pages = min(int(search.get("max_pages", default_pages)), max(1, (want + 35) // 36))
+                log.info("Vinted : recherche « %s » (cible %d, max %d page(s))...", query, want, max_pages)
 
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                await page.wait_for_timeout(3500)
-
-                links = await page.locator('a[href*="/items/"]').all()
                 count = 0
-                for link in links:
-                    if count >= int(search.get("limit", limit)):
+                for page_num in range(1, max_pages + 1):
+                    if count >= want:
                         break
-                    href = (await link.get_attribute("href")) or ""
-                    if href.startswith("/"):
-                        href = self.BASE_URL + href
-                    item_url = href.split("?")[0]
-                    if not _ITEM_URL_RE.match(item_url) or item_url in seen_urls:
-                        continue
-                    seen_urls.add(item_url)
+                    url = f"{self.BASE_URL}/catalog?search_text={quote_plus(query)}&order=newest_first&page={page_num}"
+                    if search.get("min_price") is not None:
+                        url += f"&price_from={int(search['min_price'])}"
+                    if search.get("max_price") is not None:
+                        url += f"&price_to={int(search['max_price'])}"
 
-                    raw_title = (await link.get_attribute("title")) or (await link.inner_text()) or ""
-                    title = clean_html(raw_title.split(",")[0])[:200]
-                    price = extract_price(raw_title)
+                    try:
+                        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    except Exception as exc:
+                        log.warning("Vinted : page %d de « %s » interrompue (%s).", page_num, query, exc)
+                        break
 
-                    if not title:
-                        continue
+                    await page.wait_for_timeout(2500)
+                    # Défilement doux pour déclencher le chargement paresseux des cartes et vignettes
+                    for _ in range(2):
+                        await page.evaluate("window.scrollBy(0, 1400)")
+                        await page.wait_for_timeout(700)
 
-                    ads.append(
-                        Ad(
-                            title=title,
-                            url=item_url,
-                            source=self.name,
-                            price=price,
-                            location="France",
-                            image=await link_image(link),
+                    links = await page.locator('a[href*="/items/"]').all()
+                    added_page = 0
+                    for link in links:
+                        if count >= want:
+                            break
+                        href = (await link.get_attribute("href")) or ""
+                        if href.startswith("/"):
+                            href = self.BASE_URL + href
+                        item_url = href.split("?")[0]
+                        if not _ITEM_URL_RE.match(item_url) or item_url in seen_urls:
+                            continue
+                        seen_urls.add(item_url)
+
+                        raw_title = (await link.get_attribute("title")) or ""
+                        if not raw_title:
+                            raw_title = (await link.inner_text()) or ""
+                        title = _clean_vinted_title(raw_title)
+                        price = extract_price(raw_title)
+                        if price is None:
+                            try:
+                                card_text = await link.locator("xpath=..").inner_text(timeout=1000)
+                                price = extract_price(card_text)
+                                if not title:
+                                    title = _clean_vinted_title(card_text.splitlines()[0] if card_text else "")
+                            except Exception:
+                                pass
+
+                        if not title:
+                            continue
+
+                        ads.append(
+                            Ad(
+                                title=title,
+                                url=item_url,
+                                source=self.name,
+                                price=price,
+                                location="France",
+                                image=await link_image(link),
+                            )
                         )
-                    )
-                    count += 1
+                        count += 1
+                        added_page += 1
 
-                log.info("Vinted : %d annonce(s) trouvée(s) pour « %s »", count, search["query"])
-                self.report(search["query"], count)
+                    if added_page == 0:
+                        break
+                    if page_num < max_pages and count < want:
+                        await asyncio.sleep(random.uniform(1.8, 3.2))
+
+                log.info("Vinted : %d annonce(s) trouvée(s) pour « %s »", count, query)
+                self.report(query, count)
                 await asyncio.sleep(random.uniform(2.0, 4.0))
 
             await context.close()

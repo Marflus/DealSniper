@@ -1,4 +1,4 @@
-"""Suivi des achats : bénéfices réalisés et calibrage automatique de la prudence des estimations.
+"""Suivi des achats : bénéfices réalisés, rentabilité horaire (€/h) et calibrage automatique.
 
 Quand au moins 3 achats ont été revendus, on compare le prix de revente réel à la revente estimée
 au moment de l'achat. Si vos ventes se font en moyenne à 85 % de l'estimation, le rabot
@@ -18,8 +18,8 @@ log = logging.getLogger(__name__)
 MIN_SALES = 3
 
 # Repères fiscaux France (achat-revente), à vérifier sur impots.gouv.fr — ils évoluent.
-DAC7_SALES = 30          # au-delà, les plateformes transmettent au fisc
-DAC7_REVENUE = 2000.0    # ou au-delà de ce montant de ventes / an / plateforme
+DAC7_SALES = 30           # au-delà, les plateformes transmettent au fisc
+DAC7_REVENUE = 2000.0     # ou au-delà de ce montant de ventes / an / plateforme
 MICRO_CEILING = 188700.0  # plafond de chiffre d'affaires du micro-entrepreneur (achat-revente)
 
 
@@ -27,12 +27,35 @@ def _cost(p: dict[str, Any]) -> float:
     return float(p.get("buy_price") or 0) + float(p.get("repair_cost") or 0)
 
 
+def _hours(p: dict[str, Any]) -> float:
+    try:
+        val = float(p.get("hours_spent") or 0)
+        return val if val > 0 else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def hourly_rate(p: dict[str, Any]) -> float | None:
+    """Rentabilité horaire (€/h) d'un achat revendu ayant un temps renseigné."""
+    hours = _hours(p)
+    if p.get("sold_price") is None or hours <= 0:
+        return None
+    profit = float(p["sold_price"]) - _cost(p)
+    return round(profit / hours, 2)
+
+
 def summary(purchases: list[dict[str, Any]]) -> dict[str, Any]:
-    """Totaux de l'onglet Achats."""
+    """Totaux de l'onglet Achats (bénéfice, ROI et rentabilité horaire)."""
     sold = [p for p in purchases if p.get("sold_price") is not None]
     stock = [p for p in purchases if p.get("sold_price") is None]
     cost_sold = sum(_cost(p) for p in sold)
     profit = sum(float(p["sold_price"]) - _cost(p) for p in sold)
+
+    total_hours = sum(_hours(p) for p in purchases)
+    sold_with_hours = [p for p in sold if _hours(p) > 0]
+    sold_hours = sum(_hours(p) for p in sold_with_hours)
+    profit_with_hours = sum(float(p["sold_price"]) - _cost(p) for p in sold_with_hours)
+
     return {
         "count": len(purchases), "sold": len(sold), "in_stock": len(stock),
         "invested": round(sum(_cost(p) for p in purchases), 2),
@@ -40,6 +63,9 @@ def summary(purchases: list[dict[str, Any]]) -> dict[str, Any]:
         "profit": round(profit, 2),
         "stock_value": round(sum(_cost(p) for p in stock), 2),
         "roi_pct": round(100 * profit / cost_sold, 1) if cost_sold else None,
+        "total_hours": round(total_hours, 2),
+        "sold_hours": round(sold_hours, 2),
+        "hourly_rate": round(profit_with_hours / sold_hours, 2) if sold_hours > 0 else None,
     }
 
 

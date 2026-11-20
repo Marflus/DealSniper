@@ -10,13 +10,16 @@ from __future__ import annotations
 import asyncio
 import io
 import shutil
+import sqlite3
+import tempfile
 import threading
+import zipfile
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_file, send_from_directory
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
@@ -42,7 +45,6 @@ def _yaml() -> YAML:
     yaml.preserve_quotes = True
     yaml.width = 4096  # ne jamais couper une liste de mots en plein milieu
     yaml.indent(mapping=2, sequence=4, offset=2)
-    # « min_margin: null » plutôt que « min_margin: » (plus lisible dans config.yaml)
     yaml.representer.add_representer(type(None), lambda r, _: r.represent_scalar("tag:yaml.org,2002:null", "null"))
     return yaml
 
@@ -157,7 +159,6 @@ def write_settings(new: dict[str, Any]) -> None:
             target["common_searches"] = bool(site["common_searches"])
 
     if "categories" in new:
-        # Mise à jour sur place des catégories existantes (leurs commentaires sont conservés).
         old = doc.get("categories")
         old = old if isinstance(old, CommentedSeq) else CommentedSeq()
         wanted = [c for c in new["categories"] if str(c.get("name", "")).strip()]
@@ -185,7 +186,7 @@ def write_settings(new: dict[str, Any]) -> None:
     for field in ("global_exclude_keywords", "deal_signals", "desirable_brands", "buyer_ad_keywords"):
         if field in (new.get("filters") or {}):
             filters[field] = _seq(filters.get(field), _words(new["filters"][field]))
-    for field in ("sold_title_keywords", "sold_phrases"):  # listes courtes : sur une ligne
+    for field in ("sold_title_keywords", "sold_phrases"):
         if field in (new.get("filters") or {}):
             filters[field] = _seq(filters.get(field), _words(new["filters"][field]), flow=True)
     if "min_price" in (new.get("filters") or {}):
@@ -198,7 +199,7 @@ def write_settings(new: dict[str, Any]) -> None:
         for key in keys:
             if key in (new.get(section) or {}):
                 doc.setdefault(section, CommentedMap())[key] = bool(new[section][key])
-    if "home" in (new.get("location") or {}):  # chez vous : code postal ou ville, pour les distances
+    if "home" in (new.get("location") or {}):
         home = DoubleQuotedScalarString(str(new["location"]["home"]).strip())
         doc.setdefault("location", CommentedMap())["home"] = home
 
@@ -228,7 +229,7 @@ def write_settings(new: dict[str, Any]) -> None:
     buffer = io.StringIO()
     yaml.dump(doc, buffer)
     text = buffer.getvalue()
-    _yaml().load(text)  # le fichier écrit doit se relire
+    _yaml().load(text)
     path.write_text(text, encoding="utf-8")
 
 
@@ -248,7 +249,7 @@ def _realistic(items: list[dict]) -> None:
         clean = make_realistic({**sanitize_analysis(analysis), **{k: v for k, v in analysis.items()
                                                                  if k in ("facilite_reparation", "facilite_vente")}},
                                Ad.from_dict(item), haircut)
-        if "facilite_reparation" not in analysis:  # notes absentes des anciennes analyses : on ne les invente pas
+        if "facilite_reparation" not in analysis:
             clean.pop("facilite_reparation")
         if "facilite_vente" not in analysis:
             clean.pop("facilite_vente")
@@ -307,7 +308,7 @@ def create_app() -> Flask:
         try:
             config = load_config(config_path())
             cap, home = config["analyzer"].get("max_daily_cost_usd"), str(config["location"].get("home") or "")
-        except Exception:  # config.yaml invalide : plafond et distances simplement absents
+        except Exception:
             cap, home = None, ""
         add_distances(items, home)
         geo_state = "ok" if geo.ready else "erreur" if geo.error else "chargement" if home else "inactif"
@@ -354,18 +355,51 @@ def create_app() -> Flask:
             return jsonify(ok=False, error="Annonce inconnue"), 404
         try:
             result = analyze_market(Ad.from_dict(ad), load_config(config_path()))
-        except Exception as exc:  # clé manquante, API indisponible, recherche web refusée…
+        except Exception as exc:
             return jsonify(ok=False, error=str(exc)[:200]), 502
         with database() as db:
             db.patch_ad(uid, {"market_deep": result})
             asyncio.run(db.add_cost(result.get("cost_usd", 0)))
         return jsonify(ok=True, market_deep=result)
 
+    @app.get("/api/ads/<uid>/negotiation")
+    def ad_negotiation(uid: str):
+        """Message de négociation prêt à copier, basé sur le prix conseillé de l'analyse."""
+        from ..deep import build_negotiation_message
+        from ..models import Ad
+
+        with database() as db:
+            ad_dict = db.ad_data(uid)
+        if ad_dict is None:
+            return jsonify(ok=False, error="Annonce inconnue"), 404
+        items = [ad_dict]
+        _realistic(items)
+        ad_dict = items[0]
+        deep = ad_dict.get("market_deep") or {}
+        if deep.get("message_negociation"):
+            return jsonify(ok=True, message=deep["message_negociation"],
+                           prix_achat_max=deep.get("prix_achat_max"), source="deep")
+        ad = Ad.from_dict(ad_dict)
+        max_buy = deep.get("prix_achat_max")
+        if max_buy is None:
+            analysis = ad.analysis or {}
+            resale = analysis.get("valeur_revente_estimee")
+            piece = float(analysis.get("cout_piece_estime") or 0)
+            if resale:
+                candidate = round(float(resale) * 0.9 - piece - 30)
+                if candidate > 0:
+                    max_buy = candidate
+        msg = build_negotiation_message(ad, max_buy)
+        return jsonify(ok=True, message=msg, prix_achat_max=max_buy,
+                       source="deep" if deep.get("prix_achat_max") is not None else "auto")
+
     # --- achats -------------------------------------------------------------------
     @app.get("/api/purchases")
     def list_purchases():
         with database() as db:
             rows = db.purchases()
+        for row in rows:
+            row["hourly_rate"] = purchases.hourly_rate(row)
         try:
             base = float(load_config(config_path())["analyzer"]["resale_haircut"])
         except Exception:
@@ -375,11 +409,14 @@ def create_app() -> Flask:
 
     @app.post("/api/purchases")
     def add_purchase():
-        """Depuis une annonce (« uid ») ou à la main (« title », « buy_price »)."""
+        """Depuis une annonce (« uid ») ou à la main (« title », « buy_price », « hours_spent »)."""
         body = request.get_json(force=True) or {}
         with database() as db:
-            values: dict[str, Any] = {"title": str(body.get("title") or "").strip(),
-                                      "buy_price": _number(body.get("buy_price"))}
+            values: dict[str, Any] = {
+                "title": str(body.get("title") or "").strip(),
+                "buy_price": _number(body.get("buy_price")),
+                "hours_spent": _number(body.get("hours_spent")),
+            }
             ad = db.ad_data(body["uid"]) if body.get("uid") else None
             if ad:
                 items = [ad]
@@ -399,7 +436,7 @@ def create_app() -> Flask:
     def update_purchase(purchase_id: int):
         body = request.get_json(force=True) or {}
         values: dict[str, Any] = {}
-        for key in ("buy_price", "repair_cost", "sold_price", "estimated_resale"):
+        for key in ("buy_price", "repair_cost", "sold_price", "estimated_resale", "hours_spent"):
             if key in body:
                 values[key] = _number(body[key])
         for key in ("title", "notes", "sold_at", "bought_at"):
@@ -411,7 +448,7 @@ def create_app() -> Flask:
             db.update_purchase(purchase_id, values)
             row = next((p for p in db.purchases() if p["id"] == purchase_id), None)
             if row:
-                db.record_sale(purchase_id, row.get("model"), row.get("sold_price"))  # vraie vente → cote
+                db.record_sale(purchase_id, row.get("model"), row.get("sold_price"))
         return jsonify(ok=row is not None)
 
     @app.delete("/api/purchases/<int:purchase_id>")
@@ -419,6 +456,104 @@ def create_app() -> Flask:
         with database() as db:
             db.delete_purchase(purchase_id)
         return jsonify(ok=True)
+
+    # --- sauvegarde & restauration ------------------------------------------------
+    @app.get("/api/backup")
+    def backup_data():
+        """Télécharge une archive ZIP contenant dealsniper.db (copie cohérente WAL) et config.yaml (jamais .env)."""
+        db_path = data_dir() / "dealsniper.db"
+        cfg_path = config_path()
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            if cfg_path.exists():
+                zf.write(cfg_path, arcname="config.yaml")
+            if db_path.exists():
+                with tempfile.TemporaryDirectory() as tmp:
+                    snap = Path(tmp) / "dealsniper.db"
+                    src = sqlite3.connect(db_path)
+                    dst = sqlite3.connect(snap)
+                    try:
+                        src.backup(dst)
+                    finally:
+                        dst.close()
+                        src.close()
+                    zf.write(snap, arcname="dealsniper.db")
+        buf.seek(0)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        return send_file(buf, mimetype="application/zip", as_attachment=True,
+                         download_name=f"dealsniper-backup-{stamp}.zip")
+
+    @app.post("/api/restore")
+    def restore_data():
+        """Restaure dealsniper.db et/ou config.yaml depuis une archive ZIP de sauvegarde."""
+        if state["running"]:
+            return jsonify(ok=False, error="Impossible de restaurer pendant qu'un passage est en cours."), 409
+        raw = request.files["file"].read() if "file" in request.files else request.get_data()
+        if not raw:
+            return jsonify(ok=False, error="Aucun fichier ZIP reçu."), 400
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(raw))
+        except zipfile.BadZipFile:
+            return jsonify(ok=False, error="Archive ZIP invalide."), 400
+
+        restored: list[str] = []
+        backups: list[str] = []
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+        with zf, tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            names = set(zf.namelist())
+            if not (names & {"config.yaml", "dealsniper.db"}):
+                return jsonify(ok=False, error="L'archive ne contient ni config.yaml ni dealsniper.db."), 400
+
+            new_cfg_text: str | None = None
+            if "config.yaml" in names:
+                try:
+                    new_cfg_text = zf.read("config.yaml").decode("utf-8")
+                    _yaml().load(new_cfg_text)
+                except Exception as exc:
+                    return jsonify(ok=False, error=f"config.yaml invalide dans l'archive : {exc}"), 400
+
+            new_db_path: Path | None = None
+            if "dealsniper.db" in names:
+                new_db_path = tmp_dir / "dealsniper.db"
+                new_db_path.write_bytes(zf.read("dealsniper.db"))
+                try:
+                    conn = sqlite3.connect(new_db_path)
+                    try:
+                        check = conn.execute("PRAGMA integrity_check").fetchone()
+                        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                    finally:
+                        conn.close()
+                    if not check or check[0] != "ok" or "seen" not in tables:
+                        return jsonify(ok=False, error="Base dealsniper.db invalide ou corrompue."), 400
+                except sqlite3.DatabaseError as exc:
+                    return jsonify(ok=False, error=f"Base dealsniper.db illisible : {exc}"), 400
+
+            if new_cfg_text is not None:
+                cfg_path = config_path()
+                if cfg_path.exists():
+                    bak = cfg_path.with_name(f"config.{stamp}.bak.yaml")
+                    shutil.copyfile(cfg_path, bak)
+                    backups.append(bak.name)
+                cfg_path.write_text(new_cfg_text, encoding="utf-8")
+                restored.append("config.yaml")
+
+            if new_db_path is not None:
+                db_path = data_dir() / "dealsniper.db"
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+                if db_path.exists():
+                    bak = db_path.with_name(f"dealsniper.{stamp}.bak.db")
+                    shutil.copyfile(db_path, bak)
+                    backups.append(bak.name)
+                for suffix in ("-wal", "-shm"):
+                    sidecar = db_path.with_name(db_path.name + suffix)
+                    if sidecar.exists():
+                        sidecar.unlink()
+                shutil.copyfile(new_db_path, db_path)
+                restored.append("dealsniper.db")
+
+        return jsonify(ok=True, restored=restored, backups=backups)
 
     @app.get("/api/image/<uid>")
     def ad_image(uid: str):
@@ -429,9 +564,9 @@ def create_app() -> Flask:
             ad = db.ad_data(uid)
         if ad is None:
             return jsonify(image=None), 404
-        if ad.get("image") is not None:  # déjà connue ("" = aucune)
+        if ad.get("image") is not None:
             return jsonify(image=ad["image"] or None)
-        image = fetch_image(ad.get("url") or "")  # requête réseau : base fermée pendant l'attente
+        image = fetch_image(ad.get("url") or "")
         with database() as db:
             db.set_image(uid, image)
         return jsonify(image=image)
@@ -455,7 +590,7 @@ def create_app() -> Flask:
                                for s in loaded] + [
                 {"name": name, "label": SITE_LABELS.get(name, name.capitalize()), "ok": False, "reason": reason}
                 for name, reason in skipped]
-        except Exception as exc:  # config.yaml illisible : affiché tel quel
+        except Exception as exc:
             report["error"] = str(exc)
         return jsonify(report)
 
@@ -473,7 +608,7 @@ def create_app() -> Flask:
     def get_settings():
         try:
             return jsonify(read_settings())
-        except Exception as exc:  # YAML invalide : l'interface affiche l'erreur
+        except Exception as exc:
             return jsonify(error=f"config.yaml illisible : {exc}"), 500
 
     @app.post("/api/settings/reset")
@@ -494,7 +629,7 @@ def create_app() -> Flask:
     def put_settings():
         try:
             write_settings(request.get_json(force=True) or {})
-            load_config(config_path())  # vérification complète
+            load_config(config_path())
         except Exception as exc:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True)
@@ -549,22 +684,22 @@ def create_app() -> Flask:
         if max_price is not None:
             search["max_price"] = max_price
             if min_price is not None:
-                search["min_price"] = min_price  # eBay filtre la fourchette côté API
-        sites = {str(s) for s in body.get("sites") or []}  # vide = tous les sites actifs
+                search["min_price"] = min_price
+        sites = {str(s) for s in body.get("sites") or []}
         exclude = [normalize(str(w)) for w in _words(body.get("exclude") or [])]
         max_ads = _number(body.get("max_ads"))
 
         def prepare(config: dict[str, Any]) -> None:
-            config["searches"] = [search]              # une seule recherche, commune à tous les sites
+            config["searches"] = [search]
             for name, site in config["sites"].items():
-                site["searches"] = []                  # on ignore les recherches habituelles
+                site["searches"] = []
                 site["common_searches"] = True
                 if sites and name not in sites:
-                    site["enabled"] = False            # sites décochés : pas interrogés
+                    site["enabled"] = False
             filters = config["filters"]
-            filters["drop_uncategorized"] = False      # ne pas écarter un terme hors catégories
+            filters["drop_uncategorized"] = False
             if min_price is not None:
-                filters["min_price"] = min_price       # appliqué à tous les sites par le filtre
+                filters["min_price"] = min_price
             if exclude:
                 filters["global_exclude_keywords"] = [*filters.get("global_exclude_keywords", []), *exclude]
             if max_ads:
