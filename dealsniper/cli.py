@@ -28,8 +28,18 @@ def cmd_watch(args, config) -> int:
 def cmd_ui(args, config) -> int:
     from .web.app import create_app
 
+    if args.demo:  # base séparée, remplie de fausses annonces, aucun appel réseau
+        os.environ["DEALSNIPER_DATA_DIR"] = str(data_dir() / "demo")
+        from .db import Database
+        from .demo import seed
+
+        db = Database(data_dir() / "dealsniper.db")
+        seed(db)
+        db.close()
+
     url = f"http://{'127.0.0.1' if args.host == '0.0.0.0' else args.host}:{args.port}"
-    print(f"Deal Sniper : interface sur {url} (Ctrl+C pour arrêter)")
+    banner = " [DÉMO : fausses données]" if args.demo else ""
+    print(f"Deal Sniper : interface sur {url}{banner} (Ctrl+C pour arrêter)")
     if args.open:
         import threading
         import webbrowser
@@ -95,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     ui.add_argument("--host", default="127.0.0.1", help="0.0.0.0 pour y accéder depuis le réseau local")
     ui.add_argument("--port", type=int, default=5000)
     ui.add_argument("--open", action="store_true", help="ouvre l'interface dans le navigateur")
+    ui.add_argument("--demo", action="store_true", help="fausses données pour voir l'interface (aucun réseau)")
     ui.set_defaults(func=cmd_ui)
     sub.add_parser("test-notif", help="notification de test").set_defaults(func=cmd_test_notif)
     recap = sub.add_parser("recap", help="récapitulatif des annonces notées")

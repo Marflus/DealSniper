@@ -102,6 +102,7 @@ Tout est enregistré dans votre `config.yaml` (bouton **Enregistrer** ou **Ctrl+
 **En ligne de commande** (depuis le dossier, après un premier `start_ui.bat`) :
 
 ```bat
+.venv\Scripts\python -m dealsniper ui --demo     &:: interface remplie de fausses données (aucun passage, base séparée)
 .venv\Scripts\python -m dealsniper run           &:: un passage, lignes de progression puis détail des recherches
 .venv\Scripts\python -m dealsniper watch         &:: surveillance continue, chaque site à son rythme
 .venv\Scripts\python -m dealsniper test-notif    &:: fausse annonce sur Telegram / Discord

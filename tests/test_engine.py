@@ -278,3 +278,18 @@ def test_duplicates_and_favorites_and_purchases(tmp_path):
     assert calibration(rows, 0.9)["haircut"] is None  # moins de 3 ventes : pas de calibrage
     three = [{"sold_price": 90, "estimated_resale": 100}] * 3
     assert calibration(three, 0.9)["haircut"] == 0.81
+
+
+def test_demo_seed_populates_once(tmp_path):
+    from dealsniper.db import Database
+    from dealsniper.demo import seed
+
+    db = Database(tmp_path / "demo.db")
+    seed(db)
+    seed(db)  # relancer n'ajoute rien
+    ads = db.search()
+    assert len(ads) == len(__import__("dealsniper.demo", fromlist=["DEMO_ADS"]).DEMO_ADS)
+    assert sum(a["favorite"] for a in ads) == 2
+    assert all(a["image"] == "" for a in ads)  # pas de photo = aucune requête d'aperçu
+    assert len(db.purchases()) == 3
+    db.close()
