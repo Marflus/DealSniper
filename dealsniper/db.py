@@ -31,7 +31,21 @@ CREATE TABLE IF NOT EXISTS prices (
 );
 CREATE INDEX IF NOT EXISTS prices_model ON prices (model, working, seen_at);
 CREATE TABLE IF NOT EXISTS market_samples (model TEXT PRIMARY KEY, prices TEXT NOT NULL, updated_at TEXT NOT NULL);
+-- Achats suivis depuis l'interface (onglet Achats) : bénéfices et calibrage des estimations.
+CREATE TABLE IF NOT EXISTS purchases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT, title TEXT NOT NULL, url TEXT, source TEXT, category TEXT, model TEXT,
+    bought_at TEXT NOT NULL, buy_price REAL, repair_cost REAL,
+    estimated_resale REAL,            -- revente estimée au moment de l'achat
+    sold_at TEXT, sold_price REAL, notes TEXT
+);
 """
+
+# Colonnes ajoutées après la première version (bases existantes mises à jour à l'ouverture).
+SEEN_COLUMNS = {"reason": "TEXT", "favorite": "INTEGER NOT NULL DEFAULT 0", "hidden": "INTEGER NOT NULL DEFAULT 0",
+                "fingerprint": "TEXT"}
+PURCHASE_FIELDS = ("title", "buy_price", "repair_cost", "estimated_resale", "sold_at", "sold_price", "notes",
+                   "bought_at")
 
 
 def _now() -> datetime:
@@ -45,8 +59,11 @@ class Database:
         self._conn.execute("PRAGMA journal_mode=WAL")    # lectures/écritures sans blocage
         self._conn.execute("PRAGMA synchronous=NORMAL")  # ménage la carte SD d'un Raspberry Pi
         self._conn.executescript(SCHEMA)
-        if "reason" not in {row[1] for row in self._conn.execute("PRAGMA table_info(seen)")}:
-            self._conn.execute("ALTER TABLE seen ADD COLUMN reason TEXT")  # bases créées avant l'interface
+        existing = {row[1] for row in self._conn.execute("PRAGMA table_info(seen)")}
+        for column, kind in SEEN_COLUMNS.items():
+            if column not in existing:
+                self._conn.execute(f"ALTER TABLE seen ADD COLUMN {column} {kind}")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS seen_fingerprint ON seen (fingerprint)")
         self._lock = threading.Lock()
 
     def _sql(self, query: str, params: tuple = ()) -> list[tuple]:
@@ -66,27 +83,86 @@ class Database:
         rows = await self._asql(f"SELECT uid FROM seen WHERE uid IN ({','.join('?' * len(uids))})", tuple(uids))
         return set(uids) - {uid for (uid,) in rows}
 
-    async def remember(self, ad: Ad, status: str, notified: bool = False, reason: str | None = None) -> None:
+    async def remember(self, ad: Ad, status: str, notified: bool = False, reason: str | None = None,
+                       fingerprint: str | None = None) -> None:
+        """Enregistre une annonce traitée (favori / masquée conservés si elle l'était déjà)."""
         await self._asql(
-            "INSERT OR REPLACE INTO seen (uid, site, status, score, notified, seen_at, data, reason) "
-            "VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO seen (uid, site, status, score, notified, seen_at, data, reason, fingerprint) "
+            "VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(uid) DO UPDATE SET site = excluded.site, "
+            "status = excluded.status, score = excluded.score, notified = excluded.notified, "
+            "seen_at = excluded.seen_at, data = excluded.data, reason = excluded.reason, "
+            "fingerprint = excluded.fingerprint",
             (ad.uid, ad.source, status, ad.score if ad.analysis else None, int(notified),
-             _now().isoformat(timespec="seconds"), json.dumps(ad.to_dict(), ensure_ascii=False), reason),
+             _now().isoformat(timespec="seconds"), json.dumps(ad.to_dict(), ensure_ascii=False), reason,
+             fingerprint),
         )
+
+    async def duplicate_of(self, fingerprint: str, site: str, days: int = 14) -> str | None:
+        """Site d'une annonce identique déjà vue ailleurs récemment (même modèle / titre et même prix)."""
+        since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
+        rows = await self._asql("SELECT site FROM seen WHERE fingerprint = ? AND site != ? AND seen_at >= ? LIMIT 1",
+                                (fingerprint, site, since))
+        return rows[0][0] if rows else None
+
+    def mark(self, uid: str, favorite: bool | None = None, hidden: bool | None = None) -> bool:
+        """Favori / masquée ; False si l'annonce est inconnue."""
+        if not self._sql("SELECT 1 FROM seen WHERE uid = ?", (uid,)):
+            return False
+        if favorite is not None:
+            self._sql("UPDATE seen SET favorite = ? WHERE uid = ?", (int(favorite), uid))
+        if hidden is not None:
+            self._sql("UPDATE seen SET hidden = ? WHERE uid = ?", (int(hidden), uid))
+        return True
+
+    # --- achats ---------------------------------------------------------------------
+    def add_purchase(self, values: dict) -> int:
+        fields = ["uid", "url", "source", "category", "model", *PURCHASE_FIELDS]
+        values = {"bought_at": _now().date().isoformat(), **values}
+        row = [values.get(f) for f in fields]
+        with self._lock:
+            marks = ",".join("?" * len(fields))
+            cur = self._conn.execute(f"INSERT INTO purchases ({', '.join(fields)}) VALUES ({marks})", row)
+            return int(cur.lastrowid)
+
+    def update_purchase(self, purchase_id: int, values: dict) -> None:
+        fields = [f for f in PURCHASE_FIELDS if f in values]
+        if fields:
+            self._sql(f"UPDATE purchases SET {', '.join(f + ' = ?' for f in fields)} WHERE id = ?",
+                      (*[values[f] for f in fields], purchase_id))
+
+    def delete_purchase(self, purchase_id: int) -> None:
+        self._sql("DELETE FROM purchases WHERE id = ?", (purchase_id,))
+        self._sql("DELETE FROM prices WHERE uid = ?", (f"achat:{purchase_id}",))
+
+    def record_sale(self, purchase_id: int, model: str | None, price: float | None) -> None:
+        """Un prix de revente réel est la meilleure donnée de cote qui soit : on l'ajoute aux observations."""
+        uid = f"achat:{purchase_id}"
+        if model and price:
+            self._sql("INSERT OR REPLACE INTO prices (uid, model, price, working, site, seen_at) VALUES (?,?,?,1,?,?)",
+                      (uid, model, price, "vente", _now().isoformat(timespec="seconds")))
+        else:
+            self._sql("DELETE FROM prices WHERE uid = ?", (uid,))
+
+    def purchases(self) -> list[dict]:
+        with self._lock:
+            cur = self._conn.execute("SELECT * FROM purchases ORDER BY bought_at DESC, id DESC")
+            names = [d[0] for d in cur.description]
+            return [dict(zip(names, row, strict=True)) for row in cur.fetchall()]
 
     def search(self, status: str | None = None, days: int = 30, limit: int = 2000) -> list[dict]:
         """Annonces récentes pour l'interface (les filtres fins sont faits dans le navigateur)."""
         since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
-        query = "SELECT data, status, score, notified, seen_at, reason FROM seen WHERE seen_at >= ?"
+        query = "SELECT data, status, score, notified, seen_at, reason, favorite, hidden FROM seen WHERE seen_at >= ?"
         params: list = [since]
         if status:
             query += " AND status = ?"
             params.append(status)
         rows = self._sql(query + " ORDER BY seen_at DESC LIMIT ?", (*params, limit))
         ads = []
-        for data, row_status, score, notified, seen_at, reason in rows:
+        for data, row_status, score, notified, seen_at, reason, favorite, hidden in rows:
             ad = json.loads(data or "{}")
-            ad.update(status=row_status, score=score, notified=bool(notified), seen_at=seen_at, reason=reason)
+            ad.update(status=row_status, score=score, notified=bool(notified), seen_at=seen_at, reason=reason,
+                      favorite=bool(favorite), hidden=bool(hidden))
             ads.append(ad)
         return ads
 
@@ -121,7 +197,10 @@ class Database:
         return [Ad.from_dict(json.loads(data)) for (data,) in rows]
 
     async def forget_older_than(self, days: int) -> None:
-        await self._asql("DELETE FROM seen WHERE seen_at < ?", ((_now() - timedelta(days=days)).isoformat(),))
+        """Oublie les vieilles annonces (sauf les favoris) et les vieux prix observés."""
+        limit = (_now() - timedelta(days=days)).isoformat()
+        await self._asql("DELETE FROM seen WHERE seen_at < ? AND favorite = 0", (limit,))
+        await self._asql("DELETE FROM prices WHERE seen_at < ?", (limit,))
 
     def reset(self) -> None:
         self._sql("DELETE FROM seen")

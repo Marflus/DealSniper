@@ -19,9 +19,10 @@ from . import progress as progress_module
 from .config import data_dir
 from .db import Database
 from .http import AccessDenied, PoliteClient
-from .market import Market
+from .market import Market, fingerprint
 from .models import Ad
 from .progress import LiveLogHandler, Progress
+from .purchases import calibrated_config
 from .sites import Site, load_sites
 from .sites import skipped as skipped_sites
 
@@ -35,6 +36,8 @@ class Engine:
                  market: Market | None = None):
         self.config = config
         self.market = market
+        self.brands = market.brands if market else sorted(
+            {k for cat in config["categories"] for k in cat.get("keywords") or []}, key=len, reverse=True)
         self.progress = progress or Progress()
         self.db = db
         self.http = http
@@ -97,11 +100,15 @@ class Engine:
             return {"listées": len(listed), "nouvelles": len(new_ads), "retenues": 0, "analysées": 0, "notifiées": 0}
 
         candidates = []
+        prints: dict[str, str | None] = {}  # empreintes anti-doublons (même annonce sur plusieurs sites)
         for i, ad in enumerate(new_ads, 1):
             show(site.label, f"{len(listed)} annonces · tri des nouvelles {i}/{len(new_ads)}")
-            reason = filters.check(ad, self.config) or await self.market_problem(ad)
+            prints[ad.uid] = fingerprint(ad, self.brands)
+            duplicate = prints[ad.uid] and await self.db.duplicate_of(prints[ad.uid], ad.source)
+            reason = (f"doublon d'une annonce déjà vue sur {SITE_LABELS.get(duplicate, duplicate)}" if duplicate
+                      else filters.check(ad, self.config) or await self.market_problem(ad))
             if reason:
-                await self.db.remember(ad, "rejected", reason=reason)
+                await self.db.remember(ad, "rejected", reason=reason, fingerprint=prints[ad.uid])
                 continue
             if not site.cfg.get("fetch_details", True):  # pas de fiche détaillée : moins de requêtes / fenêtres
                 candidates.append(ad)
@@ -115,7 +122,7 @@ class Engine:
                 log.debug("%s : fiche non lue (%s)", site.name, exc)
             reason = filters.check(ad, self.config)
             if reason:
-                await self.db.remember(ad, "rejected", reason=reason)
+                await self.db.remember(ad, "rejected", reason=reason, fingerprint=prints[ad.uid])
             else:
                 candidates.append(ad)
 
@@ -134,7 +141,7 @@ class Engine:
             sent = await asyncio.to_thread(notifier.notify, result.analyzed, self.config)
         sent_uids = {ad.uid for ad in sent}
         for ad in result.analyzed:
-            await self.db.remember(ad, "analyzed", notified=ad.uid in sent_uids)
+            await self.db.remember(ad, "analyzed", notified=ad.uid in sent_uids, fingerprint=prints.get(ad.uid))
         stats.update(analysées=len(result.analyzed), notifiées=len(sent))
         return stats
 
@@ -194,6 +201,7 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
         return
     db = Database(data_dir() / "dealsniper.db")
     await db.forget_older_than(int(config["storage"]["seen_retention_days"]))
+    config = calibrated_config(config, db.purchases())  # prudence ajustée à vos ventes réelles
     network = config["network"]
     async with PoliteClient(network["user_agent"], float(network["min_host_interval"]),
                             host_intervals=network.get("host_intervals")) as http:

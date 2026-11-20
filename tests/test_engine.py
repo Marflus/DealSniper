@@ -229,6 +229,8 @@ def test_market_rejects_impossible_margins_before_ai(config):
     from dealsniper.models import Ad
 
     class FakeMarket:
+        brands = ["thinkpad"]
+
         async def quote(self, ad):
             return Quote("thinkpad t480", 200, 12, "annonces")
 
@@ -237,3 +239,42 @@ def test_market_rejects_impossible_margins_before_ai(config):
     dear = Ad(title="ThinkPad T480", url="https://e.x/2", source="t", price=160)
     assert asyncio.run(engine.market_problem(cheap)) is None and cheap.market["median"] == 200
     assert asyncio.run(engine.market_problem(dear)).startswith("marge impossible selon la cote")
+
+
+def test_duplicates_and_favorites_and_purchases(tmp_path):
+    import asyncio
+
+    from dealsniper.db import Database
+    from dealsniper.market import fingerprint
+    from dealsniper.models import Ad
+    from dealsniper.purchases import calibration, summary
+
+    brands = ["thinkpad"]
+    lbc = Ad(title="Lenovo ThinkPad T480 i5", url="https://www.leboncoin.fr/ad/1", source="leboncoin", price=120)
+    fb = Ad(title="Thinkpad T480 - très bon état", url="https://www.facebook.com/marketplace/item/9/",
+            source="facebook", price=120)
+    assert fingerprint(lbc, brands) == fingerprint(fb, brands) == "thinkpad t480|120"
+
+    async def scenario():
+        db = Database(tmp_path / "d.db")
+        await db.remember(lbc, "analyzed", fingerprint=fingerprint(lbc, brands))
+        same_site = await db.duplicate_of("thinkpad t480|120", "leboncoin")
+        other_site = await db.duplicate_of("thinkpad t480|120", "facebook")
+        assert db.mark(lbc.uid, favorite=True) and not db.mark("inconnue", hidden=True)
+        await db.remember(lbc, "analyzed", fingerprint="x")  # un nouveau passage ne retire pas le favori
+        favorite = db.search()[0]["favorite"]
+        pid = db.add_purchase({"uid": lbc.uid, "title": lbc.title, "buy_price": 120, "estimated_resale": 200,
+                               "model": "thinkpad t480"})
+        db.update_purchase(pid, {"repair_cost": 20, "sold_price": 180})
+        db.record_sale(pid, "thinkpad t480", 180)
+        prices = await db.working_prices("thinkpad t480", 30)
+        rows = db.purchases()
+        db.close()
+        return same_site, other_site, favorite, rows, prices
+
+    same_site, other_site, favorite, rows, prices = asyncio.run(scenario())
+    assert same_site is None and other_site == "leboncoin" and favorite
+    assert summary(rows)["profit"] == 40 and summary(rows)["roi_pct"] == 28.6 and prices == [180]
+    assert calibration(rows, 0.9)["haircut"] is None  # moins de 3 ventes : pas de calibrage
+    three = [{"sold_price": 90, "estimated_resale": 100}] * 3
+    assert calibration(three, 0.9)["haircut"] == 0.81

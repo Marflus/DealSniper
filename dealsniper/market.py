@@ -85,6 +85,19 @@ def model_key(title: str, brands: list[str]) -> str | None:
     return f"{brand} {words[0]}" if words else None
 
 
+def fingerprint(ad: Ad, brands: list[str]) -> str | None:
+    """Empreinte pour repérer une même annonce publiée sur plusieurs sites : modèle (ou mots du titre) + prix."""
+    if ad.price is None:
+        return None
+    key = model_key(ad.title, brands)
+    if not key:
+        words = [t for t in re.findall(r"[a-z0-9]+", normalize(ad.title)) if len(t) > 1 and t not in STOPWORDS]
+        if len(words) < 3:
+            return None
+        key = " ".join(sorted(set(words[:6])))
+    return f"{key}|{round(ad.price)}"
+
+
 def is_working(text: str) -> bool:
     """Vrai si rien n'indique une panne ou un appareil incomplet."""
     return first_keyword(normalize(text), list(BROKEN)) is None
