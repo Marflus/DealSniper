@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS seen (
 );
 CREATE TABLE IF NOT EXISTS sites (name TEXT PRIMARY KEY, paused_until TEXT, last_error TEXT);
 CREATE TABLE IF NOT EXISTS costs (day TEXT PRIMARY KEY, usd REAL NOT NULL DEFAULT 0);
+-- Cote du marché (market.py) : un prix observé par annonce, et des échantillons eBay par modèle.
+CREATE TABLE IF NOT EXISTS prices (
+    uid TEXT PRIMARY KEY, model TEXT NOT NULL, price REAL NOT NULL, working INTEGER NOT NULL,
+    site TEXT, seen_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS prices_model ON prices (model, working, seen_at);
+CREATE TABLE IF NOT EXISTS market_samples (model TEXT PRIMARY KEY, prices TEXT NOT NULL, updated_at TEXT NOT NULL);
 """
 
 
@@ -130,6 +137,29 @@ class Database:
         await self._asql("INSERT OR REPLACE INTO sites (name, paused_until, last_error) VALUES (?, ?, ?)",
                          (site, until.isoformat(timespec="seconds"), reason))
         return until
+
+    # --- cote du marché -----------------------------------------------------------
+    async def record_prices(self, rows: list[tuple[str, str, float, int, str]]) -> None:
+        """(uid, modèle, prix, en état de marche, site) ; une annonce déjà enregistrée n'est pas recomptée."""
+        now = _now().isoformat(timespec="seconds")
+        for uid, model, price, working, site in rows:
+            await self._asql("INSERT OR IGNORE INTO prices (uid, model, price, working, site, seen_at) "
+                             "VALUES (?,?,?,?,?,?)", (uid, model, price, working, site, now))
+
+    async def working_prices(self, model: str, days: int) -> list[float]:
+        since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
+        rows = await self._asql("SELECT price FROM prices WHERE model = ? AND working = 1 AND seen_at >= ?",
+                                (model, since))
+        return [price for (price,) in rows]
+
+    async def market_sample(self, model: str, max_age_days: int) -> list[float] | None:
+        since = (_now() - timedelta(days=max_age_days)).isoformat(timespec="seconds")
+        rows = await self._asql("SELECT prices FROM market_samples WHERE model = ? AND updated_at >= ?", (model, since))
+        return json.loads(rows[0][0]) if rows else None
+
+    async def save_market_sample(self, model: str, prices: list[float]) -> None:
+        await self._asql("INSERT OR REPLACE INTO market_samples (model, prices, updated_at) VALUES (?,?,?)",
+                         (model, json.dumps(prices), _now().isoformat(timespec="seconds")))
 
     async def add_cost(self, usd: float) -> None:
         await self._asql("INSERT INTO costs (day, usd) VALUES (?, ?) "

@@ -219,3 +219,21 @@ def test_only_sites_disables_the_others():
     config = {"sites": {"ebay": {"enabled": True}, "vinted": {"enabled": True}}}
     only_sites(config, "ebay")
     assert config["sites"]["ebay"]["enabled"] and not config["sites"]["vinted"]["enabled"]
+
+
+def test_market_rejects_impossible_margins_before_ai(config):
+    import asyncio
+
+    from dealsniper.engine import Engine
+    from dealsniper.market import Quote
+    from dealsniper.models import Ad
+
+    class FakeMarket:
+        async def quote(self, ad):
+            return Quote("thinkpad t480", 200, 12, "annonces")
+
+    engine = Engine(config, db=None, http=None, market=FakeMarket())
+    cheap = Ad(title="ThinkPad T480", url="https://e.x/1", source="t", price=60)
+    dear = Ad(title="ThinkPad T480", url="https://e.x/2", source="t", price=160)
+    assert asyncio.run(engine.market_problem(cheap)) is None and cheap.market["median"] == 200
+    assert asyncio.run(engine.market_problem(dear)).startswith("marge impossible selon la cote")

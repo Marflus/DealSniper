@@ -37,6 +37,7 @@ facilite_vente (1-10) : demande en occasion en France. 10 = modèle très recher
 Règles :
 - Montants en euros, prix_total = prix + port. Enchère : le prix est l'enchère actuelle, raisonne sur un prix final probable.
 - valeur_revente_estimee : sois PRUDENT. C'est le prix auquel ce modèle exact se VEND réellement entre particuliers en France (leboncoin, eBay vendus) en quelques semaines, une fois réparé : le bas de la fourchette, jamais le prix neuf ni le prix affiché le plus haut. L'électronique perd vite sa valeur : un ordinateur de plus de 5 ans dépasse rarement 250-350 €. Modèle, année ou configuration inconnus : prends l'entrée de gamme et score ≤ 5.
+- « cote X € » (si fournie) = prix médian réel de ce modèle en état de marche, observé sur les annonces : ta valeur_revente_estimee ne doit pas la dépasser.
 - cout_piece_estime : prix réel de la pièce neuve ou d'occasion + petit matériel ; jamais 0 pour une réparation.
 - marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais.
 - Revente directe : panne_probable = "aucune", cout_piece_estime = 0.
@@ -104,6 +105,8 @@ def format_ad(idx: int, ad: Ad, max_chars: int) -> str:
         parts.append("signaux: " + ", ".join(ad.signals))
     if ad.seller_summary:
         parts.append(f"vendeur: {ad.seller_summary}")
+    if ad.market:
+        parts.append(f"cote {ad.market['median']:.0f} € en état de marche ({ad.market['count']} annonces)")
     description = truncate(ad.description.replace(ad.title, "").strip(), max_chars)
     if description:
         parts.append(description)
@@ -158,14 +161,17 @@ def sanitize_analysis(raw: dict[str, Any]) -> dict[str, Any]:
 def make_realistic(analysis: dict[str, Any], ad: Ad, haircut: float = 0.9) -> dict[str, Any]:
     """Garde-fou contre l'optimisme du modèle, appliqué en Python (pas de calcul confié à l'IA).
 
-    - la revente estimée est rabotée de `haircut` (0,9 = -10 %, marge de négociation des acheteurs) ;
+    - la revente part de la cote du marché si elle est connue et plus basse que l'estimation de l'IA ;
+    - elle est rabotée de `haircut` (0,9 = -10 %, marge de négociation des acheteurs) ;
     - la marge est recalculée : revente - prix payé (port compris) - pièce - 10 % de frais ;
     - une marge recalculée faible plafonne la note (< 20 € : 4/10 max ; < 40 € : 6/10 max).
     """
-    resale = round(analysis["valeur_revente_estimee"] * haircut, 2)
+    ai_resale = analysis["valeur_revente_estimee"]
+    base = min(ai_resale, ad.market["median"]) if ad.market and ad.market.get("median") else ai_resale
+    resale = round(base * haircut, 2)
     if ad.price_mode == "enchere" or ad.total_price is None:
-        # Prix final inconnu : on garde le raisonnement du modèle, moins le rabot.
-        margin = analysis["marge_nette_estimee"] - (analysis["valeur_revente_estimee"] - resale)
+        # Prix final inconnu : on garde le raisonnement du modèle, moins l'écart de revente.
+        margin = analysis["marge_nette_estimee"] - (ai_resale - resale)
     else:
         margin = resale - ad.total_price - analysis["cout_piece_estime"] - 0.10 * resale
     margin = round(margin, 2)
@@ -175,6 +181,7 @@ def make_realistic(analysis: dict[str, Any], ad: Ad, haircut: float = 0.9) -> di
     elif margin < 40:
         score = min(score, 6)
     return {**analysis, "valeur_revente_estimee": resale, "marge_nette_estimee": margin, "score_rentabilite": score,
+            "valeur_revente_ia": ai_resale, "source_revente": "cote" if base < ai_resale else "ia",
             "realiste": True}  # marque : garde-fou déjà appliqué
 
 

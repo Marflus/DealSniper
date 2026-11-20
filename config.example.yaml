@@ -250,7 +250,8 @@ analyzer:
   model: "claude-haiku-5-5"
   batch_size: 20              # annonces par appel API (le prompt système est payé une fois par lot)
   max_description_chars: 400  # description tronquée avant envoi à l'IA
-  resale_haircut: 0.9         # prudence : revente estimée par l'IA × 0,9, puis marge recalculée (1 = désactivé)
+  resale_haircut: 0.9         # prudence : revente estimée × 0,9, puis marge recalculée (1 = désactivé)
+  market_min_margin: 15       # écarte SANS IA une annonce dont la marge maximale selon la cote est sous ce montant (€)
   max_tokens: 4096            # plafond de la réponse (le lot est coupé en deux s'il est atteint)
   max_daily_cost_usd: 1.5     # sécurité anti-facture : ~1 000 annonces/jour avec haiku-4-5 (null = aucun plafond)
   max_retries: 4              # retries automatiques (429, 5xx, surcharge, réseau)

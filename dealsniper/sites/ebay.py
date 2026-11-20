@@ -18,6 +18,7 @@ TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
 ITEM_URL = "https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id"
 CONDITIONS = {"parts": "7000", "used": "3000|4000|5000|6000"}  # pour pièces / occasion
+USED_WORKING = "2750|3000|4000|5000"  # comme neuf → bon état : la référence de prix d'un appareil qui marche
 
 
 def build_filter(search: dict[str, Any], country: str = "FR") -> str:
@@ -132,6 +133,19 @@ class EbaySite(Site):
             ads += found
             self.report(search["query"], len(found))
         return ads
+
+    async def sample_prices(self, http: PoliteClient, query: str) -> list[tuple[str, float]]:
+        """Cote : (titre, prix port compris) d'occasions fonctionnelles à prix fixe, sans plafond de prix."""
+        flt = (f"itemLocationCountry:{self.cfg['country']},priceCurrency:EUR,buyingOptions:{{FIXED_PRICE}},"
+               f"conditionIds:{{{USED_WORKING}}}")
+        params = {"q": query, "filter": flt, "limit": 50}
+        resp = await http.get(SEARCH_URL, headers=await self._headers(http), params=params)
+        resp.raise_for_status()
+        out = []
+        for ad in map(item_to_ad, resp.json().get("itemSummaries") or []):
+            if ad and ad.total_price is not None:
+                out.append((ad.title, ad.total_price))
+        return out
 
     async def fetch_detail(self, http: PoliteClient, ad: Ad) -> Ad:
         """ÉTAPE 2 : fiche complète (description du vendeur, état détaillé, ville, réputation)."""

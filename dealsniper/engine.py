@@ -19,6 +19,8 @@ from . import progress as progress_module
 from .config import data_dir
 from .db import Database
 from .http import AccessDenied, PoliteClient
+from .market import Market
+from .models import Ad
 from .progress import LiveLogHandler, Progress
 from .sites import Site, load_sites
 from .sites import skipped as skipped_sites
@@ -29,8 +31,10 @@ log = logging.getLogger(__name__)
 
 
 class Engine:
-    def __init__(self, config: dict[str, Any], db: Database, http: PoliteClient, progress: Progress | None = None):
+    def __init__(self, config: dict[str, Any], db: Database, http: PoliteClient, progress: Progress | None = None,
+                 market: Market | None = None):
         self.config = config
+        self.market = market
         self.progress = progress or Progress()
         self.db = db
         self.http = http
@@ -42,6 +46,22 @@ class Engine:
         """Pause interrompue proprement par un arrêt (Ctrl+C, systemd)."""
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(self.stopping.wait(), timeout=max(0.0, seconds))
+
+    async def market_problem(self, ad: Ad) -> str | None:
+        """Renseigne la cote de l'annonce ; raison de rejet si la marge est impossible même sans réparation."""
+        if not self.market:
+            return None
+        quote = await self.market.quote(ad)
+        if not quote:
+            return None
+        ad.market = quote.as_dict()
+        if ad.price_mode == "enchere" or ad.total_price is None:
+            return None
+        analyzer_cfg = self.config["analyzer"]
+        best = quote.median * float(analyzer_cfg["resale_haircut"]) * 0.9 - ad.total_price
+        if best < float(analyzer_cfg["market_min_margin"]):
+            return f"marge impossible selon la cote ({quote.median:.0f} € sur {quote.count} annonces)"
+        return None
 
     async def budget_left(self) -> float | None:
         """Dollars encore disponibles aujourd'hui pour l'IA (None = pas de plafond)."""
@@ -68,6 +88,8 @@ class Engine:
         # Annonces déjà vues mais enregistrées sans photo : on complète avec celle de la liste (aucune requête).
         await self.db.fill_images({ad.uid: ad.image for ad in listed if ad.image and ad.uid not in new_uids})
         new_ads = list({ad.uid: ad for ad in listed if ad.uid in new_uids}.values())
+        if self.market:
+            await self.market.observe(listed)  # cote : chaque prix vu enrichit la référence (gratuit)
         if await self.budget_left() == 0:
             # Budget IA du jour épuisé : les nouvelles annonces restent « non vues » et seront
             # analysées demain ; inutile de lire leurs fiches maintenant.
@@ -77,7 +99,7 @@ class Engine:
         candidates = []
         for i, ad in enumerate(new_ads, 1):
             show(site.label, f"{len(listed)} annonces · tri des nouvelles {i}/{len(new_ads)}")
-            reason = filters.check(ad, self.config)
+            reason = filters.check(ad, self.config) or await self.market_problem(ad)
             if reason:
                 await self.db.remember(ad, "rejected", reason=reason)
                 continue
@@ -175,7 +197,10 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
     network = config["network"]
     async with PoliteClient(network["user_agent"], float(network["min_host_interval"]),
                             host_intervals=network.get("host_intervals")) as http:
-        engine = Engine(config, db, http, progress)
+        # Cote du marché : échantillons d'occasions demandés à l'API eBay si elle est configurée.
+        ebay = next((s for s in sites if s.name == "ebay"), None)
+        sampler = (lambda query: ebay.sample_prices(http, query)) if ebay else None
+        engine = Engine(config, db, http, progress, Market(db, config, sampler))
         spinner = asyncio.create_task(progress.animate()) if progress.live else None
         try:
             if forever:

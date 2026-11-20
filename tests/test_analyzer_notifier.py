@@ -121,3 +121,13 @@ def test_haiku_5_5_runs_without_thinking_at_low_effort(monkeypatch, config):
     an.analyze(ads(1))
     call = an.client.messages.calls[0]
     assert call["thinking"] == {"type": "disabled"} and call["output_config"]["effort"] == "low"
+
+
+def test_market_quote_caps_the_ai_resale():
+    ad = Ad(title="ThinkPad T480 sans SSD", url="https://e.x/2", source="t", price=90,
+            market={"model": "thinkpad t480", "median": 200, "count": 12, "source": "annonces"})
+    optimistic = {**analyzer.sanitize_analysis(item(1)), "valeur_revente_estimee": 350, "cout_piece_estime": 20}
+    clean = analyzer.make_realistic(optimistic, ad, haircut=0.9)
+    assert clean["valeur_revente_estimee"] == 180 and clean["source_revente"] == "cote"  # 200 € × 0,9
+    assert clean["valeur_revente_ia"] == 350
+    assert "cote 200 €" in analyzer.format_ad(1, ad, 400)

@@ -23,6 +23,7 @@ class Ad:
     seller: dict[str, Any] | None = None  # réputation du vendeur si la source la fournit (eBay)
     category: str | None = None         # renseigné par filters.py
     signals: list[str] = field(default_factory=list)  # mots-clés positifs (filters.py)
+    market: dict[str, Any] | None = None               # cote du modèle (market.py) : médiane, nombre, source
     analysis: dict[str, Any] | None = None             # renseigné par analyzer.py
 
     @property
