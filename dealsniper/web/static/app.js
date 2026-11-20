@@ -27,6 +27,7 @@ function siteLogo(site, size = 16) {
 
 let allAds = [];
 let geoState = "";  // distances : ok / chargement / erreur / inactif
+let preferences = {};  // goût appris par catégorie (favoris − masquées)
 let status = "analyzed";
 let selectedSites = new Set();  // vide = tous les sites
 let settings = null;
@@ -268,7 +269,10 @@ function filteredAds() {
   });
 
   const margin = (ad) => (ad.analysis || {}).marge_nette_estimee ?? -1e9;
+  const pref = (ad) => Math.max(-3, Math.min(3, preferences[ad.category] || 0));  // goût appris, borné
+  const reco = (ad) => (ad.score ?? 0) + 0.6 * pref(ad);  // note ajustée par vos favoris / masquées
   const sorters = {
+    reco: (x, y) => reco(y) - reco(x) || margin(y) - margin(x),
     recent: (x, y) => (y.seen_at || "").localeCompare(x.seen_at || ""),
     score: (x, y) => (y.score ?? -1) - (x.score ?? -1),
     margin: (x, y) => margin(y) - margin(x),
@@ -569,6 +573,7 @@ async function markAd(uid, change) {
   try {
     await api(`/api/ads/${encodeURIComponent(uid)}/mark`, { method: "POST", body: JSON.stringify(change) });
     Object.assign(ad, change);
+    api("/api/preferences").then((d) => { preferences = d.categories || {}; }).catch(() => {});
     renderAds(true);
     if ($("#details").open) showDetails(uid);
     if (change.hidden) toast("Annonce masquée (voir « Masquées » pour la retrouver)");
@@ -1246,6 +1251,7 @@ async function loadStatus() {
 restoreFilters();
 countActiveFilters();
 loadStatus();
+api("/api/preferences").then((d) => { preferences = d.categories || {}; renderAds(true); }).catch(() => {});
 try { showSettingsSection(localStorage.getItem("dealsniper-set") || "set-notif"); } catch (e) { /* idem */ }
 try { showTab(localStorage.getItem("dealsniper-tab") || "ads"); } catch (e) { showTab("ads"); }
 loadAds();

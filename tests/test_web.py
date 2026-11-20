@@ -156,3 +156,12 @@ def test_watchlist_roundtrip(client):
     assert c.put("/api/settings", json=settings).get_json() == {"ok": True}
     cfg = load_config(path)
     assert cfg["watchlist"] == [{"query": "thinkpad t480", "max_price": 120}]  # ligne vide ignorée
+
+
+def test_preferences_from_favorites_and_hidden(client):
+    c, _ = client
+    ads = c.get("/api/ads").get_json()["ads"]
+    fav = next(a["uid"] for a in ads if a["title"] == "ThinkPad T480 sans SSD")  # catégorie PC portables pros
+    c.post(f"/api/ads/{fav}/mark", json={"favorite": True})
+    prefs = c.get("/api/preferences").get_json()["categories"]
+    assert prefs.get("PC portables pros") == 1

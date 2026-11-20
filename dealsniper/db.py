@@ -104,6 +104,15 @@ class Database:
                                 (fingerprint, site, since))
         return rows[0][0] if rows else None
 
+    def preferences(self) -> dict[str, int]:
+        """Goûts appris : par catégorie, nombre de favoris moins nombre de masquées (pour re-trier)."""
+        rows = self._sql("SELECT data, favorite, hidden FROM seen WHERE favorite = 1 OR hidden = 1")
+        weights: dict[str, int] = {}
+        for data, favorite, hidden in rows:
+            category = (json.loads(data or "{}").get("category")) or "?"
+            weights[category] = weights.get(category, 0) + (1 if favorite else 0) - (1 if hidden else 0)
+        return weights
+
     def mark(self, uid: str, favorite: bool | None = None, hidden: bool | None = None) -> bool:
         """Favori / masquée ; False si l'annonce est inconnue."""
         if not self._sql("SELECT 1 FROM seen WHERE uid = ?", (uid,)):

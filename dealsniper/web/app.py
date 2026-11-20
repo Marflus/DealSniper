@@ -309,6 +309,15 @@ def create_app() -> Flask:
         return jsonify(ads=items, cost_today=round(cost, 4), cost_cap=cap, running=state["running"],
                        error=state["error"], progress=progress.current.snapshot(), geo=geo_state, home=home)
 
+    @app.get("/api/preferences")
+    def preferences():
+        """Goûts appris (par catégorie) pour le tri « Recommandé »."""
+        db = database()
+        try:
+            return jsonify(categories=db.preferences())
+        finally:
+            db.close()
+
     @app.post("/api/ads/<uid>/mark")
     def mark_ad(uid: str):
         """Favori ou masquée : {"favorite": true} / {"hidden": true}."""
