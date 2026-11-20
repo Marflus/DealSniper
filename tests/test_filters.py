@@ -69,3 +69,12 @@ def test_eliminatory_delivery_and_max_price(config):
     assert check(ad("Raspberry Pi 4", 40), config) == "pas de livraison"
     assert check(ad("Raspberry Pi 4", 40, shipping=5), config) is None
     assert "prix max" in check(ad("Raspberry Pi 5 kit", 98, shipping=6), config)
+
+
+def test_seller_type_is_eliminatory(config):
+    config["filters"].update(seller_type="particulier", drop_uncategorized=False)
+    pro = ad("Ski Rossignol", 80)
+    pro.seller = {"type": "pro"}
+    unknown = ad("Ski Dynastar", 80)
+    assert check(pro, config) == "vendeur professionnel"
+    assert check(unknown, config) is None  # type inconnu : gardée

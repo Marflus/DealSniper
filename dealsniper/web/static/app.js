@@ -4,7 +4,7 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const euros = (v) => (v == null ? "?" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`);
 const FILTER_IDS = ["f-text", "f-category", "f-type", "f-score", "f-ease", "f-sale", "f-price", "f-margin", "f-near", "f-distance",
-  "f-delivery", "f-days", "f-sort"];
+  "f-delivery", "f-seller", "f-days", "f-sort"];
 const SEARCH_FIELDS = { common: ["query", "condition", "max_price"], ebay: ["query", "condition", "max_price"], leboncoin: ["query", "category", "max_price"],
                         default: ["query", "max_price"] };
 const LBC_CATEGORIES = { "": "Toutes catégories", 15: "Informatique", 43: "Consoles & jeux vidéo", 16: "Image & son", 21: "Bricolage" };
@@ -288,12 +288,14 @@ function filteredAds(source = allAds) {
   const minMargin = $("#f-margin").value === "" ? null : Number($("#f-margin").value);
   const maxDistance = $("#f-distance").value === "" ? null : Number($("#f-distance").value);
   const deliveryMode = $("#f-delivery").value;
+  const sellerType = $("#f-seller").value;
 
   const ads = source.filter((ad) => {
     const a = ad.analysis || {};
     if (status === "fav" ? !ad.favorite : status === "hidden" ? !ad.hidden : ad.hidden) return false;
     if (maxDistance != null && (ad.distance_km ?? Infinity) > maxDistance) return false;
     if (deliveryMode && delivery(ad).mode !== deliveryMode) return false;
+    if (sellerType && ad.seller?.type && ad.seller.type !== sellerType) return false;  // type inconnu : gardée
     if (text && !`${ad.title} ${ad.description} ${ad.location} ${ad.category}`.toLowerCase().includes(text)) return false;
     if (selectedSites.size && !selectedSites.has(ad.source)) return false;
     if (category && ad.category !== category) return false;
@@ -380,7 +382,7 @@ function adCard(ad) {
       ${ad.reason ? `<div class="reason">✗ ${esc(ad.reason)}</div>` : ""}
       ${(() => { const r = riskFlags(ad); return r.length ? `<div class="risk" title="${esc(r.join(" · "))}">⚠️ ${r.length} point${r.length > 1 ? "s" : ""} de vigilance</div>` : ""; })()}
       <div class="meta">
-        <div class="site-line">${ad.distance_km != null ? `📍 ${ad.distance_km} km · ` : ""}<span title="${esc(delivery(ad).label)}">${delivery(ad).icon}</span> ${siteLogo(ad.source, 14)} ${esc(siteName(ad.source))}${ad.category ? ` · ${esc(ad.category)}` : ""}</div>
+        <div class="site-line">${ad.distance_km != null ? `📍 ${ad.distance_km} km · ` : ""}<span title="${esc(delivery(ad).label)}">${delivery(ad).icon}</span> ${ad.seller?.type === "pro" ? '<span class="pro-badge" title="Vendeur professionnel">PRO</span> ' : ""}${siteLogo(ad.source, 14)} ${esc(siteName(ad.source))}${ad.category ? ` · ${esc(ad.category)}` : ""}</div>
         <div class="card-actions">
           <button class="mini ${ad.favorite ? "on" : ""}" data-fav="${esc(ad.uid)}" title="${ad.favorite ? "Retirer des favoris" : "Mettre en favori"}">${ad.favorite ? "★" : "☆"}</button>
           <button class="mini" data-hide="${esc(ad.uid)}" title="${ad.hidden ? "Ne plus masquer" : "Masquer cette annonce"}">${ad.hidden ? "↺" : "⊘"}</button>
@@ -812,7 +814,7 @@ $("#quick-search").addEventListener("submit", async (e) => {
     await api("/api/search-now", { method: "POST", body: JSON.stringify({
       query, min_price: $("#qs-min").value, max_price: $("#qs-price").value, condition: $("#qs-condition").value,
       exclude: $("#qs-exclude").value, max_ads: $("#qs-max").value, sites,
-      delivery: $("#qs-delivery").value, near: $("#qs-near").value, km: $("#qs-km").value }) });
+      delivery: $("#qs-delivery").value, seller: $("#qs-seller").value, near: $("#qs-near").value, km: $("#qs-km").value }) });
     if (!searchPoll) searchPoll = setInterval(pollSearch, 1200);
     pollSearch();
   } catch (e2) {

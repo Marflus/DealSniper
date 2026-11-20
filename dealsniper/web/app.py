@@ -8,6 +8,7 @@ Onglets « Recherches », « Catégories », « Filtres », « Réglages » : é
 from __future__ import annotations
 
 import asyncio
+import copy
 import io
 import shutil
 import threading
@@ -35,6 +36,19 @@ CATEGORY_FIELDS = ("name", "max_budget", "require_include", *LIST_FIELDS)
 
 def config_path() -> Path:
     return config_file()
+
+
+_config_cache: dict[str, Any] = {}
+
+
+def current_config() -> dict[str, Any]:
+    """Configuration validée, relue seulement si config.yaml a changé (l'interface la lit à chaque appel).
+    Copie profonde : un appelant peut la modifier (recherche ponctuelle) sans toucher au cache."""
+    path = config_path()
+    stamp = (str(path), path.stat().st_mtime_ns if path.exists() else 0)
+    if _config_cache.get("stamp") != stamp:
+        _config_cache.update(stamp=stamp, config=load_config(path))
+    return copy.deepcopy(_config_cache["config"])
 
 
 def _yaml() -> YAML:
@@ -238,7 +252,7 @@ def _realistic(items: list[dict]) -> None:
     from ..models import Ad
 
     try:
-        haircut = float(load_config(config_path())["analyzer"].get("resale_haircut", 0.9))
+        haircut = float(current_config()["analyzer"].get("resale_haircut", 0.9))
     except Exception:
         haircut = 0.9
     for item in items:
@@ -285,7 +299,7 @@ def create_app() -> Flask:
             item["distance_km"] = geo.distance(point, item.get("location"))
 
     def brands() -> list[str]:
-        return category_brands(load_config(config_path()))
+        return category_brands(current_config())
 
     @app.get("/")
     def index():
@@ -305,7 +319,7 @@ def create_app() -> Flask:
             _realistic(items)
             cost = asyncio.run(db.cost_today())
         try:
-            config = load_config(config_path())
+            config = current_config()
             cap, home = config["analyzer"].get("max_daily_cost_usd"), str(config["location"].get("home") or "")
         except Exception:  # config.yaml invalide : plafond et distances simplement absents
             cap, home = None, ""
@@ -357,7 +371,7 @@ def create_app() -> Flask:
         if ad is None:
             return jsonify(ok=False, error="Annonce inconnue"), 404
         try:
-            result = analyze_market(Ad.from_dict(ad), load_config(config_path()))
+            result = analyze_market(Ad.from_dict(ad), current_config())
         except Exception as exc:  # clé manquante, API indisponible, recherche web refusée…
             return jsonify(ok=False, error=str(exc)[:200]), 502
         with database() as db:
@@ -376,7 +390,7 @@ def create_app() -> Flask:
         if ad is None:
             return jsonify(ok=False, error="Annonce inconnue"), 404
         try:
-            result = seller_questions(Ad.from_dict(ad), load_config(config_path()), ad.get("market_deep"))
+            result = seller_questions(Ad.from_dict(ad), current_config(), ad.get("market_deep"))
         except Exception as exc:
             return jsonify(ok=False, error=str(exc)[:200]), 502
         deep = {**(ad.get("market_deep") or {}), "questions": result["questions"]}
@@ -391,7 +405,7 @@ def create_app() -> Flask:
         with database() as db:
             rows = db.purchases()
         try:
-            base = float(load_config(config_path())["analyzer"]["resale_haircut"])
+            base = float(current_config()["analyzer"]["resale_haircut"])
         except Exception:
             base = 0.9
         return jsonify(purchases=rows, summary=purchases.summary(rows), tax=purchases.tax_overview(rows),
@@ -470,7 +484,7 @@ def create_app() -> Flask:
         report: dict[str, Any] = {"anthropic": bool(env("ANTHROPIC_API_KEY")), "channels": Notifier().channels,
                                   "sites": [], "error": None, "ai_enabled": True}
         try:
-            config = load_config(config_path())
+            config = current_config()
             report["ai_enabled"] = bool(config["analyzer"].get("enabled", True))
             loaded = load_sites(config)
             with database() as db:
@@ -518,7 +532,7 @@ def create_app() -> Flask:
     def put_settings():
         try:
             write_settings(request.get_json(force=True) or {})
-            load_config(config_path())  # vérification complète
+            load_config(config_path())  # vérification complète (sans cache)
         except Exception as exc:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True)
@@ -534,7 +548,7 @@ def create_app() -> Flask:
             from ..engine import run_once
 
             try:
-                config = load_config(config_path())
+                config = current_config()
                 if prepare:
                     prepare(config)
                 run_once(config)
@@ -567,7 +581,7 @@ def create_app() -> Flask:
             try:
                 with database() as db:
                     ads = [{**(db.ad_data(uid) or {}), "uid": uid} for uid in uids]
-                report = asyncio.run(check_ads([a for a in ads if a.get("url")], load_config(config_path()),
+                report = asyncio.run(check_ads([a for a in ads if a.get("url")], current_config(),
                                                on_progress=lambda r: check.update(report=dict(r)),
                                                stop=lambda: check["stop"]))
                 with database() as db:
@@ -631,6 +645,7 @@ def create_app() -> Flask:
         exclude = [normalize(str(w)) for w in _words(body.get("exclude") or [])]
         max_ads = _number(body.get("max_ads"))
         delivery = body.get("delivery") if body.get("delivery") == "ship" else None
+        seller_type = body.get("seller") if body.get("seller") in ("pro", "particulier") else None
         zone = {"near": str(body.get("near") or "").strip(), "km": _number(body.get("km"))}
 
         def prepare(config: dict[str, Any]) -> None:
@@ -652,6 +667,8 @@ def create_app() -> Flask:
                 filters["max_price"] = max_price       # éliminatoire, même hors catégorie
             if delivery:
                 filters["delivery"] = delivery         # livraison obligatoire
+            if seller_type:
+                filters["seller_type"] = seller_type   # particuliers seulement, ou pros seulement
             if zone["km"]:
                 filters["zone"] = zone                 # trop loin : écartée avant l'IA
             if exclude:
@@ -670,7 +687,7 @@ def create_app() -> Flask:
             items = db.by_uids(sorted(RUN_UIDS))
         _realistic(items)
         try:
-            config = load_config(config_path())
+            config = current_config()
             home = str(config["location"].get("home") or "")
         except Exception:
             home = ""

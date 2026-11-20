@@ -140,7 +140,7 @@ def sanitize_analysis(raw: dict[str, Any]) -> dict[str, Any]:
 
     def note(key: str, default: int) -> int:
         try:
-            return max(1, min(10, int(round(float(raw.get(key, default))))))
+            return max(1, min(10, round(float(raw.get(key, default)))))
         except (TypeError, ValueError):
             return default
 
@@ -255,11 +255,13 @@ class Analyzer:
             if self.no_thinking and "thinking" in message:
                 log.warning("Désactivation de la réflexion refusée par %s : réflexion laissée par défaut.", self.model)
                 self.no_thinking = False
-                return self._analyze_batch(ads, result)
+                self._analyze_batch(ads, result)
+                return
             if self.use_schema and any(w in message for w in ("output_config", "format", "schema")):
                 log.warning("Schéma JSON refusé par %s → mode JSON simple.", self.model)
                 self.use_schema = False
-                return self._analyze_batch(ads, result)
+                self._analyze_batch(ads, result)
+                return
             log.error("Requête refusée (400), lot de %d reporté : %s", len(ads), exc)
             result.failed.extend(ads)
             return

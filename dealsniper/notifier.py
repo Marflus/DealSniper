@@ -276,7 +276,7 @@ def auction_reminder(ad: Ad) -> str:
             f"Enchère actuelle : {price}\n{ad.url}")
 
 
-def notify_price_drops(drops: list[dict[str, Any]], config: dict[str, Any]) -> None:
+def notify_price_drops(drops: list[dict[str, Any]]) -> None:
     """Prévient que des annonces déjà repérées ont baissé de prix (signal d'achat fort)."""
     lines = []
     for d in sorted(drops, key=lambda x: x["pct"], reverse=True):

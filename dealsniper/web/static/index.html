@@ -89,6 +89,11 @@
             <option value="ship">🚚 Livrable</option>
             <option value="pickup">🤝 Main propre seulement</option>
           </select>
+          <select id="f-seller" title="Type de vendeur (connu sur eBay et leboncoin)">
+            <option value="">👤 Pro et particuliers</option>
+            <option value="particulier">👤 Particuliers</option>
+            <option value="pro">🏢 Pros</option>
+          </select>
           <select id="f-days">
             <option value="1">24 heures</option>
             <option value="7" selected>7 jours</option>
@@ -127,6 +132,8 @@
           <option value="parts">Pour pièces / HS</option></select></label>
         <label>Remise <select id="qs-delivery" data-mirror="f-delivery">
           <option value="">Peu importe</option><option value="ship">🚚 Livrable obligatoire</option></select></label>
+        <label>Vendeur <select id="qs-seller" data-mirror="f-seller">
+          <option value="">Tous</option><option value="particulier">👤 Particuliers</option><option value="pro">🏢 Pros</option></select></label>
         <label title="Ville ou code postal (vide = chez vous), et rayon">📍 <input id="qs-near" data-mirror="f-near" placeholder="Ville ou CP">
           ≤ <span class="affix"><input id="qs-km" data-mirror="f-distance" type="number" min="0" placeholder="km"><i>km</i></span></label>
         <label>Exclure <input id="qs-exclude" placeholder="coque, boîte vide…"></label>

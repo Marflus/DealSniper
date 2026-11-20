@@ -41,12 +41,14 @@ def _euros(amount: dict[str, Any] | None) -> float | None:
 def _seller(info: dict[str, Any]) -> dict[str, Any] | None:
     """Réputation du vendeur : pseudo, % d'avis positifs et nombre d'évaluations (≈ nombre de ventes)."""
     pct, count = info.get("feedbackPercentage"), info.get("feedbackScore")
-    if pct is None and count is None:
+    kind = {"BUSINESS": "pro", "INDIVIDUAL": "particulier"}.get(str(info.get("sellerAccountType") or "").upper())
+    if pct is None and count is None and kind is None:
         return None
     return {
         "name": info.get("username"),
         "positive_pct": float(pct) if pct is not None else None,
         "reviews": int(count) if count is not None else None,
+        "type": kind,
     }
 
 
@@ -163,11 +165,8 @@ class EbaySite(Site):
         params = {"q": query, "filter": flt, "limit": 50}
         resp = await http.get(SEARCH_URL, headers=await self._headers(http), params=params)
         resp.raise_for_status()
-        out = []
-        for ad in map(item_to_ad, resp.json().get("itemSummaries") or []):
-            if ad and ad.total_price is not None:
-                out.append((ad.title, ad.total_price))
-        return out
+        ads = map(item_to_ad, resp.json().get("itemSummaries") or [])
+        return [(ad.title, ad.total_price) for ad in ads if ad and ad.total_price is not None]
 
     async def fetch_detail(self, http: PoliteClient, ad: Ad) -> Ad:
         """ÉTAPE 2 : fiche complète (description du vendeur, état détaillé, ville, réputation)."""

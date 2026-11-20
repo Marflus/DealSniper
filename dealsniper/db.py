@@ -127,14 +127,20 @@ class Database:
     async def remember(self, ad: Ad, status: str, notified: bool = False, reason: str | None = None,
                        fingerprint: str | None = None) -> None:
         """Enregistre une annonce traitée (favori / masquée conservés si elle l'était déjà)."""
-        await self._asql(
+        await self.remember_many([(ad, status, notified, reason, fingerprint)])
+
+    async def remember_many(self, rows: list[tuple[Ad, str, bool, str | None, str | None]]) -> None:
+        """Plusieurs annonces d'un coup, en une transaction : [(annonce, statut, notifiée, raison, empreinte)]."""
+        now = _stamp()
+        await asyncio.to_thread(
+            self._many,
             "INSERT INTO seen (uid, site, status, score, notified, seen_at, data, reason, fingerprint) "
             "VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(uid) DO UPDATE SET site = excluded.site, "
             "status = excluded.status, score = excluded.score, notified = excluded.notified, "
             "seen_at = excluded.seen_at, data = excluded.data, reason = excluded.reason, "
             "fingerprint = excluded.fingerprint",
-            (ad.uid, ad.source, status, ad.score if ad.analysis else None, int(notified),
-             _stamp(), _dumps(ad.to_dict()), reason, fingerprint),
+            [(ad.uid, ad.source, status, ad.score if ad.analysis else None, int(notified), now,
+              _dumps(ad.to_dict()), reason, fingerprint) for ad, status, notified, reason, fingerprint in rows],
         )
 
     async def rejected_among(self, uids: list[str]) -> set[str]:

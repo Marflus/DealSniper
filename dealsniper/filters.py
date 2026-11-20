@@ -87,9 +87,12 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
     if kw:
         return f"mot-clé exclu : {kw}"
 
-    # Critères éliminatoires choisis avant une recherche (livraison obligatoire, prix max absolu).
+    # Critères éliminatoires choisis avant une recherche (livraison, type de vendeur, prix max absolu).
     if filters.get("delivery") == "ship" and ad.shipping is None:
         return "pas de livraison"
+    wanted, kind = filters.get("seller_type"), (ad.seller or {}).get("type")
+    if wanted in ("pro", "particulier") and kind and kind != wanted:  # type inconnu : gardée
+        return "vendeur professionnel" if kind == "pro" else "vendeur particulier"
     total = ad.total_price
     hard_max = filters.get("max_price")
     if hard_max is not None and total is not None and total > float(hard_max):

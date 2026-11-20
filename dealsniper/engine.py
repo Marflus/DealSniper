@@ -139,8 +139,8 @@ class Engine:
             self.progress.add_cost(site.label, result.cost_usd)
             sent = await asyncio.to_thread(notifier.notify, result.analyzed, self.config)
         sent_uids = {ad.uid for ad in sent}
-        for ad in result.analyzed:
-            await self.db.remember(ad, "analyzed", notified=ad.uid in sent_uids, fingerprint=prints.get(ad.uid))
+        await self.db.remember_many([(ad, "analyzed", ad.uid in sent_uids, None, prints.get(ad.uid))
+                                     for ad in result.analyzed])
         stats.update(analysées=len(result.analyzed), notifiées=len(sent))
         return stats
 
@@ -174,12 +174,12 @@ class Engine:
         drops = await asyncio.to_thread(self.db.record_price_drops, prices, min_drop)
         notable = [d for d in drops if d["status"] == "analyzed" and (d["score"] or 0) >= 1]
         if notable:
-            await asyncio.to_thread(notifier.notify_price_drops, notable, self.config)
+            await asyncio.to_thread(notifier.notify_price_drops, notable)
 
     async def _select(self, site: Site, listed: list[Ad], new_ads: list[Ad],
                       prints: dict[str, str | None]) -> list[Ad]:
         """Tri des nouvelles annonces : doublons, filtre, cote, puis fiche détaillée et second filtre."""
-        candidates = []
+        candidates, rejected = [], []
         for i, ad in enumerate(new_ads, 1):
             if self.stopping.is_set():
                 break  # annulé : les annonces restantes ne sont pas « vues », elles reviendront
@@ -204,9 +204,10 @@ class Engine:
                     log.debug("%s : fiche non lue (%s)", site.name, exc)
                 reason = self._check(ad)  # la description complète peut révéler une panne grave, « vendu »…
             if reason:
-                await self.db.remember(ad, "rejected", reason=reason, fingerprint=prints[ad.uid])
+                rejected.append((ad, "rejected", False, reason, prints[ad.uid]))
             else:
                 candidates.append(ad)
+        await self.db.remember_many(rejected)  # une seule écriture pour tout le lot
         return candidates
 
     async def _process_without_ai(self, site: Site, candidates: list[Ad], prints: dict[str, str | None],
@@ -222,8 +223,9 @@ class Engine:
         async with self._ai_lock:
             sent = await asyncio.to_thread(notifier.notify, estimated, self.config)
         sent_uids = {ad.uid for ad in sent}
-        for ad in candidates:  # on garde toutes les retenues, notées ou non par la cote
-            await self.db.remember(ad, "analyzed", notified=ad.uid in sent_uids, fingerprint=prints.get(ad.uid))
+        # On garde toutes les retenues, notées ou non par la cote.
+        await self.db.remember_many([(ad, "analyzed", ad.uid in sent_uids, None, prints.get(ad.uid))
+                                     for ad in candidates])
         stats.update(analysées=len(estimated), notifiées=len(sent))
         return stats
 
