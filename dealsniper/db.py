@@ -83,6 +83,17 @@ class Database:
             ads.append(ad)
         return ads
 
+    def ad_data(self, uid: str) -> dict | None:
+        rows = self._sql("SELECT data FROM seen WHERE uid = ?", (uid,))
+        return json.loads(rows[0][0] or "{}") if rows else None
+
+    def set_image(self, uid: str, image: str | None) -> None:
+        """Mémorise la photo d'une annonce (aperçu du lien) ; "" = aucune photo trouvée, à ne pas rechercher."""
+        data = self.ad_data(uid)
+        if data is not None:
+            data["image"] = image or ""
+            self._sql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(data, ensure_ascii=False), uid))
+
     def analyzed_since(self, hours: int) -> list[Ad]:
         """Annonces notées par Claude ces dernières `hours` heures (meilleures d'abord)."""
         since = (_now() - timedelta(hours=hours)).isoformat(timespec="seconds")

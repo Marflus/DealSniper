@@ -249,6 +249,24 @@ def create_app() -> Flask:
         return jsonify(ads=items, cost_today=round(cost, 4), cost_cap=cap, running=state["running"],
                        error=state["error"], progress=progress.current.snapshot())
 
+    @app.get("/api/image/<uid>")
+    def ad_image(uid: str):
+        """Photo d'une annonce sans image : aperçu de son lien, cherché une seule fois."""
+        from .preview import fetch_image
+
+        db = database()
+        try:
+            ad = db.ad_data(uid)
+            if ad is None:
+                return jsonify(image=None), 404
+            if ad.get("image") is not None:  # déjà connue ("" = aucune)
+                return jsonify(image=ad["image"] or None)
+            image = fetch_image(ad.get("url") or "")
+            db.set_image(uid, image)
+            return jsonify(image=image)
+        finally:
+            db.close()
+
     @app.get("/api/settings")
     def get_settings():
         try:

@@ -85,3 +85,21 @@ def test_invalid_config_is_reported(client):
     path.write_text("sites:\n  ebay:\n    enabled: true\n      searches: x\n", encoding="utf-8")
     resp = c.get("/api/settings")
     assert resp.status_code == 500 and "illisible" in resp.get_json()["error"]
+
+
+def test_og_image_parsing():
+    from dealsniper.web.preview import og_image
+
+    html = '<head><meta property="og:title" content="x"><meta content="/img/1.jpg" property="og:image"></head>'
+    assert og_image(html, "https://www.vinted.fr/items/1") == "https://www.vinted.fr/img/1.jpg"
+    assert og_image('<meta property="og:image" content="https://static.xx.fbcdn.net/rsrc.php/logo.png">', "https://f.x") is None
+
+
+def test_image_endpoint_fetches_once(client, monkeypatch):
+    c, _ = client
+    calls = []
+    monkeypatch.setattr("dealsniper.web.preview.fetch_image", lambda url: calls.append(url) or "https://img.x/1.jpg")
+    uid = next(a["uid"] for a in c.get("/api/ads").get_json()["ads"] if a["title"] == "Canapé")
+    assert c.get(f"/api/image/{uid}").get_json() == {"image": "https://img.x/1.jpg"}
+    assert c.get(f"/api/image/{uid}").get_json() == {"image": "https://img.x/1.jpg"}
+    assert len(calls) == 1  # mémorisé en base

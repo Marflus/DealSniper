@@ -28,7 +28,7 @@ button:disabled { opacity: .55; cursor: wait; }
 .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 10px 24px;
   background: var(--card); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 500; letter-spacing: -.01em; }
-.brand b { font-weight: 800; background: linear-gradient(90deg, #2563eb, #7c3aed); -webkit-background-clip: text;
+.brand b { font-weight: 800; background: linear-gradient(90deg, #ff5a4e, #ff3d7f 45%, #7c3aed); -webkit-background-clip: text;
   background-clip: text; color: transparent; }
 .tabs { display: flex; gap: 4px; overflow-x: auto; max-width: 100%; background: var(--soft); padding: 3px; border-radius: 10px; }
 .tab { border: 0; background: transparent; padding: 6px 14px; color: var(--muted); }
@@ -318,3 +318,13 @@ button.add:hover { border-color: var(--accent); color: var(--accent); background
 .prog-detail .zero { opacity: .55; }
 @media (max-width: 700px) { .prog-detail { padding-left: 0; } }
 .field input[type=number][max="10"] { width: 58px; }
+
+/* Pagination */
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin: 26px 0 8px; }
+.pager button { min-width: 38px; padding: 7px 12px; }
+.pager button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.pager button:disabled { opacity: .4; cursor: default; }
+.pager .nums { display: inline-flex; gap: 4px; align-items: center; }
+.pager .gap { color: var(--muted); padding: 0 2px; }
+.pager .where { color: var(--muted); font-size: 13px; margin: 0 6px; }
+@media (max-width: 600px) { .pager .nums { display: none; } }

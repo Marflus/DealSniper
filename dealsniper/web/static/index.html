@@ -16,17 +16,16 @@
     <div class="brand"><img src="/static/logo.svg" alt="" width="30" height="30"><span>Deal<b>Sniper</b></span></div>
     <nav class="tabs">
       <button class="tab active" data-tab="ads">Annonces</button>
-      <button class="tab" data-tab="settings">Réglages</button>
       <button class="tab" data-tab="searches">Recherches</button>
       <button class="tab" data-tab="categories">Catégories</button>
       <button class="tab" data-tab="filters">Filtres</button>
+      <button class="tab" data-tab="settings">Réglages</button>
     </nav>
     <div class="top-actions">
       <div id="budget" class="budget" title="Dépense IA du jour / limite quotidienne">
         <span id="budget-text">IA : —</span>
         <div class="budget-bar"><div id="budget-fill"></div></div>
       </div>
-      <button id="theme" class="ghost" title="Thème clair / sombre">🌓</button>
       <button id="run" class="primary">▶ Lancer un passage</button>
     </div>
   </header>
@@ -76,6 +75,7 @@
       <div id="progress" class="progress" hidden></div>
       <p id="summary" class="muted small"></p>
       <div id="ads" class="grid"></div>
+      <nav id="pager" class="pager" hidden aria-label="Pages"></nav>
     </section>
 
     <div id="settings-error" class="banner error" hidden></div>

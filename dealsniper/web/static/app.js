@@ -62,8 +62,6 @@ function setTheme(theme) {
   document.querySelectorAll("#theme-choice button").forEach((b) => b.classList.toggle("on", b.dataset.value === theme));
   try { theme ? localStorage.setItem("dealsniper-theme", theme) : localStorage.removeItem("dealsniper-theme"); } catch (e) { /* idem */ }
 }
-const isDark = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
-$("#theme").addEventListener("click", () => setTheme(isDark() ? "light" : "dark"));
 document.querySelectorAll("#theme-choice button").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.value)));
 setTheme(document.documentElement.dataset.theme || "");
 
@@ -205,7 +203,7 @@ async function loadAds() {
     if (!data.running && runPoll) { clearInterval(runPoll); runPoll = null; toast("Passage terminé"); }
     renderSiteChips(new Set(allAds.map((a) => a.source).filter(Boolean)));
     fillSelect("#f-category", new Set(allAds.map((a) => a.category).filter(Boolean)));
-    renderAds();
+    renderAds(true);  // rafraîchissement : on reste sur la même page
   } catch (e) {
     $("#ads").innerHTML = `<div class="empty">Impossible de charger les annonces : ${esc(e.message)}</div>`;
   }
@@ -276,7 +274,7 @@ function adCard(ad) {
   const saleType = ad.price_mode === "enchere" ? "Enchère" : "Prix fixe";
   const place = cleanPlace(ad.location);
 
-  return `<article class="ad ${ad.status}">
+  return `<article class="ad ${ad.status}" data-uid="${esc(ad.uid)}" ${ad.image == null ? "data-need-image" : ""}>
     <a class="thumb" href="${esc(ad.url)}" target="_blank" rel="noopener">${image}${score}</a>
     <div class="body">
       <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${esc(ad.title)}</a>
@@ -296,13 +294,68 @@ function adCard(ad) {
   </article>`;
 }
 
-function renderAds() {
+// ---------- Pages de 20 annonces ----------
+const PAGE_SIZE = 20;
+let page = 1;
+
+function renderAds(keepPage = false) {
   const ads = filteredAds();
-  $("#summary").textContent = `${ads.length} annonce(s) sur ${allAds.length}`;
+  const pages = Math.max(1, Math.ceil(ads.length / PAGE_SIZE));
+  page = keepPage ? Math.min(page, pages) : 1;  // un filtre qui change ramène à la page 1
+  const first = (page - 1) * PAGE_SIZE;
+  $("#summary").textContent = ads.length
+    ? `${ads.length} annonce(s) sur ${allAds.length} · ${first + 1}–${Math.min(first + PAGE_SIZE, ads.length)} affichées`
+    : `0 annonce sur ${allAds.length}`;
   $("#ads").innerHTML = ads.length
-    ? ads.slice(0, 500).map(adCard).join("")
+    ? ads.slice(first, first + PAGE_SIZE).map(adCard).join("")
     : '<div class="empty">Aucune annonce ne correspond à ces filtres.</div>';
+  renderPager(pages);
+  loadMissingImages();
 }
+
+// Annonces sans photo : on demande l'aperçu de leur lien (une à la fois, mémorisé côté serveur).
+let imageQueue = Promise.resolve();
+function loadMissingImages() {
+  document.querySelectorAll("#ads [data-need-image]").forEach((card) => {
+    card.removeAttribute("data-need-image");
+    const uid = card.dataset.uid;
+    imageQueue = imageQueue.then(async () => {
+      const data = await api(`/api/image/${encodeURIComponent(uid)}`).catch(() => ({}));
+      const ad = allAds.find((a) => a.uid === uid);
+      if (ad) ad.image = data.image || "";
+      const live = document.querySelector(`#ads [data-uid="${CSS.escape(uid)}"] .thumb .placeholder`);
+      if (data.image && live) {
+        live.outerHTML = `<img src="${esc(data.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"
+          onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'placeholder',textContent:'📦'}))">`;
+      }
+    });
+  });
+}
+
+function renderPager(pages) {
+  const pager = $("#pager");
+  pager.hidden = pages <= 1;
+  if (pages <= 1) return;
+  // Numéros autour de la page courante : 1 … 4 5 [6] 7 8 … 20
+  const nums = [...new Set([1, page - 2, page - 1, page, page + 1, page + 2, pages])].filter((n) => n >= 1 && n <= pages);
+  const parts = [];
+  nums.forEach((n, i) => {
+    if (i && n - nums[i - 1] > 1) parts.push('<span class="gap">…</span>');
+    parts.push(`<button data-page="${n}" class="${n === page ? "on" : ""}" ${n === page ? 'aria-current="page"' : ""}>${n}</button>`);
+  });
+  pager.innerHTML = `<button data-page="${page - 1}" ${page === 1 ? "disabled" : ""}>‹ Précédente</button>
+    <span class="nums">${parts.join("")}</span>
+    <span class="where">Page ${page} sur ${pages}</span>
+    <button data-page="${page + 1}" ${page === pages ? "disabled" : ""}>Suivante ›</button>`;
+}
+
+$("#pager").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-page]");
+  if (!button || button.disabled) return;
+  page = Number(button.dataset.page);
+  renderAds(true);
+  $("#summary").scrollIntoView({ behavior: "smooth", block: "start" });
+});
 
 FILTER_IDS.forEach((id) =>
   $("#" + id).addEventListener($("#" + id).tagName === "INPUT" ? "input" : "change", () => {
