@@ -745,3 +745,26 @@ def test_run_once_end_to_end(monkeypatch, config):
                         "ebay:100000000003": "rejected"}
     with run_lock(data_dir()):  # verrou bien rendu à la fin
         pass
+
+
+def test_watch_mode_stops_cleanly(monkeypatch, config):
+    """Surveillance continue : démarre, puis s'arrête proprement à la demande (verrou rendu)."""
+    import threading
+    import time
+
+    from dealsniper.runlock import Busy, run_lock
+
+    monkeypatch.setattr(engine, "load_sites", lambda cfg: [FakeSite(cfg)])
+    monkeypatch.setattr(engine, "skipped_sites", [])
+    monkeypatch.setattr(engine.analyzer, "analyze", fake_analyze)
+    monkeypatch.setattr(engine.notifier, "notify", lambda ads, cfg: [])
+    thread = threading.Thread(target=engine.watch, args=(config,), daemon=True)
+    thread.start()
+    time.sleep(0.5)  # démarrage
+    with pytest.raises(Busy):  # la surveillance tient le verrou : pas de passage en double
+        run_lock(data_dir()).acquire()
+    engine.CANCEL.set()
+    thread.join(timeout=10)
+    assert not thread.is_alive()
+    with run_lock(data_dir()):
+        pass

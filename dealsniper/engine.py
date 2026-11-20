@@ -393,7 +393,8 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
         try:
             if forever:
                 for sig in (signal.SIGINT, signal.SIGTERM):
-                    with contextlib.suppress(NotImplementedError):  # Windows
+                    # Windows : non pris en charge ; hors du thread principal (ex. depuis l'interface) : ValueError.
+                    with contextlib.suppress(NotImplementedError, ValueError, RuntimeError):
                         asyncio.get_running_loop().add_signal_handler(sig, engine.stopping.set)
                 log.info("Surveillance continue : %s", ", ".join(s.name for s in sites))
                 tasks = [engine.watch_site(s) for s in sites]
