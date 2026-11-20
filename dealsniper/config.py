@@ -37,6 +37,7 @@ DEFAULTS: dict[str, Any] = {
                 "sold_phrases": ["deja vendu", "plus disponible", "n'est plus a vendre", "est reserve",
                                  "en cours de vente", "en cours d'achat", "vente en cours", "transaction en cours"]},
     "categories": [],
+    "watchlist": [],  # veille : modèles précis repérés en priorité (watch.py)
     "analyzer": {"enabled": True, "model": "claude-haiku-5-5", "effort": None, "batch_size": 20,
                  "max_description_chars": 400,
                  "max_tokens": 4096, "max_daily_cost_usd": 1.00, "resale_haircut": 0.9, "auto_calibrate": True,

@@ -25,6 +25,7 @@ class Ad:
     signals: list[str] = field(default_factory=list)  # mots-clés positifs (filters.py)
     market: dict[str, Any] | None = None               # cote du modèle (market.py) : médiane, nombre, source
     analysis: dict[str, Any] | None = None             # renseigné par analyzer.py
+    watched: bool = False                              # correspond à une veille (watch.py) : notifiée d'office
 
     @property
     def total_price(self) -> float | None:

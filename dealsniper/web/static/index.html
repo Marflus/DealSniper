@@ -119,6 +119,7 @@
       <div class="settings-layout">
         <nav id="set-nav" class="set-nav" aria-label="Sections de réglages">
           <button class="set-item on" data-sec="set-notif">🔔 Notifications</button>
+          <button class="set-item" data-sec="set-watch">🔭 Veille</button>
           <button class="set-item" data-sec="set-budget">💳 Budget IA</button>
           <button class="set-item" data-sec="set-location">📍 Localisation et prix</button>
           <button class="set-item" data-sec="set-run">⚙️ Fonctionnement</button>
@@ -155,6 +156,16 @@
                 <label>Facilité de vente<span class="affix"><input id="n-sale" type="number" min="1" max="10" placeholder="toutes"><i>/10</i></span></label>
               </div>
               <div class="panel-foot"><button id="test-notif" class="ghost">🔔 Envoyer une fausse annonce pour tester</button></div>
+            </div>
+          </section>
+
+          <section id="set-watch" class="set-sec" hidden>
+            <div class="panel">
+              <div class="sec-head"><span class="sec-icon red">🔭</span><div><h2>Veille</h2>
+                <p>Modèles précis à repérer en priorité : une annonce qui correspond est notifiée tout de suite,
+                  quelle que soit sa note, même hors de vos recherches habituelles.</p></div></div>
+              <div id="watch-list" class="watch-list"></div>
+              <button id="add-watch" class="add">＋ Ajouter une veille</button>
             </div>
           </section>
 

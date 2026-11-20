@@ -147,3 +147,12 @@ def test_secrets_written_to_env(client, tmp_path, monkeypatch):
     assert data["ok"] and data["updated"] == ["ANTHROPIC_API_KEY"] and data["anthropic"]
     env_text = (tmp_path / ".env").read_text()
     assert "ANTHROPIC_API_KEY=sk-ant-test123" in env_text and "INCONNU" not in env_text  # seules les clés connues
+
+
+def test_watchlist_roundtrip(client):
+    c, path = client
+    settings = c.get("/api/settings").get_json()
+    settings["watchlist"] = [{"query": "thinkpad t480", "max_price": "120"}, {"query": "", "max_price": "50"}]
+    assert c.put("/api/settings", json=settings).get_json() == {"ok": True}
+    cfg = load_config(path)
+    assert cfg["watchlist"] == [{"query": "thinkpad t480", "max_price": 120}]  # ligne vide ignorée

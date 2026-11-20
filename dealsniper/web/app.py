@@ -110,6 +110,7 @@ def read_settings() -> dict[str, Any]:
         "searches": _plain(doc.get("searches") or []),
         "sites": _plain(doc.get("sites") or {}),
         "categories": _plain(doc.get("categories") or []),
+        "watchlist": _plain(doc.get("watchlist") or []),
         "filters": _plain(doc.get("filters") or {}),
         "location": _plain(doc.get("location") or {}),
         "notifier": _plain(doc.get("notifier") or {}),
@@ -140,6 +141,8 @@ def write_settings(new: dict[str, Any]) -> None:
 
     if "searches" in new:
         doc["searches"] = _search_rows(new["searches"], doc.get("searches"))
+    if "watchlist" in new:
+        doc["watchlist"] = _search_rows(new["watchlist"], doc.get("watchlist"))
 
     for name, site in (new.get("sites") or {}).items():
         target = doc.setdefault("sites", CommentedMap()).setdefault(name, CommentedMap())

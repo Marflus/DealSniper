@@ -210,6 +210,8 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
     min_margin, min_ease, min_sale = cfg.get("min_margin"), cfg.get("min_ease"), cfg.get("min_sale")
 
     def wanted(ad: Ad) -> bool:
+        if getattr(ad, "watched", False):
+            return True  # veille : toujours notifiée, quelle que soit la note
         if not ad.analysis or ad.deal_type not in deal_types:
             return False
         margin = ad.analysis.get("marge_nette_estimee")
@@ -221,7 +223,7 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
         return min_sale is None or (ad.analysis.get("facilite_vente") or 0) >= int(min_sale)
 
     analyzed = [a for a in ads if wanted(a)]
-    good = _rank([a for a in analyzed if a.score >= min_score])
+    good = _rank([a for a in analyzed if a.score >= min_score or getattr(a, "watched", False)])
     watch = _rank([a for a in analyzed if watch_score is not None and int(watch_score) <= a.score < min_score])
     notifier = Notifier()
 

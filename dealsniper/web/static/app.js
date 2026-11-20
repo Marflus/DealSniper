@@ -327,7 +327,7 @@ function adCard(ad) {
   return `<article class="ad ${ad.status}" data-uid="${esc(ad.uid)}" ${ad.image == null ? "data-need-image" : ""}>
     <a class="thumb" href="${esc(ad.url)}" target="_blank" rel="noopener">${image}</a>
     <div class="body">
-      <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${esc(ad.title)}</a>
+      <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${ad.watched ? '<span class="watch-badge" title="Correspond à une veille">🔭</span> ' : ""}${esc(ad.title)}</a>
       <div class="stats">
         <div><span>Achat</span><b>${buy}</b></div>
         <div title="${a.source_revente === "cote" ? "D'après la cote réelle du modèle (prix des annonces en état de marche)" : "Estimation de l'IA, rabotée par prudence"}">
@@ -951,6 +951,7 @@ async function loadSettings() {
   }
   renderSites();
   renderCategories();
+  renderWatchlist();
   const f = settings.filters, n = settings.notifier, a = settings.analyzer, l = settings.location;
   setTags("#g-exclude", f.global_exclude_keywords);
   setTags("#g-signals", f.deal_signals);
@@ -1002,6 +1003,25 @@ function searchRows(card) {
   }));
 }
 
+function watchRow(w) {
+  return `<div class="watch-row">
+    <input data-wq value="${esc(w.query ?? "")}" placeholder="ex. thinkpad t480">
+    <span class="affix"><input data-wp type="number" min="0" value="${esc(w.max_price ?? "")}" placeholder="prix max"><i>€</i></span>
+    <button class="icon danger" data-remove-watch title="Supprimer">🗑</button>
+  </div>`;
+}
+function renderWatchlist() {
+  $("#watch-list").innerHTML = (settings.watchlist || []).map(watchRow).join("");
+}
+$("#add-watch").addEventListener("click", () => {
+  $("#watch-list").insertAdjacentHTML("beforeend", watchRow({}));
+  $("#watch-list .watch-row:last-child [data-wq]").focus();
+  markDirty();
+});
+$("#watch-list").addEventListener("click", (e) => {
+  if (e.target.closest("[data-remove-watch]")) { e.target.closest(".watch-row").remove(); markDirty(); }
+});
+
 function collectSettings() {
   const sites = {};
   const commonCard = $("[data-common-card]");
@@ -1024,8 +1044,11 @@ function collectSettings() {
   const dealTypes = [];
   if ($("#n-repair").checked) dealTypes.push("reparation");
   if ($("#n-direct").checked) dealTypes.push("revente_directe");
+  const watchlist = [...document.querySelectorAll("#watch-list .watch-row")].map((r) => ({
+    query: r.querySelector("[data-wq]").value, max_price: r.querySelector("[data-wp]").value,
+  }));
   return {
-    searches: commonCard ? searchRows(commonCard) : settings.searches, sites, categories,
+    searches: commonCard ? searchRows(commonCard) : settings.searches, sites, categories, watchlist,
     filters: { global_exclude_keywords: getTags("#g-exclude"), deal_signals: getTags("#g-signals"),
                buyer_ad_keywords: getTags("#g-buyer"), min_price: $("#g-minprice").value,
                sold_title_keywords: getTags("#g-sold-title"), sold_phrases: getTags("#g-sold-desc"),

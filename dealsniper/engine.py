@@ -16,6 +16,7 @@ from typing import Any
 
 from . import analyzer, filters, notifier
 from . import progress as progress_module
+from . import watch as watchlist_match
 from .config import data_dir
 from .db import Database
 from .http import AccessDenied, PoliteClient
@@ -104,9 +105,13 @@ class Engine:
         for i, ad in enumerate(new_ads, 1):
             show(site.label, f"{len(listed)} annonces · tri des nouvelles {i}/{len(new_ads)}")
             prints[ad.uid] = fingerprint(ad, self.brands)
+            ad.watched = watchlist_match.matches(ad, self.config.get("watchlist") or [])
             duplicate = prints[ad.uid] and await self.db.duplicate_of(prints[ad.uid], ad.source)
+            # Une annonce surveillée passe outre la catégorie et la cote (mais pas les doublons).
             reason = (f"doublon d'une annonce déjà vue sur {SITE_LABELS.get(duplicate, duplicate)}" if duplicate
-                      else filters.check(ad, self.config) or await self.market_problem(ad))
+                      else None if ad.watched else filters.check(ad, self.config) or await self.market_problem(ad))
+            if ad.watched and not duplicate:
+                filters.check(ad, self.config)  # renseigne category / signals sans écarter
             if reason:
                 await self.db.remember(ad, "rejected", reason=reason, fingerprint=prints[ad.uid])
                 continue
