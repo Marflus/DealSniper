@@ -543,7 +543,7 @@ function loadHistory(ad) {
 }
 
 // Analyse approfondie (gros modèle + recherche web) : tout le « payant » est ici, à la demande —
-// prix réels, graphique des ventes, questions sur mesure ; plus les liens de réparation.
+// prix réels, graphique des ventes, verdict, message de négociation ; questions et liens de réparation à côté.
 const CONF_LEVEL = { faible: "low", moyenne: "mid", "élevée": "good" };
 
 // Verdict final de l'analyse approfondie, calculé ici (gratuit) : prix demandé vs prix d'achat maximum.
