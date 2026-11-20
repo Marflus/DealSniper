@@ -69,7 +69,7 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
     if cat is None:
         if filters.get("drop_uncategorized", True):
             return "hors catégorie"
-        cat = {"name": "Autre", "max_budget": filters.get("default_max_budget", 100)}
+        cat = {"name": "Autre", "max_budget": filters.get("max_price") or filters.get("default_max_budget", 100)}
     ad.category = cat["name"]
 
     reason = location_problem(ad, config["location"])
@@ -87,12 +87,19 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
     if kw:
         return f"mot-clé exclu : {kw}"
 
+    # Critères éliminatoires choisis avant une recherche (livraison obligatoire, prix max absolu).
+    if filters.get("delivery") == "ship" and ad.shipping is None:
+        return "pas de livraison"
     total = ad.total_price
+    hard_max = filters.get("max_price")
+    if hard_max is not None and total is not None and total > float(hard_max):
+        return f"au-dessus de votre prix max ({total:.0f} € > {float(hard_max):.0f} €)"
     if total is None:
         if not filters.get("keep_unknown_price", True):
             return "prix inconnu"
     else:
-        max_budget = cat.get("max_budget")
+        # Prix max choisi pour une recherche : il remplace le budget de la catégorie.
+        max_budget = cat.get("max_budget") if hard_max is None else None
         if max_budget is not None and total > float(max_budget):
             return f"hors budget ({total:.0f} € > {max_budget} €)"
         min_price = float(cat.get("min_price", filters.get("min_price", 0)) or 0)

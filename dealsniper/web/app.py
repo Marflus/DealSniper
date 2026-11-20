@@ -309,8 +309,12 @@ def create_app() -> Flask:
             cap, home = config["analyzer"].get("max_daily_cost_usd"), str(config["location"].get("home") or "")
         except Exception:  # config.yaml invalide : plafond et distances simplement absents
             cap, home = None, ""
-        add_distances(items, home)
-        geo_state = "ok" if geo.ready else "erreur" if geo.error else "chargement" if home else "inactif"
+        near = (request.args.get("near") or "").strip()  # zone choisie dans les filtres, sinon le domicile
+        center = near or home
+        add_distances(items, center)
+        geo_state = "ok" if geo.ready else "erreur" if geo.error else "chargement" if center else "inactif"
+        if near and geo.ready and geo.locate(near) is None:
+            geo_state = "ville inconnue"
         return jsonify(ads=items, cost_today=round(cost, 4), cost_cap=cap, running=state["running"],
                        error=state["error"], progress=progress.current.snapshot(), geo=geo_state, home=home)
 
@@ -360,6 +364,26 @@ def create_app() -> Flask:
             db.patch_ad(uid, {"market_deep": result})
             asyncio.run(db.add_cost(result.get("cost_usd", 0)))
         return jsonify(ok=True, market_deep=result)
+
+    @app.post("/api/ads/<uid>/questions")
+    def ad_questions(uid: str):
+        """Questions au vendeur sur mesure (à la demande, après l'analyse approfondie)."""
+        from ..deep import seller_questions
+        from ..models import Ad
+
+        with database() as db:
+            ad = db.ad_data(uid)
+        if ad is None:
+            return jsonify(ok=False, error="Annonce inconnue"), 404
+        try:
+            result = seller_questions(Ad.from_dict(ad), load_config(config_path()), ad.get("market_deep"))
+        except Exception as exc:
+            return jsonify(ok=False, error=str(exc)[:200]), 502
+        deep = {**(ad.get("market_deep") or {}), "questions": result["questions"]}
+        with database() as db:
+            db.patch_ad(uid, {"market_deep": deep})
+            asyncio.run(db.add_cost(result["cost_usd"]))
+        return jsonify(ok=True, questions=result["questions"], cost_usd=result["cost_usd"])
 
     # --- achats -------------------------------------------------------------------
     @app.get("/api/purchases")
@@ -606,6 +630,8 @@ def create_app() -> Flask:
         sites = {str(s) for s in body.get("sites") or []}  # vide = tous les sites actifs
         exclude = [normalize(str(w)) for w in _words(body.get("exclude") or [])]
         max_ads = _number(body.get("max_ads"))
+        delivery = body.get("delivery") if body.get("delivery") == "ship" else None
+        zone = {"near": str(body.get("near") or "").strip(), "km": _number(body.get("km"))}
 
         def prepare(config: dict[str, Any]) -> None:
             config["searches"] = [search]              # une seule recherche, commune à tous les sites
@@ -618,6 +644,12 @@ def create_app() -> Flask:
             filters["drop_uncategorized"] = False      # ne pas écarter un terme hors catégories
             if min_price is not None:
                 filters["min_price"] = min_price       # appliqué à tous les sites par le filtre
+            if max_price is not None:
+                filters["max_price"] = max_price       # éliminatoire, même hors catégorie
+            if delivery:
+                filters["delivery"] = delivery         # livraison obligatoire
+            if zone["km"]:
+                filters["zone"] = zone                 # trop loin : écartée avant l'IA
             if exclude:
                 filters["global_exclude_keywords"] = [*filters.get("global_exclude_keywords", []), *exclude]
             if max_ads:

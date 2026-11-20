@@ -3,7 +3,7 @@
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const euros = (v) => (v == null ? "?" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`);
-const FILTER_IDS = ["f-text", "f-category", "f-type", "f-score", "f-ease", "f-sale", "f-price", "f-margin", "f-distance",
+const FILTER_IDS = ["f-text", "f-category", "f-type", "f-score", "f-ease", "f-sale", "f-price", "f-margin", "f-near", "f-distance",
   "f-delivery", "f-days", "f-sort"];
 const SEARCH_FIELDS = { common: ["query", "condition", "max_price"], ebay: ["query", "condition", "max_price"], leboncoin: ["query", "category", "max_price"],
                         default: ["query", "max_price"] };
@@ -245,12 +245,23 @@ setInterval(() => {  // chrono et « buffering » animés entre deux rafraîchis
   }
 }));
 
+// Zone : centre des distances (ville ou code postal), sinon le domicile réglé dans Réglages.
+const nearParam = () => ($("#f-near").value.trim() ? `&near=${encodeURIComponent($("#f-near").value.trim())}` : "");
+
+// Champs de la recherche ponctuelle reliés aux filtres (remise, zone) : une seule valeur, deux endroits.
+document.querySelectorAll("[data-mirror]").forEach((el) => {
+  const target = $("#" + el.dataset.mirror);
+  el.value = target.value;
+  el.addEventListener("change", () => { target.value = el.value; target.dispatchEvent(new Event("change", { bubbles: true })); });
+  target.addEventListener("change", () => { el.value = target.value; });
+});
+
 // ---------- Annonces ----------
 let runPoll = null;
 async function loadAds() {
   try {
     const serverStatus = status === "fav" || status === "hidden" ? "" : status;  // favoris / masquées : tri local
-    const data = await api(`/api/ads?status=${encodeURIComponent(serverStatus)}&days=${$("#f-days").value}`);
+    const data = await api(`/api/ads?status=${encodeURIComponent(serverStatus)}&days=${$("#f-days").value}${nearParam()}`);
     geoState = data.geo;
     allAds = data.ads;
     renderBudget(data.cost_today, data.cost_cap);
@@ -384,37 +395,6 @@ function adCard(ad) {
 const faultText = (a) => (!a.panne_probable ? "" : a.panne_probable.toLowerCase() === "aucune"
   ? "Aucune — revente en l'état" : a.panne_probable);
 
-// Questions à poser au vendeur : générées ici selon la catégorie, sans appel à l'IA (gratuit).
-function sellerQuestions(ad) {
-  const a = ad.analysis || {};
-  const cat = `${ad.category || ""} ${ad.title || ""}`.toLowerCase();
-  const q = ["Pouvez-vous envoyer une photo de l'étiquette (modèle exact) et de l'appareil allumé ?"];
-  if (a.type_affaire === "revente_directe") {
-    q.push("Pourquoi le vendez-vous ? Avez-vous la facture ?", "Y a-t-il des rayures, chocs ou défauts, même petits ?");
-  } else {
-    q.push("Depuis quand la panne est-elle apparue, et comment ?",
-      "A-t-il pris l'eau, subi une chute, ou été ouvert / réparé ?");
-  }
-  if (/pc|portable|thinkpad|latitude|elitebook|macbook|surface|mini|thinkcentre|ordinateur/.test(cat)) {
-    q.push("Y a-t-il un mot de passe BIOS ou un verrouillage (iCloud, compte Microsoft, MDM) ?",
-      "Le chargeur est-il fourni ? Quel est l'état de la batterie ?");
-  }
-  if (/dyson|aspirateur|roborock|roomba/.test(cat)) {
-    q.push("La batterie est-elle d'origine ? Combien de temps tient-elle ?", "Le chargeur et les accessoires sont-ils fournis ?");
-  }
-  if (/sonos|bose|audio|enceinte|marshall|jbl/.test(cat)) {
-    q.push("L'appareil est-il bien retiré de votre compte (Sonos, Bose…) ?", "Le câble d'alimentation est-il fourni ?");
-  }
-  if (/tv|écran|ecran|moniteur|televiseur/.test(cat)) {
-    q.push("Y a-t-il du son sans image ? La dalle a-t-elle un choc ou une fissure ?", "La télécommande et le pied sont-ils fournis ?");
-  }
-  if (/makita|dewalt|milwaukee|outil|bosch/.test(cat)) {
-    q.push("La machine fonctionne-t-elle sur une batterie chargée ? Odeur de brûlé ou étincelles ?");
-  }
-  if (ad.price_mode === "enchere") q.push("Accepteriez-vous une vente immédiate avant la fin de l'enchère ?");
-  return q;
-}
-
 // Vendeur : ce que le site fournit (eBay : note + évaluations ; leboncoin : nom + particulier / pro).
 function sellerRows(seller, row) {
   const s = seller || {};
@@ -505,41 +485,68 @@ function loadHistory(ad) {
 // Analyse approfondie (gros modèle + recherche web) : tout le « payant » est ici, à la demande —
 // prix réels, graphique des ventes, questions sur mesure ; plus les liens de réparation.
 const CONF_LEVEL = { faible: "low", moyenne: "mid", "élevée": "good" };
+
+// Verdict final de l'analyse approfondie, calculé ici (gratuit) : prix demandé vs prix d'achat maximum.
+function deepVerdict(ad, d) {
+  const price = ad.total_price ?? ad.price, max = d.prix_achat_max;
+  const doubt = d.confiance === "faible" ? " Confiance faible : vérifiez avant." : "";
+  if (max == null || price == null) return { cls: "maybe", icon: "🤔", title: "À vérifier", text: "Prix ou fourchette inconnus." };
+  if (max <= 0) return { cls: "pass", icon: "⛔", title: "Ne pas acheter", text: `Même très bas, la revente ne laisse pas +30 € net.${doubt}` };
+  if (ad.price_mode === "enchere") return { cls: "buy", icon: "🎯", title: `Enchérir jusqu'à ${euros(max)}`, text: `Au-delà, la marge visée n'est plus atteinte.${doubt}` };
+  if (price <= max) return { cls: "buy", icon: "✅", title: "À acheter", text: `${euros(price)} demandés, maximum conseillé ${euros(max)} : la marge est là.${doubt}` };
+  if (price <= max * 1.25) return { cls: "nego", icon: "🤝", title: `À négocier : proposez ${euros(max)}`, text: `${euros(price)} demandés, soit ${Math.round(100 * (1 - max / price))} % de trop.${doubt}` };
+  return { cls: "pass", icon: "❌", title: "À laisser passer", text: `${euros(price)} demandés pour un maximum conseillé de ${euros(max)}.${doubt}` };
+}
+
 function deepBlock(ad) {
   const d = ad.market_deep;
   if (!d) {
     return `<section class="d-deep">
       <div class="deep-cta">
-        <div><b>🔬 Analyse approfondie</b>
-          <ul><li>Prix de revente <b>réels</b> vérifiés sur le web</li><li>Graphique des dernières ventes et de la cote</li>
-            <li>Questions à poser au vendeur, sur mesure</li><li>Tutoriels et pièces pour réparer</li></ul></div>
-        <button class="deep-btn" data-deep="${esc(ad.uid)}"><span>Lancer l'analyse</span><small>≈ quelques centimes · 10–30 s</small></button>
+        <div><b>🔬 Analyse approfondie</b><p class="muted small">Prix réels vérifiés sur le web, graphique des ventes et verdict final.</p></div>
+        <button class="deep-btn" data-deep="${esc(ad.uid)}"><span>Analyser</span><small>≈ 0,03 $ · 20 s</small></button>
       </div></section>`;
   }
-  const range = [d.revente_basse, d.revente_typique, d.revente_haute].every((x) => x != null)
-    ? `${euros(d.revente_basse)} – ${euros(d.revente_haute)}` : "—";
-  const questions = (d.questions || []).length ? d.questions : sellerQuestions(ad);
+  const v = deepVerdict(ad, d);
+  const range = [d.revente_basse, d.revente_haute].every((x) => x != null) ? `${euros(d.revente_basse)} – ${euros(d.revente_haute)}` : "—";
+  const questions = (d.questions || []).length
+    ? `<div class="d-questions"><b>💬 À demander au vendeur</b><ul>${d.questions.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`
+    : `<button class="ghost" data-questions="${esc(ad.uid)}">💬 Questions à poser au vendeur <small class="muted">≈ 0,001 $</small></button>`;
   return `<section class="d-deep done">
-    <div class="deep-head">🔬 Analyse approfondie <span class="conf ${CONF_LEVEL[d.confiance] || "mid"}">confiance ${esc(d.confiance)}</span>
-      <span class="deep-meta">${esc(d.model || "")}${d.cost_usd ? ` · ${iaCost(d.cost_usd)}` : ""}
-        <button class="link" data-deep="${esc(ad.uid)}">↻ Refaire</button></span></div>
+    <div class="verdict ${v.cls}"><span class="v-icon">${v.icon}</span>
+      <div><b>${esc(v.title)}</b><p>${esc(v.text)}</p></div>
+      <div class="deep-meta"><span class="conf ${CONF_LEVEL[d.confiance] || "mid"}">confiance ${esc(d.confiance)}</span>
+        <span>${d.cost_usd ? iaCost(d.cost_usd) : ""}</span><button class="link" data-deep="${esc(ad.uid)}" title="Refaire l'analyse">↻</button></div>
+    </div>
     <div class="deep-grid">
-      <div>
-        <div class="d-tiles">
-          <div class="d-tile pos"><span>Revente réelle</span><b>${range}</b>${d.revente_typique != null ? `<small>typique ${euros(d.revente_typique)}</small>` : ""}</div>
-          ${d.prix_achat_max != null ? `<div class="d-tile"><span>Acheter au max</span><b>${euros(d.prix_achat_max)}</b><small>pour +30 € net</small></div>` : ""}
+      <div class="deep-facts">
+        <div class="d-tiles three">
+          <div class="d-tile"><span>Revente réelle</span><b>${range}</b>${d.revente_typique != null ? `<small>typique ${euros(d.revente_typique)}</small>` : ""}</div>
+          <div class="d-tile ${d.prix_achat_max != null && d.prix_achat_max <= 0 ? "neg" : ""}"><span>Achat max</span><b>${d.prix_achat_max != null ? euros(d.prix_achat_max) : "—"}</b><small>pour +30 € net</small></div>
+          <div class="d-tile"><span>Demandé</span><b>${euros(ad.total_price ?? ad.price)}</b><small>${ad.shipping ? "port compris" : "&nbsp;"}</small></div>
         </div>
         ${d.resume ? `<p class="deep-summary">${esc(d.resume)}</p>` : ""}
         ${d.pieges ? `<p class="deep-warn">⚠️ ${esc(d.pieges)}</p>` : ""}
-        ${(d.sources || []).length ? `<ul class="deep-sources">${d.sources.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+        ${(d.sources || []).length ? `<div class="deep-sources">${d.sources.map((x) => `<span>${esc(x)}</span>`).join("")}</div>` : ""}
       </div>
-      <div class="deep-charts">${salesChart(d) || '<p class="muted small">Aucune vente datée trouvée sur le web pour tracer le graphique.</p>'}<div id="d-history"></div></div>
+      <div class="deep-charts">${salesChart(d) || '<div class="chart-empty">Pas de vente datée trouvée pour le graphique</div>'}<div id="d-history"></div></div>
     </div>
-    <div class="deep-grid">
-      <div class="d-questions"><b>💬 Questions à poser au vendeur</b><ul>${questions.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
-      ${repairLinks(ad)}
-    </div>
+    <div class="deep-actions">${questions}${repairLinks(ad)}</div>
   </section>`;
+}
+
+async function askQuestions(uid) {
+  const ad = allAds.find((x) => x.uid === uid);
+  const btn = $("#details-body [data-questions]");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Préparation des questions…"; }
+  try {
+    const data = await api(`/api/ads/${encodeURIComponent(uid)}/questions`, { method: "POST" });
+    if (ad) ad.market_deep = { ...(ad.market_deep || {}), questions: data.questions };
+    showDetails(uid);
+  } catch (e) {
+    toast("❌ " + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = "💬 Réessayer"; }
+  }
 }
 
 // Nuage de points « prix × date de vente » (une série : les ventes observées sur le web).
@@ -610,7 +617,7 @@ async function deepMarket(uid) {
   const ad = allAds.find((x) => x.uid === uid);
   if (!ad) return;
   const btn = $("#details-body").querySelector(`[data-deep]`);
-  if (btn) { btn.disabled = true; btn.classList.add("loading"); btn.innerHTML = "<span>⏳ Recherche des prix réels…</span><small>10–30 s</small>"; }
+  if (btn) { btn.disabled = true; btn.classList.add("loading"); btn.innerHTML = "<span>⏳ Analyse…</span><small>prix réels sur le web</small>"; }
   try {
     const data = await api(`/api/ads/${encodeURIComponent(uid)}/market-analysis`, { method: "POST" });
     ad.market_deep = data.market_deep;
@@ -630,10 +637,10 @@ function repairLinks(ad) {
   const part = ["batterie", "écran", "ecran", "clavier", "ssd", "chargeur", "ventilateur", "charnière", "nappe", "alimentation",
     "carte", "port", "moteur", "dalle"].find((w) => fault.includes(w)) || "";
   const q = encodeURIComponent(`${model} ${part}`.trim());
-  return `<div class="d-links"><b>🔧 Réparer</b><div>
-    <a href="https://www.ifixit.com/Search?query=${q}" target="_blank" rel="noopener">Tutoriels iFixit ↗</a>
-    <a href="https://www.ebay.fr/sch/i.html?_nkw=${q}" target="_blank" rel="noopener">Pièce sur eBay ↗</a>
-    <a href="https://fr.aliexpress.com/w/wholesale-${q}.html" target="_blank" rel="noopener">Pièce sur AliExpress ↗</a></div></div>`;
+  return `<div class="d-links"><b>🔧 Réparer</b>
+    <a href="https://www.ifixit.com/Search?query=${q}" target="_blank" rel="noopener">iFixit</a>
+    <a href="https://www.ebay.fr/sch/i.html?_nkw=${q}" target="_blank" rel="noopener">Pièce eBay</a>
+    <a href="https://fr.aliexpress.com/w/wholesale-${q}.html" target="_blank" rel="noopener">AliExpress</a></div>`;
 }
 
 async function markAd(uid, change) {
@@ -660,13 +667,14 @@ async function buyAd(uid) {
 }
 
 function onAdAction(e) {
-  const t = e.target.closest("[data-info],[data-fav],[data-hide],[data-buy],[data-deep]");
+  const t = e.target.closest("[data-info],[data-fav],[data-hide],[data-buy],[data-deep],[data-questions]");
   if (!t) return;
   if (t.dataset.info) showDetails(t.dataset.info);
   else if (t.dataset.fav) markAd(t.dataset.fav, { favorite: !allAds.find((x) => x.uid === t.dataset.fav)?.favorite });
   else if (t.dataset.hide) markAd(t.dataset.hide, { hidden: !allAds.find((x) => x.uid === t.dataset.hide)?.hidden });
   else if (t.dataset.buy) buyAd(t.dataset.buy);
   else if (t.dataset.deep) deepMarket(t.dataset.deep);
+  else if (t.dataset.questions) askQuestions(t.dataset.questions);
 }
 $("#ads").addEventListener("click", onAdAction);
 $("#details-body").addEventListener("click", onAdAction);
@@ -803,7 +811,8 @@ $("#quick-search").addEventListener("submit", async (e) => {
     const sites = [...document.querySelectorAll("#qs-sites .chip.on")].map((b) => b.dataset.site);
     await api("/api/search-now", { method: "POST", body: JSON.stringify({
       query, min_price: $("#qs-min").value, max_price: $("#qs-price").value, condition: $("#qs-condition").value,
-      exclude: $("#qs-exclude").value, max_ads: $("#qs-max").value, sites }) });
+      exclude: $("#qs-exclude").value, max_ads: $("#qs-max").value, sites,
+      delivery: $("#qs-delivery").value, near: $("#qs-near").value, km: $("#qs-km").value }) });
     if (!searchPoll) searchPoll = setInterval(pollSearch, 1200);
     pollSearch();
   } catch (e2) {
@@ -826,7 +835,7 @@ $("#qs-sites").addEventListener("click", (e) => {
 
 async function pollSearch() {
   let data;
-  try { data = await api(`/api/ads?status=analyzed&days=1`); } catch (e) { return; }
+  try { data = await api(`/api/ads?status=analyzed&days=1${nearParam()}`); } catch (e) { return; }
   const p = data.progress;
   setRunning(data.running);
   renderProgress(p);  // progression animée (chrono, « buffering »), comme dans l'onglet Annonces
@@ -1543,14 +1552,14 @@ async function loadStatus() {
     s.ai_enabled === false
       ? { ok: true, text: "Mode sans IA : tri et estimation par la cote du marché (aucune clé Anthropic requise)" }
       : { ok: s.anthropic, text: s.anthropic ? "Clé Anthropic présente : les annonces sont notées par l'IA"
-          : "Clé Anthropic manquante : collez-la ci-dessous, ou passez en mode sans IA (Réglages → Budget IA)" },
+          : "Clé Anthropic manquante : collez-la ci-dessous, ou passez en mode sans IA (Réglages → Budget IA)", short: "Clé IA manquante" },
     { ok: s.channels.length > 0, text: s.channels.length ? `Notifications : ${s.channels.join(" + ")}`
-      : "Aucune notification : ajoutez TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (ou DISCORD_WEBHOOK_URL) dans .env" },
+      : "Aucune notification : ajoutez TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (ou DISCORD_WEBHOOK_URL) dans .env", short: "Pas de notifications" },
     ...s.sites.map((site) => {
-      if (!site.ok) return { ok: false, text: `${site.label} ignoré : ${site.reason}` };
+      if (!site.ok) return { ok: false, text: `${site.label} ignoré : ${site.reason}`, short: `${site.label} inactif`, why: site.reason };
       const last = site.last_ok ? `dernière récolte ${timeAgo(site.last_ok)}${site.last_count != null ? ` · ${site.last_count} annonces` : ""}` : "jamais récolté encore";
       const broken = site.last_error ? ` — ⚠️ dernière erreur : ${site.last_error}` : "";
-      return { ok: !site.last_error, text: `${site.label} : ${last}${broken}` };
+      return { ok: !site.last_error, text: `${site.label} : ${last}${broken}`, short: `${site.label} en erreur`, why: site.last_error };
     }),
   ];
   if (s.error) items.push({ ok: false, text: `config.yaml illisible : ${s.error}` });
@@ -1560,10 +1569,12 @@ async function loadStatus() {
   const problems = items.filter((i) => !i.ok);
   const key = problems.map((p) => p.text).join("|");
   $("#setup").hidden = !problems.length || store.get("setup-hidden", "") === key;
-  $("#setup").innerHTML = `<div><b>À régler pour profiter de tout Deal Sniper</b>
-      <ul>${problems.map((p) => `<li>${esc(p.text)}</li>`).join("")}</ul>
-      <small>Après avoir modifié <code>.env</code>, relancez <code>start_ui.bat</code>.</small></div>
+  // Bandeau compact : une pastille par problème (détail au survol), lien vers Réglages.
+  $("#setup").innerHTML = `<span class="setup-title">⚠ À régler</span>
+    ${problems.map((p) => `<span class="setup-chip" title="${esc(p.text)}">${esc(p.short || p.text)}</span>`).join("")}
+    <button class="link" data-goto-keys>Réglages →</button>
     <button class="icon" title="Masquer" data-hide-setup>✕</button>`;
+  $("#setup [data-goto-keys]").addEventListener("click", () => { showTab("settings"); showSettingsSection("set-status"); });
   $("#setup [data-hide-setup]").addEventListener("click", () => {
     $("#setup").hidden = true;
     store.set("setup-hidden", key);

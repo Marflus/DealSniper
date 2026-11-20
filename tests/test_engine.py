@@ -517,3 +517,20 @@ def test_cancel_stops_before_saving(monkeypatch, config):
 
     stats, unseen = asyncio.run(go())
     assert stats["listées"] == 3 and stats["analysées"] == 0 and not calls and unseen == {"ebay:100000000001"}
+
+
+def test_zone_is_eliminatory(config):
+    cfg = {**config, "filters": {**config["filters"], "zone": {"near": "Lyon", "km": 30}}}
+    eng = engine.Engine(cfg, db=None, http=None)
+
+    class FakeGeo:
+        def distance(self, center, place):
+            return {"Villeurbanne": 5, "Marseille": 280}.get(place)
+
+    eng._geo, eng._center = FakeGeo(), (45.76, 4.83)
+    near = Ad(title="a", url="https://x/1", source="t", location="Villeurbanne")
+    far = Ad(title="b", url="https://x/2", source="t", location="Marseille")
+    unknown = Ad(title="c", url="https://x/3", source="t")
+    assert asyncio.run(eng.zone_problem(near)) is None
+    assert "hors zone (280 km" in asyncio.run(eng.zone_problem(far))
+    assert asyncio.run(eng.zone_problem(unknown)) is None  # ville inconnue : gardée

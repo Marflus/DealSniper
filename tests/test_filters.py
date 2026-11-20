@@ -62,3 +62,10 @@ def test_desirable_brand_signal(config):
     quote = Quote(model="thinkpad t480", median=200, count=5, source="test")
     a.price_mode, b.price_mode = "fixe", "fixe"
     assert free_estimate(a, quote)["score_rentabilite"] == free_estimate(b, quote)["score_rentabilite"] + 1
+
+
+def test_eliminatory_delivery_and_max_price(config):
+    config["filters"].update(delivery="ship", max_price=100, drop_uncategorized=False)
+    assert check(ad("Raspberry Pi 4", 40), config) == "pas de livraison"
+    assert check(ad("Raspberry Pi 4", 40, shipping=5), config) is None
+    assert "prix max" in check(ad("Raspberry Pi 5 kit", 98, shipping=6), config)

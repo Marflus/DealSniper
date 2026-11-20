@@ -136,6 +136,23 @@ class Engine:
         stats.update(analysées=len(result.analyzed), notifiées=len(sent))
         return stats
 
+    async def zone_problem(self, ad: Ad) -> str | None:
+        """Zone éliminatoire (`filters.zone` : {near, km}) : annonce trop loin du centre choisi.
+        Une annonce sans ville connue est gardée (on ne peut pas savoir)."""
+        zone = self.config["filters"].get("zone") or {}
+        if not zone.get("km"):
+            return None
+        if not hasattr(self, "_geo"):
+            from .geo import Geo
+
+            self._geo = Geo(data_dir() / "communes.json")
+            await asyncio.to_thread(self._geo.load)
+            self._center = self._geo.locate(zone.get("near") or self.config["location"].get("home") or "")
+        distance = self._geo.distance(self._center, ad.location) if self._center else None
+        if distance is not None and distance > float(zone["km"]):
+            return f"hors zone ({distance:.0f} km > {float(zone['km']):.0f} km)"
+        return None
+
     def _check(self, ad: Ad) -> str | None:
         """Raison de rejet par le filtre ; une annonce surveillée n'est jamais écartée
         (le filtre renseigne quand même sa catégorie et ses signaux)."""
@@ -166,7 +183,7 @@ class Engine:
             if duplicate:
                 reason = f"doublon d'une annonce déjà vue sur {SITE_LABELS.get(duplicate, duplicate)}"
             else:
-                reason = self._check(ad)
+                reason = self._check(ad) or (None if ad.watched else await self.zone_problem(ad))
                 problem = None if reason else await self.market_problem(ad)  # renseigne aussi la cote
                 reason = reason or (None if ad.watched else problem)
             if not reason and site.cfg.get("fetch_details", True):  # sinon : moins de requêtes / fenêtres

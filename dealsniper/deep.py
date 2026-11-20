@@ -30,14 +30,10 @@ selon le nombre de prix réels trouvés, et 2 à 4 sources courtes au format « 
 Donne aussi « ventes » : jusqu'à 12 ventes ou annonces RÉELLEMENT observées pendant ta recherche, chacune avec
 son mois (date) et son prix. N'invente aucun point : si tu n'as pas trouvé de prix daté, renvoie une liste vide.
 
-Donne enfin « questions » : 3 à 5 questions courtes à poser au vendeur AVANT d'acheter, propres à CE modèle et
-à SA panne (points faibles connus du modèle, verrouillages, pièces manquantes, état de la batterie…).
-
 Termine TOUJOURS par un unique bloc JSON, sans rien après :
 {"revente_basse": n, "revente_typique": n, "revente_haute": n, "confiance": "faible|moyenne|élevée",
  "sources": ["...", "..."], "resume": "une phrase", "pieges": "pièges éventuels en 8 mots max",
- "ventes": [{"date": "AAAA-MM", "prix": n, "source": "ebay|leboncoin|vinted|backmarket"}],
- "questions": ["...", "..."]}"""
+ "ventes": [{"date": "AAAA-MM", "prix": n, "source": "ebay|leboncoin|vinted|backmarket"}]}"""
 
 WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5,
                    "user_location": {"type": "approximate", "country": "FR"}}
@@ -81,7 +77,6 @@ def sanitize(raw: dict[str, Any], ad: Ad) -> dict[str, Any]:
         "confiance": confiance, "sources": sources, "ventes": _sales(raw.get("ventes")),
         "resume": str(raw.get("resume", ""))[:300], "pieges": str(raw.get("pieges", ""))[:120],
         "prix_achat_max": max_buy,
-        "questions": [str(q).strip()[:160] for q in (raw.get("questions") or []) if str(q).strip()][:5],
     }
 
 
@@ -136,3 +131,37 @@ def analyze_market(ad: Ad, config: dict[str, Any], client: Any = None) -> dict[s
     result["cost_usd"] = round(cost, 4)
     result["model"] = model
     return result
+
+
+QUESTIONS_PROMPT = """Tu aides un acheteur d'électronique d'occasion en France. Donne 4 questions courtes à poser au
+vendeur AVANT d'acheter cette annonce, propres à CE modèle et à SA panne (points faibles connus du modèle,
+verrouillages, pièces manquantes, état de la batterie…). Réponds UNIQUEMENT par {"questions": ["...", "..."]}."""
+
+
+def seller_questions(ad: Ad, config: dict[str, Any], deep: dict[str, Any] | None = None,
+                     client: Any = None) -> dict[str, Any]:
+    """Questions au vendeur sur mesure, à la demande : petit modèle, sans recherche web (≈ 0,001 $)."""
+    if not env("ANTHROPIC_API_KEY"):
+        raise RuntimeError("Clé Anthropic manquante (ANTHROPIC_API_KEY dans .env).")
+    cfg = config["analyzer"]
+    model = cfg.get("model") or "claude-haiku-5-5"
+    pricing = {**DEFAULT_PRICING, **{k: tuple(v) for k, v in (cfg.get("pricing") or {}).items()}}
+    price_in, price_out = pricing.get(model, (1.0, 5.0))
+    if client is None:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"), max_retries=2,
+                                     timeout=float(cfg.get("timeout_seconds", 90)))
+    deep = deep or {}
+    context = _describe(ad) + (f"\nAnalyse : {deep.get('resume')} {deep.get('pieges') or ''}" if deep else "")
+    params: dict[str, Any] = {"model": model, "max_tokens": 500, "system": QUESTIONS_PROMPT,
+                              "messages": [{"role": "user", "content": context}]}
+    if model.startswith("claude-haiku-5"):
+        params["thinking"] = {"type": "disabled"}
+    resp = client.messages.create(**params)
+    usage = getattr(resp, "usage", None)
+    cost = (usage.input_tokens * price_in + usage.output_tokens * price_out) / 1e6 if usage else 0.0
+    text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+    raw = _parse_json(text) if text else {}
+    questions = [str(q).strip()[:160] for q in (raw.get("questions") or []) if str(q).strip()][:5]
+    return {"questions": questions, "cost_usd": round(cost, 5)}

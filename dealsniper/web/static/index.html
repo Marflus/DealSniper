@@ -77,16 +77,17 @@
             <option value="reparation">🔧 À réparer</option>
             <option value="revente_directe">💎 Revente directe</option>
           </select>
-          <label class="field" title="Note de rentabilité donnée par l'IA">Note ≥ <input id="f-score" type="number" min="1" max="10" placeholder="—">/10</label>
-          <label class="field" title="Facilité de réparation : 10 = rien ou presque à faire">🔧 Réparation ≥ <input id="f-ease" type="number" min="1" max="10" placeholder="—">/10</label>
-          <label class="field" title="Facilité de vente : 10 = très recherché, part en quelques jours">🔥 Vente ≥ <input id="f-sale" type="number" min="1" max="10" placeholder="—">/10</label>
+          <label class="field" title="Note de rentabilité donnée par l'IA">⭐ Note ≥ <input id="f-score" type="number" min="1" max="10" placeholder="—">/10</label>
+          <label class="field" title="Facilité de réparation : 10 = rien ou presque à faire">🔧 Facile ≥ <input id="f-ease" type="number" min="1" max="10" placeholder="—">/10</label>
+          <label class="field" title="Facilité de vente : 10 = très recherché, part en quelques jours">🔥 Demande ≥ <input id="f-sale" type="number" min="1" max="10" placeholder="—">/10</label>
           <label class="field">Prix max <input id="f-price" type="number" min="0" placeholder="—"> €</label>
           <label class="field">Marge min <input id="f-margin" type="number" placeholder="—"> €</label>
-          <label class="field" title="Distance depuis chez vous (code postal à régler dans Filtres)">📍 ≤ <input id="f-distance" type="number" min="0" placeholder="—"> km</label>
+          <label class="field zone" title="Zone : une ville ou un code postal (vide = chez vous), et un rayon">📍
+            <input id="f-near" type="text" placeholder="Ville ou CP"> ≤ <input id="f-distance" type="number" min="0" placeholder="—"> km</label>
           <select id="f-delivery" title="Mode de remise">
-            <option value="">Remise : peu importe</option>
-            <option value="ship">🚚 Envoi possible</option>
-            <option value="pickup">🤝 Sur place (pas d'envoi)</option>
+            <option value="">🚚🤝 Livrable ou non</option>
+            <option value="ship">🚚 Livrable</option>
+            <option value="pickup">🤝 Main propre seulement</option>
           </select>
           <select id="f-days">
             <option value="1">24 heures</option>
@@ -112,21 +113,25 @@
     <!-- RECHERCHE PONCTUELLE -->
     <section id="tab-search" class="page" hidden>
       <div class="page-head"><h1>Recherche ponctuelle</h1>
-        <p>Cherchez un objet précis sur tous les sites d'un coup, en direct. Les résultats sont notés par l'IA
-          et rangés aussi dans l'onglet Annonces.</p></div>
+        <p>Un objet précis, tous les sites d'un coup.</p></div>
       <form id="quick-search" class="quick-search">
         <input id="qs-query" placeholder="🔎  Ex. : thinkpad x1 carbon, dyson v11, steam deck…" autocomplete="off">
         <button id="qs-run" class="primary">Analyser maintenant</button>
       </form>
       <div class="qs-options" id="qs-options">
+        <span class="qs-title" title="Une annonce qui ne passe pas ces critères est écartée avant l'IA : elle ne coûte rien">⛔ Éliminatoire</span>
         <label>Prix <span class="affix"><input id="qs-min" type="number" min="0" placeholder="min"><i>€</i></span>
           à <span class="affix"><input id="qs-price" type="number" min="0" placeholder="max"><i>€</i></span></label>
         <label>État <select id="qs-condition">
           <option value="any">Tous états</option><option value="used">Occasion (fonctionnel)</option>
           <option value="parts">Pour pièces / HS</option></select></label>
-        <label>Exclure <input id="qs-exclude" placeholder="mots séparés par des virgules : coque, boîte vide…"></label>
-        <label>Analyse IA max <span class="affix"><input id="qs-max" type="number" min="1" placeholder="toutes"><i>annonces</i></span></label>
-        <label>Sites <span class="qs-sites" id="qs-sites"></span> <small>(aucun coché = tous)</small></label>
+        <label>Remise <select id="qs-delivery" data-mirror="f-delivery">
+          <option value="">Peu importe</option><option value="ship">🚚 Livrable obligatoire</option></select></label>
+        <label title="Ville ou code postal (vide = chez vous), et rayon">📍 <input id="qs-near" data-mirror="f-near" placeholder="Ville ou CP">
+          ≤ <span class="affix"><input id="qs-km" data-mirror="f-distance" type="number" min="0" placeholder="km"><i>km</i></span></label>
+        <label>Exclure <input id="qs-exclude" placeholder="coque, boîte vide…"></label>
+        <label title="Plafond d'annonces envoyées à l'IA">IA max <span class="affix"><input id="qs-max" type="number" min="1" placeholder="—"><i>ann.</i></span></label>
+        <label title="Aucun coché = tous les sites">Sites <span class="qs-sites" id="qs-sites"></span></label>
       </div>
       <div id="search-live" class="progress" hidden></div>
       <div id="search-report" hidden></div>
@@ -137,7 +142,7 @@
     <!-- BILAN / TABLEAU DE BORD -->
     <section id="tab-stats" class="page" hidden>
       <div class="page-head"><h1>Bilan</h1>
-        <p>Ce que le repérage a trouvé sur la période : où sont les meilleures marges, et l'activité jour par jour.</p></div>
+        <p>Où sont les meilleures marges.</p></div>
       <div class="toolbar-row" style="margin-bottom:14px">
         <select id="st-days">
           <option value="7">7 jours</option>
@@ -158,8 +163,7 @@
     <section id="tab-purchases" class="page" hidden>
       <div class="page-head">
         <h1>Achats</h1>
-        <p>Vos achats et reventes : bénéfice réel, et calibrage automatique des estimations. Ajoutez un achat avec
-          le bouton <b>i</b> d'une annonce (« Je l'ai acheté ») ou à la main ci-dessous.</p>
+        <p>Bénéfice réel de vos achats-reventes.</p>
       </div>
       <div id="p-summary" class="kpis"></div>
       <div id="p-tax" class="tax-box"></div>
@@ -176,7 +180,7 @@
     <!-- RÉGLAGES -->
     <section id="tab-settings" class="page" hidden>
       <div class="page-head"><h1>Réglages</h1>
-        <p>Notifications, budget IA, localisation et apparence de l'interface.</p></div>
+        </div>
       <div class="settings-layout">
         <nav id="set-nav" class="set-nav" aria-label="Sections de réglages">
           <button class="set-item on" data-sec="set-notif">🔔 Notifications</button>
@@ -228,8 +232,7 @@
           <section id="set-watch" class="set-sec" hidden>
             <div class="panel">
               <div class="sec-head"><span class="sec-icon red">🔭</span><div><h2>Veille</h2>
-                <p>Modèles précis à repérer en priorité : une annonce qui correspond est notifiée tout de suite,
-                  quelle que soit sa note, même hors de vos recherches habituelles.</p></div></div>
+                <p>Modèles notifiés tout de suite, quelle que soit leur note.</p></div></div>
               <div id="watch-list" class="watch-list"></div>
               <button id="add-watch" class="add">＋ Ajouter une veille</button>
             </div>
@@ -334,9 +337,7 @@
                 <p>Clés du fichier <code>.env</code> et sites réellement lancés.</p></div></div>
               <ul id="status-list" class="status-list"></ul>
               <div class="label">Clés (fichier <code>.env</code>)</div>
-              <p class="muted small">Collez vos clés puis « Enregistrer » : elles sont écrites dans le fichier
-                <code>.env</code> local, sur cette machine. Jamais envoyées ailleurs (ignoré par git), utilisées
-                seulement pour appeler l'API correspondante. Laissez vide ce que vous ne changez pas.</p>
+              <p class="muted small">Écrites dans <code>.env</code> sur cette machine uniquement. Laissez vide ce qui ne change pas.</p>
               <div class="secret-fields">
                 <label>Clé Anthropic (IA)<input id="k-ANTHROPIC_API_KEY" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
                 <label>eBay — Client ID<input id="k-EBAY_CLIENT_ID" type="password" autocomplete="off"></label>
@@ -370,7 +371,7 @@
     <section id="tab-searches" class="page" hidden>
       <div class="page-head">
         <h1>Recherches</h1>
-        <p>Ce que chaque site doit chercher. Les annonces trouvées passent ensuite par les filtres, puis sont notées par l'IA.</p>
+        <p>Ce que chaque site cherche.</p>
       </div>
       <input id="search-filter" class="search slim" type="search" placeholder="🔍  Trouver une recherche…">
       <div id="sites"></div>
@@ -380,8 +381,7 @@
     <section id="tab-categories" class="page" hidden>
       <div class="page-head">
         <h1>Catégories</h1>
-        <p>Une annonce est rangée dans la première catégorie dont un mot-clé apparaît dans son titre.
-          Chaque catégorie a son budget maximum et ses propres exclusions.</p>
+        <p>Premier mot-clé trouvé dans le titre = catégorie.</p>
       </div>
       <div class="cat-layout">
         <nav id="cat-nav" class="cat-nav"></nav>
@@ -392,8 +392,7 @@
     <!-- FILTRES -->
     <section id="tab-filters" class="page" hidden>
       <div class="page-head"><h1>Filtres</h1>
-        <p>Tri gratuit, avant toute analyse par l'IA : ce qui est écarté ici ne coûte rien.
-          Tapez un mot puis <kbd>Entrée</kbd> pour l'ajouter.</p></div>
+        <p>Tri gratuit avant l'IA · <kbd>Entrée</kbd> pour ajouter un mot.</p></div>
       <div class="filter-grid">
         <div class="filter-card">
           <div class="sec-head"><span class="sec-icon red">🚫</span><div><h2>Mots interdits</h2>

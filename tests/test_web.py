@@ -219,3 +219,28 @@ def test_search_now_applies_options(client, monkeypatch):
     assert config["filters"]["min_price"] == 20 and "boitier seul" in config["filters"]["global_exclude_keywords"]
     assert config["analyzer"]["max_ads_per_run"] == 15
     assert all(s.get("enabled") is False for name, s in config["sites"].items() if name != "ebay")
+
+
+def test_seller_questions_on_demand(client, monkeypatch):
+    c, _ = client
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+
+    class Resp:
+        text = '{"questions": ["Le BIOS est-il verrouillé ?", "Chargeur fourni ?"]}'
+        content = [type("B", (), {"type": "text", "text": text})()]
+        usage = type("U", (), {"input_tokens": 300, "output_tokens": 60})()
+
+    class FakeClient:
+        class messages:  # noqa: N801
+            @staticmethod
+            def create(**params):
+                assert "tools" not in params  # pas de recherche web : appel léger
+                return Resp()
+
+    import dealsniper.deep as deep
+    original = deep.seller_questions
+    monkeypatch.setattr(deep, "seller_questions", lambda ad, cfg, d=None: original(ad, cfg, d, client=FakeClient()))
+    data = c.post("/api/ads/ebay:100000000001/questions").get_json()
+    assert data["ok"] and data["questions"][0].startswith("Le BIOS")
+    ad = [a for a in c.get("/api/ads").get_json()["ads"] if a["uid"] == "ebay:100000000001"][0]
+    assert ad["market_deep"]["questions"] == data["questions"]

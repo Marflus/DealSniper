@@ -650,3 +650,56 @@ button.danger, .primary.danger { background: var(--bad) !important; border-color
 .gone-badge { font-size: 11px; font-weight: 700; color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent);
   padding: 1px 6px; border-radius: 6px; }
 @media (max-width: 560px) { .check-kpis { grid-template-columns: 1fr 1fr; } }
+
+/* Verdict final de l'analyse approfondie */
+.verdict { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px; margin-bottom: 14px;
+  border: 1px solid var(--line); background: var(--soft); }
+.verdict .v-icon { font-size: 30px; line-height: 1; }
+.verdict b { font-size: 18px; }
+.verdict p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.verdict.buy { background: color-mix(in srgb, var(--good) 14%, var(--card)); border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }
+.verdict.buy b { color: var(--good); }
+.verdict.nego { background: color-mix(in srgb, var(--mid) 14%, var(--card)); border-color: color-mix(in srgb, var(--mid) 45%, var(--line)); }
+.verdict.nego b { color: var(--mid); }
+.verdict.pass { background: color-mix(in srgb, var(--bad) 12%, var(--card)); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.verdict.pass b { color: var(--bad); }
+.verdict .deep-meta { margin-left: auto; align-self: flex-start; }
+.d-deep.done { background: var(--card); border: 1px solid var(--line); }
+.d-tiles.three { grid-template-columns: repeat(3, 1fr); }
+.d-tiles.three .d-tile b { font-size: 16px; }
+.deep-facts { display: grid; gap: 8px; align-content: start; }
+.deep-facts p { margin: 0; }
+.deep-sources { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; }
+.deep-sources span { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: var(--soft); border: 1px solid var(--line); color: var(--muted); }
+.chart-empty { display: grid; place-items: center; min-height: 120px; border: 1px dashed var(--line); border-radius: 12px;
+  color: var(--muted); font-size: 13px; }
+.deep-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.deep-actions .d-questions { flex: 1 1 360px; margin: 0; }
+.deep-actions > button { flex: none; }
+.d-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0; border: 0; margin-left: auto; }
+.d-links b { font-size: 13px; color: var(--muted); font-weight: 600; }
+.d-links a { padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line); background: var(--soft); font-size: 13px; text-decoration: none !important; }
+.d-links a:hover { border-color: var(--accent); }
+.deep-cta p { margin: 4px 0 0; }
+/* Zone (ville + rayon) et options éliminatoires de la recherche */
+.field.zone #f-near { width: 110px; text-align: left; }
+.qs-options #qs-near { width: 120px; }
+.qs-title { font-size: 12px; font-weight: 700; color: var(--bad); text-transform: uppercase; letter-spacing: .04em;
+  padding: 3px 8px; border-radius: 6px; background: color-mix(in srgb, var(--bad) 10%, transparent); }
+@media (max-width: 860px) { .d-tiles.three { grid-template-columns: 1fr 1fr; } .verdict { flex-wrap: wrap; } }
+
+/* Bandeau « À régler » compact */
+#setup:not([hidden]) { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 14px; }
+.setup-title { font-weight: 700; color: var(--mid); }
+.setup-chip { font-size: 13px; padding: 3px 10px; border-radius: 99px; cursor: help;
+  background: color-mix(in srgb, var(--mid) 14%, var(--card)); border: 1px solid color-mix(in srgb, var(--mid) 35%, var(--line)); }
+#setup .icon { margin-left: 4px; }
+#setup [data-goto-keys] { margin-left: auto; }
+/* Filtres : champ zone plus large, libellés courts */
+.toolbar-row.filters .field.zone { grid-column: span 2; }
+.toolbar-row.filters .field.zone #f-distance { width: 60px; }
+.toolbar-row.filters .field { overflow: hidden; }
+.toolbar-row.filters .field input { min-width: 0; flex: 1 1 auto; width: 40px; text-align: center; }
+.toolbar-row.filters .field.zone { justify-content: flex-start; gap: 6px; }
+.toolbar-row.filters .field.zone #f-near { flex: 1 1 120px; text-align: left; }
+.toolbar-row.filters .field.zone #f-distance { flex: 0 0 52px; }
