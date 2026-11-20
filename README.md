@@ -61,6 +61,9 @@ quelques secondes.
 > N'exécutez pas `python ...` directement : passez toujours par un `.bat`, qui utilise le `.venv` où les
 > dépendances sont installées (sinon `ModuleNotFoundError: No module named 'yaml'`).
 
+> **Sur téléphone** : ouvrez `http://<ip-du-pc>:5000` (lancez l'interface avec `--host 0.0.0.0`), puis
+> « Ajouter à l'écran d'accueil » : Deal Sniper s'installe comme une application plein écran.
+
 > **Linux / Mac / Raspberry Pi** : mêmes étapes avec `cp .env.example .env`, puis
 > `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m dealsniper ui --open`.
 
@@ -96,12 +99,12 @@ Gardez la fenêtre noire ouverte tant que vous utilisez l'interface : la fermer 
 
 | Onglet | Contenu |
 |---|---|
-| **Annonces** | toutes les annonces trouvées, 20 par page : photo, prix d'achat / revente / marge (« cote » quand la revente vient des prix réels), les 3 notes, distance. **☆** met en favori, **⊘** masque l'annonce, **i** ouvre le détail : panne, ville et distance, cote du marché et estimation de l'IA, coût de la pièce, vendeur (note et évaluations quand le site les donne), description, questions à poser au vendeur, liens de réparation (iFixit, pièce sur eBay / AliExpress), « Je l'ai acheté », et **Analyse du marché** (un modèle plus puissant + recherche web va chercher les prix de vente réels, affiche une fourchette fiable **et un graphique des ventes par date**, à la demande, quelques centimes). Vues Notées / Écartées / Toutes / Favoris / Masquées ; filtres par texte, site, catégorie, notes, prix, marge, distance, période ; tri par date, note, marge, prix, facilité de vente ou distance ; **export CSV** pour Excel. Pendant un passage, une ligne par site montre l'avancement, la durée et le coût IA ; à la fin, le détail de chaque recherche reste affiché. |
-| **Achats** | vos achats (ajoutés depuis une annonce ou à la main) : prix payé, réparation, prix de revente réel. Bénéfice, rentabilité, stock. Dès 3 ventes, Deal Sniper compare vos ventes réelles à ses estimations et ajuste sa prudence tout seul ; chaque vente réelle enrichit aussi la cote du modèle. |
+| **Annonces** | toutes les annonces trouvées, 20 par page : photo, prix d'achat / revente / marge (« cote » quand la revente vient des prix réels), les 3 notes, distance. **☆** met en favori, **⊘** masque l'annonce, **i** ouvre le détail : panne, ville et distance, cote du marché et estimation de l'IA, coût de la pièce, vendeur (note et évaluations quand le site les donne), description, questions à poser au vendeur, **points de vigilance** (vendeur douteux, prix trop bas, enchère…), **mode de remise** (🚚 envoi / 🤝 main propre), **historique de la cote** du modèle, liens de réparation (iFixit, pièce sur eBay / AliExpress), « Je l'ai acheté », et **Analyse du marché** (un modèle plus puissant + recherche web va chercher les prix de vente réels, affiche une fourchette fiable **et un graphique des ventes par date**, à la demande, quelques centimes). Vues Notées / Écartées / Toutes / Favoris / Masquées ; filtres par texte, site, catégorie, notes, prix, marge, distance, période ; tri par date, note, marge, prix, facilité de vente ou distance ; filtre **remise** (envoi / sur place) ; **export CSV** pour Excel. Pendant un passage, une ligne par site montre l'avancement, la durée et le coût IA ; à la fin, le détail de chaque recherche reste affiché. |
+| **Achats** | vos achats (ajoutés depuis une annonce ou à la main) : prix payé, réparation, prix de revente réel. Bénéfice, rentabilité, stock. Dès 3 ventes, Deal Sniper compare vos ventes réelles à ses estimations et ajuste sa prudence tout seul ; chaque vente réelle enrichit aussi la cote du modèle. **Suivi fiscal** : ventes et chiffre d'affaires de l'année, proximité des seuils de déclaration (indicatif). |
 | **Recherches** | ce que chaque site cherche. La carte **🌐 Tous les sites** contient les recherches communes, lancées partout ; chaque site peut en ajouter. |
 | **Catégories** | familles d'objets (PC portables, mini-PC, Dyson…) : mots-clés du titre, budget maximum, exclusions, signaux positifs. Une annonce hors catégorie est écartée gratuitement. |
 | **Filtres** | quatre blocs symétriques : mots interdits, signaux « bonne affaire », déjà vendue / réservée, annonces d'acheteurs. |
-| **Réglages** | menu à gauche : Notifications, Budget IA, Localisation et prix (code postal, France, prix minimum…), Fonctionnement, Installation, Apparence. |
+| **Réglages** | menu à gauche : Notifications (seuil + **message immédiat** pour les pépites, le reste en récap groupé), **Veille** (modèles précis repérés en priorité), Budget IA (**mode sans IA** possible), Localisation et prix, Fonctionnement, Installation (clés `.env`), Apparence. |
 
 Tout est enregistré dans votre `config.yaml` (bouton **Enregistrer** ou **Ctrl+S**) et appliqué au passage suivant.
 
@@ -165,7 +168,8 @@ Tout se règle depuis l'interface ; `config.yaml` reste lisible et commenté si 
 | `categories` | mots-clés, budget maximum, exclusions et signaux par famille d'objets |
 | `filters`, `location` | mots interdits, vendu / réservé, acheteurs, prix minimum, France uniquement, `home` (votre code postal) |
 | `analyzer` | `enabled` (IA ou mode sans IA), modèle de notation, modèle de l'analyse approfondie (`deep_model`), plafond quotidien, prudence (`resale_haircut`, `auto_calibrate`), seuil de la cote (`market_min_margin`) |
-| `notifier` | note minimale pour un message, récapitulatif « à vérifier », marge / facilités minimales |
+| `watchlist` | veille : modèles précis repérés en priorité (notifiés d'office) |
+| `notifier` | seuil de notification, seuil du message immédiat (`instant_min_score`), récap « à vérifier », rappel de fin d'enchère (`auction_reminder_minutes`) |
 | `network` | délai entre deux requêtes vers un même site, pause après un refus |
 
 ## 7. Fonctionnement et coûts
