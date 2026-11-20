@@ -760,7 +760,7 @@ async function loadSettings() {
   $("#n-repair").checked = types.includes("reparation");
   $("#n-direct").checked = types.includes("revente_directe");
 
-  const model = a.model || "claude-haiku-4-5";
+  const model = a.model || "claude-haiku-5-5";
   if (!document.querySelector(`[name=a-model][value="${CSS.escape(model)}"]`)) {
     $("#a-model").insertAdjacentHTML("beforeend",
       `<label class="tile"><input type="radio" name="a-model" value="${esc(model)}"><span>🤖</span><b>${esc(model)}</b><small>défini dans config.yaml</small></label>`);

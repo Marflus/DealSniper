@@ -113,3 +113,11 @@ def test_make_realistic_recomputes_margin_and_caps_score():
     assert clean["marge_nette_estimee"] == 540 - 70 - 60 - 54  # recalculée, pas celle du modèle
     thin = analyzer.make_realistic({**optimistic, "valeur_revente_estimee": 150}, ad, haircut=0.9)
     assert thin["marge_nette_estimee"] < 20 and thin["score_rentabilite"] == 4
+
+
+def test_haiku_5_5_runs_without_thinking_at_low_effort(monkeypatch, config):
+    cfg = {**config, "analyzer": {**config["analyzer"], "model": "claude-haiku-5-5", "effort": None}}
+    an = make_analyzer(monkeypatch, cfg, [("end_turn", {"annonces": [item(1)]})])
+    an.analyze(ads(1))
+    call = an.client.messages.calls[0]
+    assert call["thinking"] == {"type": "disabled"} and call["output_config"]["effort"] == "low"

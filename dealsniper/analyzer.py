@@ -192,6 +192,8 @@ class Analyzer:
         if self.effort is None and not self.model.startswith("claude-haiku-4"):
             self.effort = "low"  # modèles récents : réflexion minimale, inutile pour cette tâche et facturée
         self.use_schema = bool(cfg["structured_output"])
+        # Réflexion coupée sur Haiku 5.5 (accepté avec un effort ≤ high) ; rétablie si l'API la refuse.
+        self.no_thinking = self.model.startswith("claude-haiku-5") and self.effort in ("low", "medium", "high")
         self.resale_haircut = float(cfg.get("resale_haircut", 0.9))
         pricing = {**DEFAULT_PRICING, **{k: tuple(v) for k, v in (cfg.get("pricing") or {}).items()}}
         self.price_in, self.price_out = pricing.get(self.model, (1.0, 5.0))
@@ -215,6 +217,9 @@ class Analyzer:
             params["system"] += '\nRéponds UNIQUEMENT par un objet JSON {"annonces": [...]} sans texte autour.'
         if self.effort:
             output_config["effort"] = self.effort
+        if self.no_thinking:
+            # Haiku 5.5 réfléchit par défaut (tokens facturés) ; inutile pour noter des annonces.
+            params["thinking"] = {"type": "disabled"}
         if output_config:
             params["output_config"] = output_config
 
@@ -239,6 +244,10 @@ class Analyzer:
             message = str(exc).lower()
             if "credit" in message or "billing" in message:
                 raise FatalAPIError(f"crédit API insuffisant : {exc}") from exc
+            if self.no_thinking and "thinking" in message:
+                log.warning("Désactivation de la réflexion refusée par %s : réflexion laissée par défaut.", self.model)
+                self.no_thinking = False
+                return self._analyze_batch(ads, result)
             if self.use_schema and any(w in message for w in ("output_config", "format", "schema")):
                 log.warning("Schéma JSON refusé par %s → mode JSON simple.", self.model)
                 self.use_schema = False

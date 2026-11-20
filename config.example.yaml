@@ -245,11 +245,9 @@ categories:
 #  Analyse IA (Anthropic)
 # -----------------------------------------------------------------------------
 analyzer:
-  # Modèle économique. claude-haiku-5-5 est ~10x moins cher que claude-haiku-4-5
-  # ($0.10 / $0.50 par million de tokens contre $1 / $5) : passez-y si vous voulez
-  # réduire encore le coût (et ajoutez alors  effort: low  ci-dessous).
-  model: "claude-haiku-4-5"
-  # effort: low               # uniquement pour les modèles qui le supportent (pas haiku-4-5)
+  # claude-haiku-5-5 : 0,10 $ / 0,50 $ par million de tokens (10 fois moins que claude-haiku-4-5).
+  # Effort « low » et réflexion désactivée automatiquement : la notation n'en a pas besoin.
+  model: "claude-haiku-5-5"
   batch_size: 20              # annonces par appel API (le prompt système est payé une fois par lot)
   max_description_chars: 400  # description tronquée avant envoi à l'IA
   resale_haircut: 0.9         # prudence : revente estimée par l'IA × 0,9, puis marge recalculée (1 = désactivé)
