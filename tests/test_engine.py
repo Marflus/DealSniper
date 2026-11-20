@@ -68,7 +68,7 @@ class FakeSite(Site):
         return ad
 
 
-def fake_analyze(ads, config, budget):
+def fake_analyze(ads, config, budget, should_stop=None):
     for ad in ads:
         ad.analysis = {"type_affaire": "reparation", "score_rentabilite": 8, "facilite_reparation": 9,
                        "marge_nette_estimee": 80}
@@ -446,8 +446,11 @@ def test_max_ads_per_run_caps_candidates(monkeypatch, config):
         import tempfile
         db = Database(__import__("pathlib").Path(tempfile.mkdtemp()) / "cap.db")
         engine = Engine(cfg, db, http=None)
-        monkeypatch.setattr("dealsniper.analyzer.analyze", lambda ads, c, b=None: sent.append(len(ads)) or __import__(
-            "dealsniper.analyzer", fromlist=["AnalysisResult"]).AnalysisResult(analyzed=list(ads)))
+        def analyze(ads, c, b=None, s=None):
+            sent.append(len(ads))
+            return AnalysisResult(analyzed=list(ads))
+
+        monkeypatch.setattr("dealsniper.analyzer.analyze", analyze)
         monkeypatch.setattr("dealsniper.notifier.notify", lambda ads, c: [])
         stats = await engine.process(FakeSite())
         db.close()
@@ -563,3 +566,29 @@ def test_no_hidden_budget_in_one_off_search(config):
                                  "ignore_category_budget": True, "default_max_budget": None}}
     ski = Ad(title="Ski Rossignol 170 cm", url="https://x/ski", source="vinted", price=180)
     assert check(ski, cfg) is None and ski.category == "Autre"
+
+
+def test_ai_failures_are_given_up_after_three_tries(monkeypatch, config):
+    """Une annonce que l'IA ne note jamais n'est pas repayée indéfiniment : abandonnée au 3e échec."""
+    calls = []
+
+    def always_fails(ads, cfg, budget, should_stop=None):
+        calls.append(len(ads))
+        return AnalysisResult(failed=list(ads))
+
+    monkeypatch.setattr(engine.analyzer, "analyze", always_fails)
+
+    async def go():
+        db = Database(data_dir() / "f.db")
+        async with client() as http:
+            eng = engine.Engine(config, db, http)
+            for _ in range(4):
+                await eng.process(FakeSite(config))
+        seen = db.search(days=1)
+        db.close()
+        return seen
+
+    seen = asyncio.run(go())
+    assert calls == [1, 1, 1]  # 3 essais pour le ThinkPad, puis plus aucun appel
+    thinkpad = next(a for a in seen if a["uid"] == "ebay:100000000001")
+    assert thinkpad["status"] == "rejected" and "3 essais" in thinkpad["reason"]

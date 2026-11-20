@@ -32,6 +32,8 @@ SITE_LABELS = {"ebay": "eBay", "leboncoin": "Leboncoin", "vinted": "Vinted", "fa
 
 log = logging.getLogger(__name__)
 
+MAX_AI_ATTEMPTS = 3  # échecs d'analyse propres à une annonce avant de l'abandonner (évite de repayer sans fin)
+
 # Annulation demandée depuis l'interface (bouton « Annuler ») : le passage s'arrête proprement au
 # prochain point de contrôle (après la liste, entre deux annonces, avant l'analyse IA).
 CANCEL = threading.Event()
@@ -134,13 +136,15 @@ class Engine:
         show(site.label, f"{len(listed)} annonces · analyse IA de {len(candidates)}…")
         async with self._ai_lock:
             budget = await self.budget_left()
-            result = await asyncio.to_thread(analyzer.analyze, candidates, self.config, budget)
+            result = await asyncio.to_thread(analyzer.analyze, candidates, self.config, budget,
+                                             self.stopping.is_set)
             await self.db.add_cost(result.cost_usd)
             self.progress.add_cost(site.label, result.cost_usd)
             sent = await asyncio.to_thread(notifier.notify, result.analyzed, self.config)
         sent_uids = {ad.uid for ad in sent}
         await self.db.remember_many([(ad, "analyzed", ad.uid in sent_uids, None, prints.get(ad.uid))
                                      for ad in result.analyzed])
+        await self._count_failures(result.failed, prints)
         stats.update(analysées=len(result.analyzed), notifiées=len(sent))
         return stats
 
@@ -160,6 +164,18 @@ class Engine:
         if distance is not None and distance > float(zone["km"]):
             return f"hors zone ({distance:.0f} km > {float(zone['km']):.0f} km)"
         return None
+
+    async def _count_failures(self, failed: list[Ad], prints: dict[str, str | None]) -> None:
+        """Annonces que l'IA n'a pas pu noter : réessayées au passage suivant, abandonnées au bout de
+        MAX_AI_ATTEMPTS échecs (sinon un refus du modèle serait repayé à chaque passage)."""
+        if not failed:
+            return
+        counts = await asyncio.to_thread(self.db.count_failures, [ad.uid for ad in failed])
+        given_up = [ad for ad in failed if counts.get(ad.uid, 0) >= MAX_AI_ATTEMPTS]
+        if given_up:
+            log.warning("%d annonce(s) abandonnée(s) après %d échecs d'analyse IA", len(given_up), MAX_AI_ATTEMPTS)
+            reason = f"analyse IA impossible ({MAX_AI_ATTEMPTS} essais)"
+            await self.db.remember_many([(ad, "rejected", False, reason, prints.get(ad.uid)) for ad in given_up])
 
     def _check(self, ad: Ad) -> str | None:
         """Raison de rejet par le filtre ; une annonce surveillée n'est jamais écartée

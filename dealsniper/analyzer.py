@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -82,7 +83,12 @@ class FatalAPIError(RuntimeError):
 @dataclass
 class AnalysisResult:
     analyzed: list[Ad] = field(default_factory=list)
+    # Échec propre à l'annonce (refus du modèle, réponse illisible, requête rejetée, annonce absente
+    # de la réponse) : compté, et abandonné après quelques essais pour ne pas repayer indéfiniment.
     failed: list[Ad] = field(default_factory=list)
+    # Pas analysée sans que l'annonce y soit pour quelque chose (budget atteint, clé refusée,
+    # réseau ou API indisponible, annulation) : simplement reportée au prochain passage.
+    deferred: list[Ad] = field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
@@ -267,7 +273,7 @@ class Analyzer:
             return
         except (anthropic.APIConnectionError, anthropic.APIStatusError) as exc:
             log.error("Erreur API temporaire (%s), lot de %d reporté.", type(exc).__name__, len(ads))
-            result.failed.extend(ads)
+            result.deferred.extend(ads)
             return
         except (json.JSONDecodeError, ValueError) as exc:
             log.error("Réponse JSON illisible (%s), lot de %d reporté.", exc, len(ads))
@@ -299,21 +305,26 @@ class Analyzer:
                 log.warning("Pas de réponse pour « %s », reportée.", ad.title[:50])
                 result.failed.append(ad)
 
-    def analyze(self, ads: list[Ad], budget_left_usd: float | None = None) -> AnalysisResult:
-        """Analyse lot par lot. Ne lève jamais : les erreurs finissent dans `failed`."""
+    def analyze(self, ads: list[Ad], budget_left_usd: float | None = None,
+                should_stop: Callable[[], bool] | None = None) -> AnalysisResult:
+        """Analyse lot par lot. Ne lève jamais : les erreurs finissent dans `failed` ou `deferred`."""
         result = AnalysisResult()
         for start in range(0, len(ads), self.batch_size):
+            if should_stop and should_stop():
+                log.info("Analyse annulée : %d annonce(s) reportée(s).", len(ads) - start)
+                result.deferred.extend(ads[start:])
+                break
             if budget_left_usd is not None and result.cost_usd >= budget_left_usd:
                 log.warning("Plafond de dépense atteint : %d annonce(s) reportée(s).", len(ads) - start)
-                result.failed.extend(ads[start:])
+                result.deferred.extend(ads[start:])
                 break
             batch = ads[start:start + self.batch_size]
             try:
                 self._analyze_batch(batch, result)
             except FatalAPIError as exc:
                 log.error("Analyse interrompue : %s", exc)
-                done = {id(a) for a in result.analyzed + result.failed}
-                result.failed.extend(a for a in ads[start:] if id(a) not in done)
+                done = {id(a) for a in result.analyzed + result.failed + result.deferred}
+                result.deferred.extend(a for a in ads[start:] if id(a) not in done)
                 break
             log.info(
                 "Lot %d-%d analysé — %d in / %d out tokens ≈ %.4f $",
@@ -322,16 +333,17 @@ class Analyzer:
         return result
 
 
-def analyze(ads: list[Ad], config: dict[str, Any], budget_left_usd: float | None = None) -> AnalysisResult:
+def analyze(ads: list[Ad], config: dict[str, Any], budget_left_usd: float | None = None,
+            should_stop: Callable[[], bool] | None = None) -> AnalysisResult:
     """Point d'entrée utilisé par le pipeline."""
     if not ads:
         return AnalysisResult()
     if not env("ANTHROPIC_API_KEY"):
         log.error("ANTHROPIC_API_KEY manquante : analyse impossible.")
-        return AnalysisResult(failed=list(ads))
+        return AnalysisResult(deferred=list(ads))
     try:
         analyzer = Analyzer(config)
     except Exception as exc:  # SDK absent, configuration invalide…
         log.error("Impossible d'initialiser l'analyseur : %s", exc)
-        return AnalysisResult(failed=list(ads))
-    return analyzer.analyze(ads, budget_left_usd)
+        return AnalysisResult(deferred=list(ads))
+    return analyzer.analyze(ads, budget_left_usd, should_stop)

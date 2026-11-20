@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS seen (
 );
 CREATE TABLE IF NOT EXISTS sites (name TEXT PRIMARY KEY, paused_until TEXT, last_error TEXT);
 CREATE TABLE IF NOT EXISTS costs (day TEXT PRIMARY KEY, usd REAL NOT NULL DEFAULT 0);
+-- Échecs d'analyse IA par annonce (refus, réponse illisible…) : abandon après quelques essais.
+CREATE TABLE IF NOT EXISTS ai_failures (uid TEXT PRIMARY KEY, count INTEGER NOT NULL, last_at TEXT NOT NULL);
 -- Cote du marché (market.py) : un prix observé par annonce, et des échantillons eBay par modèle.
 CREATE TABLE IF NOT EXISTS prices (
     uid TEXT PRIMARY KEY, model TEXT NOT NULL, price REAL NOT NULL, working INTEGER NOT NULL,
@@ -142,6 +144,16 @@ class Database:
             [(ad.uid, ad.source, status, ad.score if ad.analysis else None, int(notified), now,
               _dumps(ad.to_dict()), reason, fingerprint) for ad, status, notified, reason, fingerprint in rows],
         )
+
+    def count_failures(self, uids: list[str]) -> dict[str, int]:
+        """Ajoute un échec d'analyse IA à chaque annonce ; renvoie le nombre d'échecs de chacune."""
+        if not uids:
+            return {}
+        self._many("INSERT INTO ai_failures (uid, count, last_at) VALUES (?, 1, ?) "
+                   "ON CONFLICT(uid) DO UPDATE SET count = count + 1, last_at = excluded.last_at",
+                   [(uid, _stamp()) for uid in uids])
+        rows = self._sql(f"SELECT uid, count FROM ai_failures WHERE uid IN ({_marks(len(uids))})", tuple(uids))
+        return dict(rows)
 
     async def rejected_among(self, uids: list[str]) -> set[str]:
         """Parmi `uids`, ceux déjà vus mais écartés par le filtre (à réévaluer si les critères changent)."""
@@ -376,6 +388,7 @@ class Database:
         limit = _stamp(-timedelta(days=days))
         await self._asql("DELETE FROM seen WHERE seen_at < ? AND favorite = 0", (limit,))
         await self._asql("DELETE FROM prices WHERE seen_at < ?", (limit,))
+        await self._asql("DELETE FROM ai_failures WHERE last_at < ?", (limit,))
 
     def reset(self) -> None:
         self._sql("DELETE FROM seen")

@@ -51,7 +51,17 @@ def test_split_on_max_tokens_and_budget(monkeypatch, config):
     assert len(an.analyze(ads(2)).analyzed) == 2
     an = make_analyzer(monkeypatch, config, [("end_turn", {"annonces": [item(i) for i in range(1, 11)]})])
     res = an.analyze(ads(20), budget_left_usd=0.0001)
-    assert len(res.analyzed) == 10 and len(res.failed) == 10
+    assert len(res.analyzed) == 10 and len(res.failed) == 10  # absentes de la réponse : échecs comptés
+
+
+def test_budget_and_cancel_defer_without_counting_failures(monkeypatch, config):
+    config["analyzer"]["batch_size"] = 10
+    an = make_analyzer(monkeypatch, config, [("end_turn", {"annonces": [item(i) for i in range(1, 11)]})])
+    res = an.analyze(ads(20), budget_left_usd=0.0001)  # plafond atteint après le 1er lot
+    assert len(res.analyzed) == 10 and len(res.deferred) == 10 and not res.failed
+    an = make_analyzer(monkeypatch, config, [])
+    res = an.analyze(ads(5), should_stop=lambda: True)  # annulé avant le premier appel
+    assert len(res.deferred) == 5 and not an.client.messages.calls
 
 
 def test_prompt_rules():
