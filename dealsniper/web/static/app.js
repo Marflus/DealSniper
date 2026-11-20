@@ -243,17 +243,18 @@ function filteredAds() {
   return ads.sort(sorters[$("#f-sort").value] || sorters.recent);
 }
 
-// Pastilles des deux notes secondaires : facilité de réparation et facilité de vente (demande).
-function scoreBadges(a) {
-  const badge = (value, icon, label, title) => {
-    if (value == null) return "";
-    const level = value >= 7 ? "pos" : value >= 4 ? "mid" : "neg";
-    return `<span class="ease ${level}" title="${title}">${icon} ${label} ${value}/10</span>`;
-  };
-  const repair = a.type_affaire === "revente_directe" ? ""
-    : badge(a.facilite_reparation, "🔧", "réparation", "Facilité de réparation : 10 = rien ou presque à faire");
-  const sale = badge(a.facilite_vente, "🔥", "vente", "Facilité de vente : 10 = modèle très recherché, part en quelques jours");
-  return repair || sale ? `<div class="badges">${repair}${sale}</div>` : "";
+// Les 3 notes, posées sur la photo : rentabilité (note IA), facilité de réparation, facilité de vente.
+function thumbScores(ad) {
+  const a = ad.analysis || {};
+  const level = (v) => (v >= 7 ? "s-good" : v >= 5 ? "s-mid" : "s-low");
+  const pill = (value, icon, title) => (value == null ? ""
+    : `<span class="pill ${level(value)}" title="${title}">${icon}<b>${value}</b></span>`);
+  const pills = [
+    pill(ad.score, "⭐", "Note de rentabilité (IA) sur 10"),
+    a.type_affaire === "revente_directe" ? "" : pill(a.facilite_reparation, "🔧", "Facilité de réparation sur 10 (10 = rien ou presque à faire)"),
+    pill(a.facilite_vente, "🔥", "Facilité de vente sur 10 (10 = très recherché, part en quelques jours)"),
+  ].join("");
+  return pills ? `<div class="thumb-scores">${pills}</div>` : "";
 }
 
 // « Laon 02000 02000 » → « Laon 02000 »
@@ -261,8 +262,6 @@ const cleanPlace = (place) => String(place || "").split(/\s+/).filter((w, i, all
 
 function adCard(ad) {
   const a = ad.analysis || {};
-  const scoreClass = ad.score >= 7 ? "s-good" : ad.score >= 5 ? "s-mid" : "s-low";
-  const score = ad.score != null ? `<span class="score ${scoreClass}">${ad.score}</span>` : "";
   const image = ad.image
     ? `<img src="${esc(ad.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'placeholder',textContent:'📦'}))">`
     : `<span class="placeholder">📦</span>`;
@@ -275,7 +274,7 @@ function adCard(ad) {
   const place = cleanPlace(ad.location);
 
   return `<article class="ad ${ad.status}" data-uid="${esc(ad.uid)}" ${ad.image == null ? "data-need-image" : ""}>
-    <a class="thumb" href="${esc(ad.url)}" target="_blank" rel="noopener">${image}${score}</a>
+    <a class="thumb" href="${esc(ad.url)}" target="_blank" rel="noopener">${image}${ad.analysis ? thumbScores(ad) : ""}</a>
     <div class="body">
       <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${esc(ad.title)}</a>
       <div class="stats">
@@ -284,7 +283,6 @@ function adCard(ad) {
         <div class="${marginClass}"><span>Marge</span><b>${margin}</b></div>
       </div>
       ${fault ? `<div class="fault">🩺 ${esc(fault)}</div>` : ""}
-      ${scoreBadges(a)}
       ${ad.reason ? `<div class="reason">✗ ${esc(ad.reason)}</div>` : ""}
       <div class="meta">
         <div>${place ? `📍 ${esc(place)} · ` : ""}${saleType}</div>
@@ -470,12 +468,17 @@ function searchRow(site, row) {
     <button class="icon danger" data-remove title="Supprimer cette recherche">🗑</button></div>`;
 }
 
+// Recherches par ordre alphabétique (puis par état : pour pièces, occasion…).
+const sortSearches = (rows) => [...rows].sort((x, y) =>
+  String(x.query || "").localeCompare(String(y.query || ""), "fr", { sensitivity: "base" })
+  || String(x.condition || "").localeCompare(String(y.condition || "")));
+
 function searchTable(key, rows) {
   const fields = SEARCH_FIELDS[key] || SEARCH_FIELDS.default;
   const label = (f) => (key === "common" && f === "condition" ? "État (eBay)" : FIELD_LABELS[f] || f);
   return `<div class="site-body" style="--cols: ${fields.map((f) => (f === "query" ? "minmax(0, 2fr)" : f === "max_price" ? "120px" : "minmax(0, 1fr)")).join(" ")} 38px">
         <div class="search-row head">${fields.map((f) => `<span>${label(f)}</span>`).join("")}<span></span></div>
-        <div class="search-list">${rows.map((r) => searchRow(key, r)).join("")}</div>
+        <div class="search-list">${sortSearches(rows).map((r) => searchRow(key, r)).join("")}</div>
         <button class="add" data-add-search>＋ Ajouter une recherche</button>
       </div>`;
 }

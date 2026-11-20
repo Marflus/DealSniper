@@ -10,27 +10,23 @@
 #  Recherches communes : lancées sur TOUS les sites activés (base commune).
 #  condition (parts = pour pièces / HS, used = occasion, any = tout) ne sert qu'à eBay ;
 #  sur les autres sites, deux recherches identiques sont fusionnées (prix max le plus haut).
-#  Ciblage : objets très demandés, pannes connues et simples, pièces faciles à trouver.
 # -----------------------------------------------------------------------------
+#  Pourquoi ces objets : très demandés, pannes connues et simples (ThinkPad / Latitude / EliteBook :
+#  SSD, RAM, batterie, charnière ; MacBook : batterie, clavier ; ThinkCentre : mini-PC vendus sans disque ;
+#  Dyson : batterie ; Sonos / Bose : alimentation, batterie ; outils vendus sans batterie).
+#  Ordre alphabétique (l'interface les trie de la même façon).
 searches:
-  # --- À réparer : panne simple, forte demande ---
-  - {query: "thinkpad", condition: parts, max_price: 130}         # sans SSD/RAM, batterie, clavier, charnière
-  - {query: "macbook", condition: parts, max_price: 200}          # batterie, clavier, SSD (évite carte mère / liquide)
+  - {query: "bose", condition: parts, max_price: 80}
   - {query: "dell latitude", condition: parts, max_price: 100}
-  - {query: "thinkcentre", condition: any, max_price: 90}         # mini-PC très demandés (homelab), souvent sans disque
-  - {query: "ps5", condition: parts, max_price: 200}              # port HDMI, lecteur, surchauffe
-  - {query: "ps4 pro", condition: parts, max_price: 80}           # surchauffe : nettoyage + pâte thermique
-  - {query: "nintendo switch", condition: parts, max_price: 110}  # joy-con, lecteur de cartes, ventilateur
-  - {query: "steam deck", condition: parts, max_price: 220}       # joysticks, SSD, écran
-  - {query: "xbox series", condition: parts, max_price: 160}
-  - {query: "dyson", condition: parts, max_price: 80}             # batterie HS : pièce standard, revente rapide
-  - {query: "sonos", condition: parts, max_price: 80}             # alimentation, très recherché
-  # --- Revente directe : fonctionnel, sous la cote ---
-  - {query: "ps5", condition: used, max_price: 260}
-  - {query: "nintendo switch oled", condition: used, max_price: 180}
-  - {query: "steam deck", condition: used, max_price: 260}
-  - {query: "makita sans batterie", condition: any, max_price: 80}
   - {query: "dewalt machine nue", condition: any, max_price: 80}
+  - {query: "dyson", condition: parts, max_price: 80}
+  - {query: "hp elitebook", condition: parts, max_price: 100}
+  - {query: "macbook", condition: parts, max_price: 200}
+  - {query: "makita sans batterie", condition: any, max_price: 80}
+  - {query: "sonos", condition: parts, max_price: 80}
+  - {query: "surface pro", condition: parts, max_price: 120}
+  - {query: "thinkcentre", condition: any, max_price: 90}
+  - {query: "thinkpad", condition: parts, max_price: 130}
 
 # -----------------------------------------------------------------------------
 #  Sites surveillés : un bloc par fichier de dealsniper/sites/
@@ -44,7 +40,7 @@ sites:
   #   eBay comprend « (a,b) » = a OU b : « thinkpad (t480,t490) »
   ebay:
     enabled: true
-    interval: [720, 1080]      # 18 recherches toutes les 12-18 min ≈ 1 800 appels/jour (quota : 5 000)
+    interval: [600, 900]       # 13 recherches toutes les 10-15 min ≈ 1 500 appels/jour (quota : 5 000)
     marketplace: EBAY_FR
     country: FR
     limit: 100                 # annonces récentes par recherche (max 200)
@@ -220,12 +216,6 @@ categories:
     keywords: ["raspberry", "raspberry pi"]
     max_budget: 40
     exclude_keywords: ["boitier seul", "alimentation seule"]
-
-  - name: "Consoles"
-    keywords: ["ps5", "ps4", "playstation", "xbox", "switch", "steam deck", "nintendo"]
-    max_budget: 200
-    exclude_keywords: ["jeu seul", "manette seule", "boite seule", "jeux uniquement", "puce", "hackee", "ban", "switch reseau", "gigabit", "ethernet"]
-    include_keywords: ["surchauffe", "bruyante", "ventilateur", "hdmi", "port hdmi", "lecteur hs", "ne lit plus", "joycon", "drift", "s'eteint", "ecran bleu", "carte sd"]
 
   - name: "Écrans & TV"
     keywords: ["ecran", "moniteur", "tv", "televiseur", "television", "oled", "qled"]
