@@ -81,6 +81,7 @@ class Engine:
             budget = None if cap is None else max(0.0, cap - await self.db.cost_today())
             result = await asyncio.to_thread(analyzer.analyze, candidates, self.config, budget)
             await self.db.add_cost(result.cost_usd)
+            self.progress.add_cost(site.label, result.cost_usd)
             sent = await asyncio.to_thread(notifier.notify, result.analyzed, self.config)
         sent_uids = {ad.uid for ad in sent}
         for ad in result.analyzed:
@@ -117,9 +118,8 @@ class Engine:
             await self.process_safely(site)
             paused = await self.db.paused_until(site.name)
             wait = (paused - datetime.now(timezone.utc)).total_seconds() if paused else random.uniform(*site.interval)
-            last = self.progress.sites.get(site.label, {}).get("text", "")
             next_run = (datetime.now() + timedelta(seconds=wait)).strftime("%H:%M")
-            self.progress.done(site.label, f"{last} · prochain passage à {next_run}")
+            self.progress.append(site.label, f" · prochain passage à {next_run}")
             await self.sleep(wait)
 
 

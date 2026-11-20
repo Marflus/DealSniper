@@ -35,10 +35,12 @@ def _summary(ad: Ad) -> dict[str, str]:
     margin_txt = f"{'+' if (margin or 0) >= 0 else ''}{_eur(margin)}" if margin is not None else "?"
     fault = a.get("panne_probable") or "?"
     ease = a.get("facilite_reparation")
+    demand = a.get("facilite_vente")
     return {
         "title": ad.title,
         "buy": buy,
-        "resale": f"{_eur(a.get('valeur_revente_estimee'))} (marge {margin_txt})",
+        "resale": f"{_eur(a.get('valeur_revente_estimee'))} (marge {margin_txt})"
+                  + (f" · vente {demand}/10" if demand else ""),
         "fault": "aucune (revente en l'état)" if fault.lower() == "aucune"
         else f"{fault} (facilité {ease}/10)" if ease else fault,
         "url": ad.url,
@@ -204,7 +206,7 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
     min_score = int(cfg["min_score"])
     watch_score = cfg.get("watch_score")
     deal_types = set(cfg.get("deal_types") or ("reparation", "revente_directe"))
-    min_margin, min_ease = cfg.get("min_margin"), cfg.get("min_ease")
+    min_margin, min_ease, min_sale = cfg.get("min_margin"), cfg.get("min_ease"), cfg.get("min_sale")
 
     def wanted(ad: Ad) -> bool:
         if not ad.analysis or ad.deal_type not in deal_types:
@@ -214,6 +216,8 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
             return False
         ease = ad.analysis.get("facilite_reparation")  # ne concerne que les objets à réparer
         if min_ease is not None and ad.deal_type == "reparation" and (ease or 0) < int(min_ease):
+            return False
+        if min_sale is not None and (ad.analysis.get("facilite_vente") or 0) < int(min_sale):
             return False
         return True
 
@@ -248,7 +252,7 @@ def demo_ad() -> Ad:
         url="https://example.com/annonce-de-test",
         source="test", price=85.0, shipping=6.5, category="PC portables pros", location="Lyon 69003",
         analysis={
-            "type_affaire": "reparation", "score_rentabilite": 8, "facilite_reparation": 9,
+            "type_affaire": "reparation", "score_rentabilite": 8, "facilite_reparation": 9, "facilite_vente": 8,
             "panne_probable": "SSD manquant", "cout_piece_estime": 25, "valeur_revente_estimee": 220,
             "marge_nette_estimee": 82,
         },

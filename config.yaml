@@ -263,6 +263,7 @@ notifier:
   deal_types: ["reparation", "revente_directe"]
   min_margin: null            # marge nette minimale (€) pour être notifié (null = pas de minimum)
   min_ease: null              # facilité de réparation minimale (1-10) pour les objets à réparer (null = toutes)
+  min_sale: null              # facilité de vente minimale (1-10) : demande sur le marché (null = toutes)
 
 # -----------------------------------------------------------------------------
 #  Stockage (data/dealsniper.db)

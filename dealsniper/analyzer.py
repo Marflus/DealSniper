@@ -32,6 +32,8 @@ score_rentabilite (1-10) :
 
 facilite_reparation (1-10) : 10 = rien à réparer ou pièce à brancher sans outil ; 7-9 = pièce standard et tournevis (SSD, RAM, batterie, nettoyage, pâte thermique, chargeur) ; 4-6 = démontage poussé (écran, clavier, nappe, port) ; 1-3 = soudure, micro-soudure ou panne inconnue.
 
+facilite_vente (1-10) : demande en occasion en France. 10 = modèle très recherché qui part en quelques jours ; 5 = quelques semaines ; 1-3 = ancien, de niche ou peu demandé. Une vente difficile baisse score_rentabilite.
+
 Règles :
 - Montants en euros, prix_total = prix + port. Enchère : le prix est l'enchère actuelle, raisonne sur un prix final probable.
 - valeur_revente_estimee : prix d'occasion réaliste en France une fois réparé, jamais le prix neuf.
@@ -46,6 +48,7 @@ _ITEM_FIELDS: dict[str, Any] = {
     "type_affaire": {"type": "string", "enum": list(DEAL_TYPES)},
     "score_rentabilite": {"type": "integer"},
     "facilite_reparation": {"type": "integer"},
+    "facilite_vente": {"type": "integer"},
     "panne_probable": {"type": "string"},
     "cout_piece_estime": {"type": "number"},
     "valeur_revente_estimee": {"type": "number"},
@@ -144,6 +147,7 @@ def sanitize_analysis(raw: dict[str, Any]) -> dict[str, Any]:
         "type_affaire": deal_type,
         "score_rentabilite": note("score_rentabilite", 1),
         "facilite_reparation": note("facilite_reparation", 5),
+        "facilite_vente": note("facilite_vente", 5),
         "panne_probable": str(raw.get("panne_probable", ""))[:120],
         "cout_piece_estime": num("cout_piece_estime"),
         "valeur_revente_estimee": num("valeur_revente_estimee"),

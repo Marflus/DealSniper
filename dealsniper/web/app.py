@@ -38,6 +38,8 @@ def _yaml() -> YAML:
     yaml.preserve_quotes = True
     yaml.width = 4096  # ne jamais couper une liste de mots en plein milieu
     yaml.indent(mapping=2, sequence=4, offset=2)
+    # « min_margin: null » plutôt que « min_margin: » (plus lisible dans config.yaml)
+    yaml.representer.add_representer(type(None), lambda r, _: r.represent_scalar("tag:yaml.org,2002:null", "null"))
     return yaml
 
 
@@ -180,10 +182,10 @@ def write_settings(new: dict[str, Any]) -> None:
 
     notifier = new.get("notifier") or {}
     target = doc.setdefault("notifier", CommentedMap())
-    _set_numbers(doc, "notifier", notifier, ("min_score", "watch_score", "min_margin", "min_ease"),
-                 nullable=("watch_score", "min_margin", "min_ease"))
+    _set_numbers(doc, "notifier", notifier, ("min_score", "watch_score", "min_margin", "min_ease", "min_sale"),
+                 nullable=("watch_score", "min_margin", "min_ease", "min_sale"))
     if "deal_types" in notifier:
-        target["deal_types"] = _seq(target.get("deal_types"), list(notifier["deal_types"]), flow=True)
+        target["deal_types"] = _seq(target.get("deal_types"), _words(notifier["deal_types"]), flow=True)
 
     analyzer = new.get("analyzer") or {}
     target = doc.setdefault("analyzer", CommentedMap())
@@ -234,7 +236,7 @@ def create_app() -> Flask:
         except Exception:  # config.yaml invalide : le plafond n'est simplement pas affiché
             cap = None
         return jsonify(ads=items, cost_today=round(cost, 4), cost_cap=cap, running=state["running"],
-                       error=state["error"], progress=progress.current.snapshot() if state["running"] else [])
+                       error=state["error"], progress=progress.current.snapshot())
 
     @app.get("/api/settings")
     def get_settings():

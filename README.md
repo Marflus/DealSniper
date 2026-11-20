@@ -133,8 +133,10 @@ eBay : Recherche "thinkpad" — 25 annonces /
 Leboncoin : 50 annonces · 6 nouvelles · 2 analysées · 0 notifiées
 ```
 
+Chaque ligne affiche aussi la durée et le coût IA du site, et une ligne « Total » résume le passage.
 Un connecteur alimente cette ligne en appelant `self.report(requete, nb_annonces)` après chaque recherche.
-Chaque annonce notée reçoit aussi une **facilité de réparation** de 1 à 10 (10 = aucune réparation ou pièce
+Chaque annonce notée reçoit, en plus de sa note, une **facilité de vente** de 1 à 10 (10 = modèle très
+recherché qui part en quelques jours) et une **facilité de réparation** de 1 à 10 (10 = aucune réparation ou pièce
 qui se change sans outil, 1 = soudure ou panne inconnue), visible dans l'interface et sur Telegram.
 
 ## Où le faire tourner

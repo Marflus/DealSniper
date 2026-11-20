@@ -30,7 +30,7 @@ def ads(n):
 
 
 def item(i, score=8):
-    return {"id": i, "type_affaire": "reparation", "score_rentabilite": score, "facilite_reparation": 9,
+    return {"id": i, "type_affaire": "reparation", "score_rentabilite": score, "facilite_reparation": 9, "facilite_vente": 8,
             "panne_probable": "SSD absent", "cout_piece_estime": 20, "valeur_revente_estimee": 200,
             "marge_nette_estimee": 90}
 
@@ -70,7 +70,7 @@ def test_telegram_format_is_short():
     assert txt.splitlines() == [
         "<b>PS5 Slim</b>",
         "💶 Achat : 250 €",
-        "📈 Revente : 200 € (marge +90 €)",
+        "📈 Revente : 200 € (marge +90 €) · vente 8/10",
         "🔧 Panne : SSD absent (facilité 9/10)",
         '🔗 <a href="https://www.ebay.fr/itm/123456789012">Voir l\'annonce</a>',
     ]
@@ -88,6 +88,7 @@ def test_sanitize_ease_score_and_schema():
     clean = analyzer.sanitize_analysis({"facilite_reparation": "12", "score_rentabilite": "x"})
     assert clean["facilite_reparation"] == 10 and clean["score_rentabilite"] == 1
     required = analyzer.RESPONSE_SCHEMA["properties"]["annonces"]["items"]["required"]
+    assert "facilite_vente" in required and analyzer.sanitize_analysis({})["facilite_vente"] == 5
     assert "facilite_reparation" in required and "justification_courte" not in required
 
 

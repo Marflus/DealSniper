@@ -37,7 +37,7 @@ DEFAULTS: dict[str, Any] = {
                  "max_tokens": 4096, "max_daily_cost_usd": 1.00, "max_retries": 4, "timeout_seconds": 90,
                  "structured_output": True, "pricing": {}},
     "notifier": {"min_score": 7, "watch_score": 5, "deal_types": ["reparation", "revente_directe"],
-                 "min_margin": None, "min_ease": None},
+                 "min_margin": None, "min_ease": None, "min_sale": None},
     "storage": {"seen_retention_days": 90},
 }
 

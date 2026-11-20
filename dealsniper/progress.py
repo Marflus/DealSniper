@@ -1,7 +1,8 @@
 """Progression d'un passage : une ligne par site, mise à jour en place dans le terminal.
 
-    eBay : 312 annonces · 12 nouvelles · 3 analysées · 1 notifiée
-    Vinted : Recherche "thinkpad" — 25 annonces /
+    eBay : 312 annonces · 12 nouvelles · 3 analysées · 1 notifiée · 1 min 12 s · IA 0,0123 $
+    Vinted : Recherche "thinkpad" — 25 annonces · 42 s /
+    Total : 1 min 54 s · IA 0,0123 $
 
 Le même état est lu par l'interface web (`snapshot`).
 """
@@ -12,35 +13,92 @@ import asyncio
 import logging
 import os
 import sys
+import time
 
 SPINNER = "|/-\\"
+
+
+def duration(seconds: float) -> str:
+    """42 → « 42 s », 130 → « 2 min 10 s », 3720 → « 1 h 02 »."""
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds} s"
+    if seconds < 3600:
+        return f"{seconds // 60} min {seconds % 60:02d} s"
+    return f"{seconds // 3600} h {seconds % 3600 // 60:02d}"
+
+
+def dollars(usd: float) -> str:
+    return f"{usd:.4f} $".replace(".", ",")
 
 
 class Progress:
     def __init__(self, live: bool = False):
         self.live = live and sys.stdout.isatty()
         self.sites: dict[str, dict] = {}
+        self.started = time.monotonic()
         self._frame = 0
         self._drawn = 0
         if self.live and os.name == "nt":
             os.system("")  # active les codes d'affichage ANSI dans la console Windows
 
     # --- état -----------------------------------------------------------------
+    def _state(self, site: str) -> dict:
+        state = self.sites.get(site)
+        if state is None or state["done"]:  # nouveau passage pour ce site : le chrono repart
+            state = self.sites[site] = {"text": "", "done": False, "start": time.monotonic(), "end": None, "cost": 0.0}
+        return state
+
     def update(self, site: str, text: str) -> None:
-        self.sites[site] = {"text": text, "done": False}
+        self._state(site)["text"] = text
         self.render()
 
     def done(self, site: str, text: str) -> None:
-        self.sites[site] = {"text": text, "done": True}
+        state = self._state(site)
+        state.update(text=text, done=True, end=time.monotonic())
         self.render()
 
-    def snapshot(self) -> list[dict]:
-        return [{"site": name, **state} for name, state in self.sites.items()]
+    def append(self, site: str, text: str) -> None:
+        """Complète la ligne d'un site sans relancer son chrono (« · prochain passage à 14:05 »)."""
+        if site in self.sites:
+            self.sites[site]["text"] += text
+            self.render()
+
+    def add_cost(self, site: str, usd: float) -> None:
+        self._state(site)["cost"] += usd
+
+    def elapsed(self, state: dict) -> float:
+        return (state["end"] or time.monotonic()) - state["start"]
+
+    @property
+    def total_elapsed(self) -> float:
+        """Durée du passage, figée quand tous les sites ont fini."""
+        states = list(self.sites.values())
+        if states and all(s["done"] for s in states):
+            return max(s["end"] for s in states) - self.started
+        return time.monotonic() - self.started
+
+    @property
+    def total_cost(self) -> float:
+        return sum(s["cost"] for s in self.sites.values())
+
+    def snapshot(self) -> dict:
+        """État pour l'interface web (durées en secondes)."""
+        sites = [{"site": name, "text": s["text"], "done": s["done"], "elapsed": round(self.elapsed(s), 1),
+                  "cost": round(s["cost"], 5)} for name, s in self.sites.items()]
+        return {"sites": sites, "elapsed": round(self.total_elapsed, 1),
+                "cost": round(self.total_cost, 5), "done": bool(sites) and all(s["done"] for s in sites)}
 
     # --- affichage terminal ------------------------------------------------------
     def lines(self) -> list[str]:
         spin = SPINNER[self._frame % len(SPINNER)]
-        return [f"{name} : {s['text']}" + ("" if s["done"] else f" {spin}") for name, s in self.sites.items()]
+        lines = []
+        for name, s in self.sites.items():
+            extra = f" · {duration(self.elapsed(s))}" + (f" · IA {dollars(s['cost'])}" if s["cost"] else "")
+            lines.append(f"{name} : {s['text']}{extra}" + ("" if s["done"] else f" {spin}"))
+        if len(lines) > 1 or self.total_cost:
+            lines.append(f"Total : {duration(self.total_elapsed)} · IA {dollars(self.total_cost)}")
+        return lines
 
     def clear(self) -> None:
         if self.live and self._drawn:
