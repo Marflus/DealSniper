@@ -15,16 +15,25 @@ import yaml
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
 # Valeurs par défaut : config.yaml ne précise que ce qui change.
-# Marques de qualité, à cote stable et très demandées en occasion (repérées dans le titre).
+# Marques de qualité, à cote stable et très demandées en occasion (repérées dans le TITRE, en mot entier).
+# Formes précises pour éviter les faux positifs : « microsoft surface » plutôt que « surface »
+# (« plan de travail surface »), « google pixel » plutôt que « pixel » (« pixel art »).
 DESIRABLE_BRANDS = [
+    # Informatique, téléphonie
     "apple", "macbook", "iphone", "ipad", "imac", "mac mini", "airpods", "apple watch",
-    "thinkpad", "dell xps", "latitude", "surface", "framework",
+    "thinkpad", "dell xps", "dell latitude", "microsoft surface", "surface pro", "surface laptop",
+    "framework laptop", "samsung galaxy s", "google pixel",
+    # Jeux vidéo
     "nintendo", "playstation", "ps5", "xbox series", "steam deck",
-    "sonos", "bose", "bang & olufsen", "sennheiser", "marshall", "jbl",
-    "dyson", "kitchenaid", "thermomix", "nespresso", "delonghi", "garmin",
+    # Audio, image
+    "sonos", "bose", "bang & olufsen", "sennheiser", "marshall", "jbl", "lg oled",
+    "canon eos", "nikon", "sony alpha", "fujifilm", "gopro", "dji",
+    # Maison
+    "dyson", "kitchenaid", "thermomix", "nespresso", "delonghi", "de'longhi", "garmin",
+    # Outillage
     "makita", "dewalt", "milwaukee", "festool", "bosch professional", "hilti",
-    "canon", "nikon", "sony alpha", "fujifilm", "gopro", "dji",
-    "samsung galaxy s", "pixel", "oled", "lg oled",
+    # Sport et mobilité (cote stable en occasion)
+    "salomon", "rossignol", "brompton",
 ]
 
 DEFAULTS: dict[str, Any] = {

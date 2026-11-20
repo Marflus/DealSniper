@@ -78,3 +78,16 @@ def test_seller_type_is_eliminatory(config):
     unknown = ad("Ski Dynastar", 80)
     assert check(pro, config) == "vendeur professionnel"
     assert check(unknown, config) is None  # type inconnu : gardée
+
+
+def test_desirable_brands_avoid_generic_words():
+    from dealsniper.config import DESIRABLE_BRANDS
+    from dealsniper.utils.text import first_keyword, normalize
+
+    found = {t: first_keyword(normalize(t), DESIRABLE_BRANDS) for t in (
+        "Plan de travail surface 2m", "Tapis pixel art", "Télé OLED 55 Hisense", "Framework carton",
+        "Microsoft Surface Pro 7", "Google Pixel 7 Pro", "Dell Latitude 7490", "Enceinte Bang & Olufsen A1")}
+    assert found == {"Plan de travail surface 2m": None, "Tapis pixel art": None, "Télé OLED 55 Hisense": None,
+                     "Framework carton": None, "Microsoft Surface Pro 7": "microsoft surface",
+                     "Google Pixel 7 Pro": "google pixel", "Dell Latitude 7490": "dell latitude",
+                     "Enceinte Bang & Olufsen A1": "bang & olufsen"}
