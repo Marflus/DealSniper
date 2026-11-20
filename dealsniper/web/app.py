@@ -13,7 +13,7 @@ import io
 import shutil
 import threading
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -275,6 +275,25 @@ def _realistic(items: list[dict]) -> None:
         item["score"] = clean["score_rentabilite"]
 
 
+IMAGE_RETRY_DAYS = 7
+NO_PREVIEW_SITES = {"leboncoin", "facebook"}  # aperçu de lien bloqué (protection / connexion) : inutile d'insister
+
+
+def _image_retry_due(ad: dict) -> bool:
+    """Photo introuvable au dernier essai : on réessaie après quelques jours (le site a pu répondre de
+    travers ce jour-là), sauf pour les sites qui bloquent toujours ces aperçus."""
+    if ad.get("image") != "" or ad.get("source") in NO_PREVIEW_SITES:
+        return False
+    checked = ad.get("image_checked_at")
+    if not checked:
+        return True  # ancienne annonce marquée « sans photo » sans date : un nouvel essai
+    try:
+        age = datetime.now(UTC) - datetime.fromisoformat(checked)
+    except ValueError:
+        return True
+    return age > timedelta(days=IMAGE_RETRY_DAYS)
+
+
 def _json_body() -> dict[str, Any]:
     """Corps JSON de la requête ; {} si absent, invalide, ou pas un objet (jamais d'exception)."""
     data = request.get_json(silent=True)
@@ -330,6 +349,9 @@ def create_app() -> Flask:
             items = db.search(status=status if status in ("analyzed", "rejected") else None, days=days)
             _realistic(items)
             cost = asyncio.run(db.cost_today())
+        for item in items:  # photo à rechercher de nouveau : l'interface la redemandera
+            if _image_retry_due(item):
+                item["image"] = None
         try:
             config = current_config()
             cap, home = config["analyzer"].get("max_daily_cost_usd"), str(config["location"].get("home") or "")
@@ -491,7 +513,7 @@ def create_app() -> Flask:
             ad = db.ad_data(uid)
         if ad is None:
             return jsonify(image=None), 404
-        if ad.get("image") is not None:  # déjà connue ("" = aucune)
+        if ad.get("image") is not None and not _image_retry_due(ad):  # déjà connue ("" = aucune)
             return jsonify(image=ad["image"] or None)
         image = fetch_image(ad.get("url") or "")  # requête réseau : base fermée pendant l'attente
         with database() as db:
@@ -714,6 +736,9 @@ def create_app() -> Flask:
         with database() as db:
             items = db.by_uids(sorted(RUN_UIDS))
         _realistic(items)
+        for item in items:
+            if _image_retry_due(item):
+                item["image"] = None
         try:
             config = current_config()
             home = str(config["location"].get("home") or "")

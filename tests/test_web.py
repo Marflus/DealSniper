@@ -250,3 +250,28 @@ def test_progress_endpoint_is_light(client):
     c, _ = client
     data = c.get("/api/progress").get_json()
     assert set(data) == {"running", "error", "progress", "cost_today", "cost_cap"}  # pas la liste des annonces
+
+
+def test_missing_photo_is_retried_later_except_blocked_sites(client, monkeypatch, tmp_path):
+    from dealsniper.config import data_dir
+    from dealsniper.db import Database
+
+    c, _ = client
+    calls = []
+    monkeypatch.setattr("dealsniper.web.preview.fetch_image", lambda url: calls.append(url) or None)
+    uid = next(a["uid"] for a in c.get("/api/ads").get_json()["ads"] if a["title"] == "Canapé")
+    assert c.get(f"/api/image/{uid}").get_json() == {"image": None} and len(calls) == 1
+    c.get(f"/api/image/{uid}")
+    assert len(calls) == 1  # échec récent : pas de nouvel essai tout de suite
+    ad = next(a for a in c.get("/api/ads").get_json()["ads"] if a["uid"] == uid)
+    assert ad["image"] == ""  # l'interface ne la redemande pas
+    with Database(data_dir() / "dealsniper.db") as db:  # 8 jours plus tard…
+        db.patch_ad(uid, {"image_checked_at": "2000-01-01T00:00:00+00:00"})
+    ad = next(a for a in c.get("/api/ads").get_json()["ads"] if a["uid"] == uid)
+    assert ad["image"] is None  # à redemander
+    c.get(f"/api/image/{uid}")
+    assert len(calls) == 2
+    with Database(data_dir() / "dealsniper.db") as db:  # leboncoin : bloque ces aperçus, on n'insiste pas
+        db.patch_ad(uid, {"source": "leboncoin", "image_checked_at": "2000-01-01T00:00:00+00:00"})
+    c.get(f"/api/image/{uid}")
+    assert len(calls) == 2

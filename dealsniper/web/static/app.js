@@ -525,13 +525,21 @@ function deepVerdict(ad, d) {
   return { cls: "pass", icon: "❌", title: "À laisser passer", text: `${euros(price)} demandés pour un maximum conseillé de ${euros(max)}.${doubt}` };
 }
 
+// Coût indicatif de l'analyse approfondie : moyenne des analyses déjà faites (tokens + recherches web).
+function deepCostHint() {
+  const costs = allAds.map((a) => a.market_deep?.cost_usd).filter((c) => c > 0);
+  if (!costs.length) return "quelques centimes";
+  const avg = costs.reduce((x, y) => x + y, 0) / costs.length;
+  return `≈ ${avg.toLocaleString("fr-FR", { maximumFractionDigits: 2, minimumFractionDigits: 2 })} $`;
+}
+
 function deepBlock(ad) {
   const d = ad.market_deep;
   if (!d) {
     return `<section class="d-deep">
       <div class="deep-cta">
         <div><b>🔬 Analyse approfondie</b><p class="muted small">Prix réels vérifiés sur le web, graphique des ventes et verdict final.</p></div>
-        <button class="deep-btn" data-deep="${esc(ad.uid)}"><span>Analyser</span><small>≈ 0,03 $ · 20 s</small></button>
+        <button class="deep-btn" data-deep="${esc(ad.uid)}"><span>Analyser</span><small>${deepCostHint()} · 20 s</small></button>
       </div></section>`;
   }
   const v = deepVerdict(ad, d);

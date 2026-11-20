@@ -260,10 +260,11 @@ class Database:
         return json.loads(rows[0][0] or "{}") if rows else None
 
     def set_image(self, uid: str, image: str | None) -> None:
-        """Mémorise la photo d'une annonce (aperçu du lien) ; "" = aucune photo trouvée, à ne pas rechercher."""
+        """Mémorise la photo d'une annonce (aperçu du lien) ; "" = aucune trouvée (nouvel essai plus tard)."""
         data = self.ad_data(uid)
         if data is not None:
             data["image"] = image or ""
+            data["image_checked_at"] = _stamp()
             self._save_data([(uid, data)])
 
     def record_price_drops(self, prices: dict[str, float], min_drop: float) -> list[dict]:

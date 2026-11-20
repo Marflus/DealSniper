@@ -37,7 +37,7 @@ facilite_vente (1-10) : demande en occasion en France. 10 = modèle très recher
 
 Règles :
 - Montants en euros, prix_total = prix + port. Enchère : le prix est l'enchère actuelle, raisonne sur un prix final probable.
-- valeur_revente_estimee : sois PRUDENT. C'est le prix auquel ce modèle exact se VEND réellement entre particuliers en France (leboncoin, eBay vendus) en quelques semaines, une fois réparé : le bas de la fourchette, jamais le prix neuf ni le prix affiché le plus haut. L'électronique perd vite sa valeur : un ordinateur de plus de 5 ans dépasse rarement 250-350 €. Modèle, année ou configuration inconnus : prends l'entrée de gamme et score ≤ 5.
+- valeur_revente_estimee : sois PRUDENT. C'est le prix auquel ce modèle exact se VEND réellement entre particuliers en France (leboncoin, eBay vendus) en quelques semaines, une fois réparé : le bas de la fourchette, jamais le prix neuf ni le prix affiché le plus haut. Décote selon l'objet : l'électronique perd vite sa valeur (un ordinateur de plus de 5 ans dépasse rarement 250-350 €) ; sport, outillage et électroménager se jugent sur la marque, l'état, l'usure et la saison (skis, vélos : modèle et année comptent). Modèle, année ou configuration inconnus : prends l'entrée de gamme et score ≤ 5.
 - « cote X € » (si fournie) = prix médian réel de ce modèle en état de marche, observé sur les annonces : ta valeur_revente_estimee ne doit pas la dépasser.
 - cout_piece_estime : prix réel de la pièce neuve ou d'occasion + petit matériel ; jamais 0 pour une réparation.
 - marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais.
