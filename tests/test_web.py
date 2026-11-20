@@ -193,3 +193,10 @@ def test_max_ads_per_run_saved(client):
     settings["analyzer"]["max_ads_per_run"] = "25"
     assert c.put("/api/settings", json=settings).get_json() == {"ok": True}
     assert load_config(path)["analyzer"]["max_ads_per_run"] == 25
+
+
+def test_search_now_validates_and_starts(client, monkeypatch):
+    c, _ = client
+    monkeypatch.setattr("dealsniper.engine.run_once", lambda config: None)
+    assert c.post("/api/search-now", json={"query": ""}).status_code == 400
+    assert c.post("/api/search-now", json={"query": "thinkpad x1", "max_price": "150"}).get_json()["ok"]

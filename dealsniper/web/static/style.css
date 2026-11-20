@@ -545,3 +545,9 @@ button.wide { width: 100%; }
 .stat-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
 .stat-table td.pos { color: var(--good); font-weight: 600; }
 .stat-table th:not(:first-child), .stat-table td:not(:first-child) { text-align: right; }
+
+/* Recherche ponctuelle */
+.quick-search { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
+.quick-search #qs-query { flex: 1 1 320px; font-size: 15px; padding: 11px 14px; }
+.quick-search .affix input { width: 90px; }
+@media (max-width: 560px) { .quick-search { flex-wrap: wrap; } .quick-search .primary { flex: 1; } }

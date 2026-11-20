@@ -699,6 +699,20 @@ $("#run").addEventListener("click", async () => {
   } catch (e) { toast(e.message); }
 });
 
+// Recherche ponctuelle : lance tous les sites sur un terme précis, en direct.
+$("#quick-search").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const query = $("#qs-query").value.trim();
+  if (!query) return;
+  try {
+    await api("/api/search-now", { method: "POST", body: JSON.stringify({ query, max_price: $("#qs-price").value }) });
+    toast(`🔎 Recherche « ${query} » lancée sur tous les sites…`);
+    $("#f-text").value = query;  // filtre l'affichage sur le terme cherché
+    setStatus("analyzed");
+    loadAds();
+  } catch (e2) { toast(e2.message); }
+});
+
 $("#test-notif").addEventListener("click", async () => {
   const data = await api("/api/test-notif", { method: "POST" }).catch(() => ({ ok: false }));
   toast(data.ok ? "Notification envoyée ✅" : "Échec : vérifiez TELEGRAM_* / DISCORD_* dans .env ❌");

@@ -167,7 +167,7 @@ Tout se règle depuis l'interface ; `config.yaml` reste lisible et commenté si 
 | `sites` | un bloc par site : activé, rythme en surveillance continue, recherches propres, `fetch_details` |
 | `categories` | mots-clés, budget maximum, exclusions et signaux par famille d'objets |
 | `filters`, `location` | mots interdits, vendu / réservé, acheteurs, prix minimum, France uniquement, `home` (votre code postal) |
-| `analyzer` | `enabled` (IA ou mode sans IA), modèle de notation, modèle de l'analyse approfondie (`deep_model`), plafond quotidien, prudence (`resale_haircut`, `auto_calibrate`), seuil de la cote (`market_min_margin`) |
+| `analyzer` | `enabled` (IA ou mode sans IA), modèle de notation, modèle de l'analyse approfondie (`deep_model`), plafond quotidien, max d'annonces analysées par passage (`max_ads_per_run`), prudence (`resale_haircut`, `auto_calibrate`), seuil de la cote (`market_min_margin`) |
 | `watchlist` | veille : modèles précis repérés en priorité (notifiés d'office) |
 | `notifier` | seuil de notification, seuil du message immédiat (`instant_min_score`), récap « à vérifier », rappel de fin d'enchère (`auction_reminder_minutes`) |
 | `network` | délai entre deux requêtes vers un même site, pause après un refus |

@@ -554,6 +554,41 @@ def create_app() -> Flask:
         threading.Thread(target=worker, daemon=True).start()
         return jsonify(ok=True)
 
+    @app.post("/api/search-now")
+    def search_now():
+        """Recherche ponctuelle : tous les sites cherchent CE terme en une fois, puis notation."""
+        body = request.get_json(force=True) or {}
+        query = str(body.get("query") or "").strip()
+        if not query:
+            return jsonify(ok=False, error="Tapez ce que vous cherchez"), 400
+        with lock:
+            if state["running"]:
+                return jsonify(ok=False, message="Un passage est déjà en cours."), 409
+            state["running"], state["error"] = True, None
+
+        def worker():
+            from ..engine import run_once
+
+            try:
+                config = load_config(config_path())
+                search: dict[str, Any] = {"query": query, "condition": "any"}
+                price = _number(body.get("max_price"))
+                if price is not None:
+                    search["max_price"] = price
+                config["searches"] = [search]              # une seule recherche, commune à tous les sites
+                for site in config["sites"].values():
+                    site["searches"] = []                  # on ignore les recherches habituelles
+                    site["common_searches"] = True
+                config["filters"]["drop_uncategorized"] = False  # ne pas écarter un terme hors catégories
+                run_once(config)
+            except Exception as exc:
+                state["error"] = str(exc)
+            finally:
+                state["running"] = False
+
+        threading.Thread(target=worker, daemon=True).start()
+        return jsonify(ok=True)
+
     @app.post("/api/test-notif")
     def test_notif():
         from ..notifier import Notifier, demo_ad
