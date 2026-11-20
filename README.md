@@ -92,8 +92,8 @@ Gardez la fenêtre noire ouverte tant que vous utilisez l'interface : la fermer 
 | **Achats** | vos achats (ajoutés depuis une annonce ou à la main) : prix payé, réparation, prix de revente réel. Bénéfice, rentabilité, stock. Dès 3 ventes, Deal Sniper compare vos ventes réelles à ses estimations et ajuste sa prudence tout seul ; chaque vente réelle enrichit aussi la cote du modèle. |
 | **Recherches** | ce que chaque site cherche. La carte **🌐 Tous les sites** contient les recherches communes, lancées partout ; chaque site peut en ajouter. |
 | **Catégories** | familles d'objets (PC portables, mini-PC, Dyson…) : mots-clés du titre, budget maximum, exclusions, signaux positifs. Une annonce hors catégorie est écartée gratuitement. |
-| **Filtres** | mots interdits (oxydé, iCloud…), annonces d'acheteurs, déjà vendues ou réservées, France uniquement, prix minimum, **votre code postal** (pour les distances). |
-| **Réglages** | seuils de notification, budget IA quotidien et modèle, état de l'installation, thème clair / sombre, envoi d'une notification de test. |
+| **Filtres** | quatre blocs symétriques : mots interdits, signaux « bonne affaire », déjà vendue / réservée, annonces d'acheteurs. |
+| **Réglages** | menu à gauche : Notifications, Budget IA, Localisation et prix (code postal, France, prix minimum…), Fonctionnement, Installation, Apparence. |
 
 Tout est enregistré dans votre `config.yaml` (bouton **Enregistrer** ou **Ctrl+S**) et appliqué au passage suivant.
 

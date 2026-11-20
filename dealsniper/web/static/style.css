@@ -27,7 +27,7 @@ button:disabled { opacity: .55; cursor: wait; }
 /* Barre du haut */
 .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 10px 24px;
   background: var(--card); border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 500; letter-spacing: -.01em; }
+.brand { display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 500; letter-spacing: -.01em; cursor: pointer; user-select: none; }
 .brand b { font-weight: 800; background: linear-gradient(90deg, #ff5a4e, #ff3d7f 45%, #7c3aed); -webkit-background-clip: text;
   background-clip: text; color: transparent; }
 .tabs { display: flex; gap: 4px; overflow-x: auto; max-width: 100%; background: var(--soft); padding: 3px; border-radius: 10px; }
@@ -439,3 +439,43 @@ button.wide { width: 100%; }
 .deep-warn { margin: 4px 0; color: var(--mid); font-size: 13px; }
 .deep-sources { margin: 6px 0; padding-left: 18px; font-size: 13px; color: var(--muted); display: grid; gap: 2px; }
 .deep-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+
+/* ===== Onglet Filtres : grille 2×2 de blocs égaux, défilement interne ===== */
+.filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.filter-card { display: flex; flex-direction: column; height: 360px; padding: 16px; }
+.filter-card .sec-head { flex: none; }
+.card-scroll { flex: 1; min-height: 0; overflow-y: auto; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.card-scroll .tags { min-height: 44px; }
+.card-scroll .tags:last-child { flex: 1; }
+.card-scroll .label { margin-top: 2px; }
+
+/* ===== Onglet Réglages : menu à gauche, une section à droite ===== */
+.settings-layout { display: grid; grid-template-columns: 240px 1fr; gap: 18px; align-items: start; }
+.set-nav { position: sticky; top: 76px; display: grid; gap: 4px; background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 8px; box-shadow: var(--shadow); }
+.set-item { border: 0; background: transparent; text-align: left; padding: 11px 14px; border-radius: 10px; color: var(--muted);
+  font-size: 14px; }
+.set-item:hover { background: var(--soft); color: var(--fg); }
+.set-item.on { background: color-mix(in srgb, var(--accent) 12%, var(--card)); color: var(--accent); font-weight: 600; }
+.set-body { min-width: 0; }
+.set-sec .panel { max-width: 760px; }
+
+@media (max-width: 860px) {
+  .filter-grid { grid-template-columns: 1fr; }
+  .filter-card { height: 300px; }
+  .settings-layout { grid-template-columns: 1fr; }
+  .set-nav { position: static; flex-direction: row; display: flex; overflow-x: auto; gap: 6px; }
+  .set-item { white-space: nowrap; }
+}
+
+/* ===== Confort téléphone (général) ===== */
+@media (max-width: 560px) {
+  .topbar { gap: 8px; padding: 8px 12px; }
+  .brand span { font-size: 16px; }
+  main { padding: 12px; }
+  .page-head h1 { font-size: 19px; }
+  .kpis { grid-template-columns: 1fr 1fr; }
+  .grid { grid-template-columns: 1fr; }
+  dialog.details { width: calc(100vw - 16px); padding: 16px; }
+  .p-fields { grid-template-columns: 1fr 1fr; }
+}

@@ -108,104 +108,152 @@
 
     <!-- RÉGLAGES -->
     <section id="tab-settings" class="page" hidden>
-      <div class="page-head">
-        <h1>Réglages</h1>
-        <p>Quand être prévenu, combien dépenser en IA, et l'apparence de l'interface.</p>
-      </div>
-      <div class="page-grid">
-        <div class="panel">
-          <div class="sec-head"><span class="sec-icon blue">🔔</span><div><h2>Notifications</h2>
-            <p>Ce qui déclenche un message Telegram / Discord.</p></div></div>
+      <div class="page-head"><h1>Réglages</h1>
+        <p>Notifications, budget IA, localisation et apparence de l'interface.</p></div>
+      <div class="settings-layout">
+        <nav id="set-nav" class="set-nav" aria-label="Sections de réglages">
+          <button class="set-item on" data-sec="set-notif">🔔 Notifications</button>
+          <button class="set-item" data-sec="set-budget">💳 Budget IA</button>
+          <button class="set-item" data-sec="set-location">📍 Localisation et prix</button>
+          <button class="set-item" data-sec="set-run">⚙️ Fonctionnement</button>
+          <button class="set-item" data-sec="set-status">🩺 Installation</button>
+          <button class="set-item" data-sec="set-theme">🎨 Apparence</button>
+        </nav>
+        <div class="set-body">
 
-          <div class="setting">
-            <div><b>Message immédiat</b><small>Une annonce notée au moins…</small></div>
-            <div class="range"><input id="n-min" type="range" min="1" max="10"><output data-for="n-min"></output></div>
-          </div>
-          <div class="setting">
-            <div><b>Récap « à vérifier »</b><small>Annonces juste en dessous, regroupées en un seul message</small></div>
-            <label class="switch"><input id="n-watch-on" type="checkbox"><span></span></label>
-          </div>
-          <div class="setting sub" id="n-watch-row">
-            <div><small>À partir de</small></div>
-            <div class="range"><input id="n-watch" type="range" min="1" max="10"><output data-for="n-watch"></output></div>
-          </div>
-
-          <div class="label">Types d'affaires</div>
-          <div class="tiles two">
-            <label class="tile"><input id="n-repair" type="checkbox"><span>🔧</span><b>À réparer</b><small>Objet en panne, marge après réparation</small></label>
-            <label class="tile"><input id="n-direct" type="checkbox"><span>💎</span><b>Revente directe</b><small>Fonctionnel, vendu sous sa cote</small></label>
-          </div>
-
-          <div class="label">Seuils supplémentaires <span class="muted">(facultatif)</span></div>
-          <div class="inline-fields">
-            <label>Marge minimale<span class="affix"><input id="n-margin" type="number" placeholder="aucune"><i>€</i></span></label>
-            <label>Facilité de réparation<span class="affix"><input id="n-ease" type="number" min="1" max="10" placeholder="toutes"><i>/10</i></span></label>
-            <label>Facilité de vente<span class="affix"><input id="n-sale" type="number" min="1" max="10" placeholder="toutes"><i>/10</i></span></label>
-          </div>
-          <div class="panel-foot"><button id="test-notif" class="ghost">🔔 Envoyer une fausse annonce pour tester</button></div>
-        </div>
-
-        <div class="panel">
-          <div class="sec-head"><span class="sec-icon green">💳</span><div><h2>Budget IA</h2>
-            <p>Chaque annonce retenue par les filtres est notée par Claude.</p></div></div>
-          <div class="spend">
-            <div class="spend-top"><span>Aujourd'hui</span><b id="budget-today"></b></div>
-            <div class="budget-bar big"><div id="budget-fill-2"></div></div>
-          </div>
-          <div class="setting">
-            <div><b>Limite quotidienne</b><small>Au-delà, les annonces attendent le lendemain. Vide = aucune limite.</small></div>
-            <span class="affix"><input id="a-cap" type="number" step="0.05" min="0" placeholder="aucune"><i>$</i></span>
-          </div>
-          <div class="label">Modèle</div>
-          <div class="tiles two" id="a-model">
-            <label class="tile"><input type="radio" name="a-model" value="claude-haiku-5-5"><span>🪶</span><b>Haiku 5.5</b><small>recommandé · ≈ 0,0001 $ par annonce</small></label>
-            <label class="tile"><input type="radio" name="a-model" value="claude-haiku-4-5"><span>⚡</span><b>Haiku 4.5</b><small>ancien · 10× plus cher</small></label>
-          </div>
-          <details class="advanced">
-            <summary>Réglages avancés</summary>
-            <div class="setting">
-              <div><b>Annonces par appel</b><small>Plus = moins de tokens (consignes payées une fois par lot)</small></div>
-              <input id="a-batch" type="number" min="1" max="50" class="num">
+          <section id="set-notif" class="set-sec">
+            <div class="panel">
+              <div class="sec-head"><span class="sec-icon blue">🔔</span><div><h2>Notifications</h2>
+                <p>Ce qui déclenche un message Telegram / Discord.</p></div></div>
+              <div class="setting">
+                <div><b>Message immédiat</b><small>Une annonce notée au moins…</small></div>
+                <div class="range"><input id="n-min" type="range" min="1" max="10"><output data-for="n-min"></output></div>
+              </div>
+              <div class="setting">
+                <div><b>Récap « à vérifier »</b><small>Annonces juste en dessous, regroupées en un seul message</small></div>
+                <label class="switch"><input id="n-watch-on" type="checkbox"><span></span></label>
+              </div>
+              <div class="setting sub" id="n-watch-row">
+                <div><small>À partir de</small></div>
+                <div class="range"><input id="n-watch" type="range" min="1" max="10"><output data-for="n-watch"></output></div>
+              </div>
+              <div class="label">Types d'affaires</div>
+              <div class="tiles two">
+                <label class="tile"><input id="n-repair" type="checkbox"><span>🔧</span><b>À réparer</b><small>Objet en panne, marge après réparation</small></label>
+                <label class="tile"><input id="n-direct" type="checkbox"><span>💎</span><b>Revente directe</b><small>Fonctionnel, vendu sous sa cote</small></label>
+              </div>
+              <div class="label">Seuils supplémentaires <span class="muted">(facultatif)</span></div>
+              <div class="inline-fields">
+                <label>Marge minimale<span class="affix"><input id="n-margin" type="number" placeholder="aucune"><i>€</i></span></label>
+                <label>Facilité de réparation<span class="affix"><input id="n-ease" type="number" min="1" max="10" placeholder="toutes"><i>/10</i></span></label>
+                <label>Facilité de vente<span class="affix"><input id="n-sale" type="number" min="1" max="10" placeholder="toutes"><i>/10</i></span></label>
+              </div>
+              <div class="panel-foot"><button id="test-notif" class="ghost">🔔 Envoyer une fausse annonce pour tester</button></div>
             </div>
-            <div class="setting">
-              <div><b>Longueur de description envoyée</b><small>En caractères. Plus court = moins cher</small></div>
-              <input id="a-desc" type="number" min="50" step="50" class="num">
+          </section>
+
+          <section id="set-budget" class="set-sec" hidden>
+            <div class="panel">
+              <div class="sec-head"><span class="sec-icon green">💳</span><div><h2>Budget IA</h2>
+                <p>Chaque annonce retenue par les filtres est notée par Claude.</p></div></div>
+              <div class="spend">
+                <div class="spend-top"><span>Aujourd'hui</span><b id="budget-today"></b></div>
+                <div class="budget-bar big"><div id="budget-fill-2"></div></div>
+              </div>
+              <div class="setting">
+                <div><b>Limite quotidienne</b><small>Au-delà, les annonces attendent le lendemain. Vide = aucune limite.</small></div>
+                <span class="affix"><input id="a-cap" type="number" step="0.05" min="0" placeholder="aucune"><i>$</i></span>
+              </div>
+              <div class="label">Modèle de notation</div>
+              <div class="tiles two" id="a-model">
+                <label class="tile"><input type="radio" name="a-model" value="claude-haiku-5-5"><span>🪶</span><b>Haiku 5.5</b><small>recommandé · ≈ 0,0001 $ par annonce</small></label>
+                <label class="tile"><input type="radio" name="a-model" value="claude-haiku-4-5"><span>⚡</span><b>Haiku 4.5</b><small>ancien · 10× plus cher</small></label>
+              </div>
+              <details class="advanced">
+                <summary>Réglages avancés</summary>
+                <div class="setting">
+                  <div><b>Annonces par appel</b><small>Plus = moins de tokens (consignes payées une fois par lot)</small></div>
+                  <input id="a-batch" type="number" min="1" max="50" class="num">
+                </div>
+                <div class="setting">
+                  <div><b>Longueur de description envoyée</b><small>En caractères. Plus court = moins cher</small></div>
+                  <input id="a-desc" type="number" min="50" step="50" class="num">
+                </div>
+              </details>
             </div>
-          </details>
-        </div>
+          </section>
 
-        <div class="panel">
-          <div class="sec-head"><span class="sec-icon blue">🩺</span><div><h2>État de l'installation</h2>
-            <p>Clés du fichier <code>.env</code> et sites réellement lancés.</p></div></div>
-          <ul id="status-list" class="status-list"></ul>
-        </div>
+          <section id="set-location" class="set-sec" hidden>
+            <div class="panel">
+              <div class="sec-head"><span class="sec-icon purple">📍</span><div><h2>Localisation et prix</h2>
+                <p>Où vous êtes, et ce qui est toujours écarté.</p></div></div>
+              <div class="setting">
+                <div><b>Chez vous</b><small>Code postal ou ville : affiche la distance de chaque annonce</small></div>
+                <input id="g-home" placeholder="ex. 69003" class="home-input">
+              </div>
+              <div class="setting">
+                <div><b>France uniquement</b><small>Écarte les pays et devises étrangers</small></div>
+                <label class="switch"><input id="g-france" type="checkbox"><span></span></label>
+              </div>
+              <div class="setting">
+                <div><b>Exclure les DOM-TOM</b><small>Frais de port trop élevés</small></div>
+                <label class="switch"><input id="g-overseas" type="checkbox"><span></span></label>
+              </div>
+              <div class="setting">
+                <div><b>Prix minimum</b><small>En dessous, c'est souvent un faux prix (« 1 € à débattre »)</small></div>
+                <span class="affix"><input id="g-minprice" type="number" min="0"><i>€</i></span>
+              </div>
+              <div class="setting">
+                <div><b>Garder les annonces sans prix lisible</b><small>Sinon elles sont écartées</small></div>
+                <label class="switch"><input id="g-noprice" type="checkbox"><span></span></label>
+              </div>
+              <div class="setting">
+                <div><b>Écarter les annonces hors catégories</b><small>Aucun mot-clé de l'onglet Catégories dans le titre</small></div>
+                <label class="switch"><input id="g-uncat" type="checkbox"><span></span></label>
+              </div>
+            </div>
+          </section>
 
-        <div class="panel">
-          <div class="sec-head"><span class="sec-icon purple">⚙️</span><div><h2>Fonctionnement</h2>
-            <p>Mémoire et comportement face aux sites.</p></div></div>
-          <div class="setting">
-            <div><b>Mémoire des annonces vues</b><small>Une annonce déjà vue n'est jamais ré-analysée</small></div>
-            <span class="affix"><input id="s-retention" type="number" min="1"><i>jours</i></span>
-          </div>
-          <div class="setting">
-            <div><b>Pause après un refus d'accès</b><small>Si un site bloque, il est laissé tranquille</small></div>
-            <span class="affix"><input id="s-pause" type="number" min="1"><i>heures</i></span>
-          </div>
-          <div class="setting">
-            <div><b>Repartir de la configuration d'exemple</b><small>Récupère les dernières recherches, catégories et
-              réglages recommandés. Votre configuration actuelle est d'abord sauvegardée.</small></div>
-            <button id="reset-config" class="ghost">↺ Réinitialiser</button>
-          </div>
-        </div>
+          <section id="set-run" class="set-sec" hidden>
+            <div class="panel">
+              <div class="sec-head"><span class="sec-icon purple">⚙️</span><div><h2>Fonctionnement</h2>
+                <p>Mémoire et comportement face aux sites.</p></div></div>
+              <div class="setting">
+                <div><b>Mémoire des annonces vues</b><small>Une annonce déjà vue n'est jamais ré-analysée</small></div>
+                <span class="affix"><input id="s-retention" type="number" min="1"><i>jours</i></span>
+              </div>
+              <div class="setting">
+                <div><b>Pause après un refus d'accès</b><small>Si un site bloque, il est laissé tranquille</small></div>
+                <span class="affix"><input id="s-pause" type="number" min="1"><i>heures</i></span>
+              </div>
+              <div class="setting">
+                <div><b>Repartir de la configuration d'exemple</b><small>Récupère les dernières recherches, catégories et
+                  réglages recommandés. Votre configuration actuelle est d'abord sauvegardée.</small></div>
+                <button id="reset-config" class="ghost">↺ Réinitialiser</button>
+              </div>
+            </div>
+          </section>
 
-        <div class="panel">
-          <div class="sec-head"><span class="sec-icon orange">🎨</span><div><h2>Apparence</h2>
-            <p>Mémorisée dans ce navigateur.</p></div></div>
-          <div id="theme-choice" class="tiles three">
-            <button data-value="" class="theme-tile"><span class="preview auto"></span>Automatique</button>
-            <button data-value="light" class="theme-tile"><span class="preview light"></span>Clair</button>
-            <button data-value="dark" class="theme-tile"><span class="preview dark"></span>Sombre</button>
-          </div>
+          <section id="set-status" class="set-sec" hidden>
+            <div class="panel">
+              <div class="sec-head"><span class="sec-icon blue">🩺</span><div><h2>État de l'installation</h2>
+                <p>Clés du fichier <code>.env</code> et sites réellement lancés.</p></div></div>
+              <ul id="status-list" class="status-list"></ul>
+            </div>
+          </section>
+
+          <section id="set-theme" class="set-sec" hidden>
+            <div class="panel">
+              <div class="sec-head"><span class="sec-icon orange">🎨</span><div><h2>Apparence</h2>
+                <p>Mémorisée dans ce navigateur.</p></div></div>
+              <div id="theme-choice" class="tiles three">
+                <button data-value="" class="theme-tile"><span class="preview auto"></span>Automatique</button>
+                <button data-value="light" class="theme-tile"><span class="preview light"></span>Clair</button>
+                <button data-value="dark" class="theme-tile"><span class="preview dark"></span>Sombre</button>
+              </div>
+            </div>
+          </section>
+
         </div>
       </div>
     </section>
@@ -235,62 +283,34 @@
 
     <!-- FILTRES -->
     <section id="tab-filters" class="page" hidden>
-      <div class="page-head">
-        <h1>Filtres</h1>
+      <div class="page-head"><h1>Filtres</h1>
         <p>Tri gratuit, avant toute analyse par l'IA : ce qui est écarté ici ne coûte rien.
-          Tapez un mot puis <kbd>Entrée</kbd> pour l'ajouter.</p>
-      </div>
-      <div class="page-grid">
-        <div class="panel wide">
+          Tapez un mot puis <kbd>Entrée</kbd> pour l'ajouter.</p></div>
+      <div class="filter-grid">
+        <div class="filter-card">
           <div class="sec-head"><span class="sec-icon red">🚫</span><div><h2>Mots interdits</h2>
-            <p>Présents dans le titre ou la description : l'annonce est écartée (pannes trop graves, arnaques…).</p></div></div>
-          <div class="tags red" id="g-exclude"></div>
+            <p>Titre ou description : l'annonce est écartée (pannes graves, arnaques…).</p></div></div>
+          <div class="card-scroll"><div class="tags red" id="g-exclude"></div></div>
         </div>
-        <div class="panel">
+        <div class="filter-card">
           <div class="sec-head"><span class="sec-icon green">✨</span><div><h2>Signaux « bonne affaire »</h2>
             <p>Mis en avant et signalés à l'IA (vendeur pressé, objet neuf…).</p></div></div>
-          <div class="tags green" id="g-signals"></div>
+          <div class="card-scroll"><div class="tags green" id="g-signals"></div></div>
         </div>
-        <div class="panel">
+        <div class="filter-card">
           <div class="sec-head"><span class="sec-icon orange">🏷️</span><div><h2>Déjà vendue ou réservée</h2>
-            <p>Écartée si le titre commence ou finit par l'un de ces mots, ou si la description contient l'une de ces phrases.</p></div></div>
-          <div class="label">Début ou fin du titre</div>
-          <div class="tags" id="g-sold-title"></div>
-          <div class="label">Dans la description</div>
-          <div class="tags" id="g-sold-desc"></div>
+            <p>Écartée selon le début ou la fin du titre, ou une phrase de la description.</p></div></div>
+          <div class="card-scroll">
+            <div class="label">Début ou fin du titre</div>
+            <div class="tags" id="g-sold-title"></div>
+            <div class="label">Dans la description</div>
+            <div class="tags" id="g-sold-desc"></div>
+          </div>
         </div>
-        <div class="panel">
+        <div class="filter-card">
           <div class="sec-head"><span class="sec-icon blue">🛒</span><div><h2>Annonces d'acheteurs</h2>
             <p>Titres de gens qui cherchent à acheter, pas à vendre.</p></div></div>
-          <div class="tags" id="g-buyer"></div>
-        </div>
-        <div class="panel">
-          <div class="sec-head"><span class="sec-icon purple">📍</span><div><h2>Localisation et prix</h2>
-            <p>Ce qui est toujours écarté.</p></div></div>
-          <div class="setting">
-            <div><b>Chez vous</b><small>Code postal ou ville : affiche la distance de chaque annonce</small></div>
-            <input id="g-home" placeholder="ex. 69003" class="home-input">
-          </div>
-          <div class="setting">
-            <div><b>France uniquement</b><small>Écarte les pays et devises étrangers</small></div>
-            <label class="switch"><input id="g-france" type="checkbox"><span></span></label>
-          </div>
-          <div class="setting">
-            <div><b>Exclure les DOM-TOM</b><small>Frais de port trop élevés</small></div>
-            <label class="switch"><input id="g-overseas" type="checkbox"><span></span></label>
-          </div>
-          <div class="setting">
-            <div><b>Prix minimum</b><small>En dessous, c'est souvent un faux prix (« 1 € à débattre »)</small></div>
-            <span class="affix"><input id="g-minprice" type="number" min="0"><i>€</i></span>
-          </div>
-          <div class="setting">
-            <div><b>Garder les annonces sans prix lisible</b><small>Sinon elles sont écartées</small></div>
-            <label class="switch"><input id="g-noprice" type="checkbox"><span></span></label>
-          </div>
-          <div class="setting">
-            <div><b>Écarter les annonces hors catégories</b><small>Aucun mot-clé de l'onglet Catégories dans le titre</small></div>
-            <label class="switch"><input id="g-uncat" type="checkbox"><span></span></label>
-          </div>
+          <div class="card-scroll"><div class="tags" id="g-buyer"></div></div>
         </div>
       </div>
     </section>

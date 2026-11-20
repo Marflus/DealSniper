@@ -57,6 +57,18 @@ function showTab(tab) {
   try { localStorage.setItem("dealsniper-tab", tab); } catch (e) { /* stockage indisponible */ }
 }
 document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
+$(".brand").addEventListener("click", () => showTab("ads"));  // cliquer le logo revient aux annonces
+
+// Réglages : menu à gauche, une section visible à la fois.
+function showSettingsSection(id) {
+  document.querySelectorAll("#set-nav .set-item").forEach((b) => b.classList.toggle("on", b.dataset.sec === id));
+  document.querySelectorAll(".set-sec").forEach((sec) => (sec.hidden = sec.id !== id));
+  try { localStorage.setItem("dealsniper-set", id); } catch (e) { /* stockage indisponible */ }
+}
+$("#set-nav").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-sec]");
+  if (item) showSettingsSection(item.dataset.sec);
+});
 
 // ---------- Thème clair / sombre ----------
 function setTheme(theme) {
@@ -375,7 +387,7 @@ function showDetails(uid) {
     <h3>${esc(ad.title)}</h3>
     <div class="d-grid">
       ${row("🩺 Panne probable", esc(faultText(a)))}
-      ${row("📍 Ville", esc(cleanPlace(ad.location)) + (ad.distance_km != null ? ` <span class="muted">(${ad.distance_km} km)</span>` : ""))}
+      ${row("📍 Ville", esc(cleanPlace(ad.location)) + (ad.distance_km != null ? ` <span class="muted">(à ${ad.distance_km} km de chez vous)</span>` : ""))}
       ${row("🏷️ Type de vente", ad.price_mode === "enchere" ? "Enchère (prix provisoire)" : "Prix fixe")}
       ${row("💶 Achat", buy)}
       ${row("🔩 Pièce estimée", a.cout_piece_estime ? euros(a.cout_piece_estime) : "")}
@@ -1078,6 +1090,7 @@ async function loadStatus() {
 restoreFilters();
 countActiveFilters();
 loadStatus();
+try { showSettingsSection(localStorage.getItem("dealsniper-set") || "set-notif"); } catch (e) { /* idem */ }
 try { showTab(localStorage.getItem("dealsniper-tab") || "ads"); } catch (e) { showTab("ads"); }
 loadAds();
 setInterval(loadAds, 60000);
