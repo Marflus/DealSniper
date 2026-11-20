@@ -137,6 +137,28 @@ class Database:
              _stamp(), _dumps(ad.to_dict()), reason, fingerprint),
         )
 
+    async def rejected_among(self, uids: list[str]) -> set[str]:
+        """Parmi `uids`, ceux déjà vus mais écartés par le filtre (à réévaluer si les critères changent)."""
+        if not uids:
+            return set()
+        rows = await self._asql(f"SELECT uid FROM seen WHERE status = 'rejected' AND uid IN ({_marks(len(uids))})",
+                                tuple(uids))
+        return {uid for (uid,) in rows}
+
+    def by_uids(self, uids: list[str]) -> list[dict]:
+        """Annonces précises (format de `search`), ex. les résultats d'une recherche ponctuelle."""
+        if not uids:
+            return []
+        rows = self._sql("SELECT data, status, score, notified, seen_at, reason, favorite, hidden FROM seen "
+                         f"WHERE uid IN ({_marks(len(uids))})", tuple(uids))
+        out = []
+        for data, status, score, notified, seen_at, reason, favorite, hidden in rows:
+            ad = json.loads(data or "{}")
+            ad.update(status=status, score=score, notified=bool(notified), seen_at=seen_at, reason=reason,
+                      favorite=bool(favorite), hidden=bool(hidden))
+            out.append(ad)
+        return out
+
     async def duplicate_of(self, fingerprint: str, site: str, days: int = 14) -> str | None:
         """Site d'une annonce identique déjà vue ailleurs récemment (même modèle / titre et même prix)."""
         since = _stamp(-timedelta(days=days))

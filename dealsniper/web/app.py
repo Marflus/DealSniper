@@ -635,13 +635,17 @@ def create_app() -> Flask:
 
         def prepare(config: dict[str, Any]) -> None:
             config["searches"] = [search]              # une seule recherche, commune à tous les sites
+            config["recheck_rejected"] = True          # réévalue ce qui avait été écarté avec d'autres critères
             for name, site in config["sites"].items():
                 site["searches"] = []                  # on ignore les recherches habituelles
                 site["common_searches"] = True
+                site["limit"] = max(int(site.get("limit") or 25), 60)  # plus de résultats pour une recherche ciblée
                 if sites and name not in sites:
                     site["enabled"] = False            # sites décochés : pas interrogés
             filters = config["filters"]
             filters["drop_uncategorized"] = False      # ne pas écarter un terme hors catégories
+            filters["ignore_category_budget"] = True   # seul VOTRE prix max compte (pas les budgets des catégories)
+            filters["default_max_budget"] = None
             if min_price is not None:
                 filters["min_price"] = min_price       # appliqué à tous les sites par le filtre
             if max_price is not None:
@@ -656,6 +660,22 @@ def create_app() -> Flask:
                 config["analyzer"]["max_ads_per_run"] = int(max_ads)
 
         return start_run(prepare)
+
+    @app.get("/api/search-results")
+    def search_results():
+        """Compte rendu de la dernière recherche : toutes les annonces trouvées (notées ou écartées, avec la raison)."""
+        from ..engine import RUN_UIDS
+
+        with database() as db:
+            items = db.by_uids(sorted(RUN_UIDS))
+        _realistic(items)
+        try:
+            config = load_config(config_path())
+            home = str(config["location"].get("home") or "")
+        except Exception:
+            home = ""
+        add_distances(items, (request.args.get("near") or "").strip() or home)
+        return jsonify(ads=items)
 
     @app.post("/api/test-notif")
     def test_notif():

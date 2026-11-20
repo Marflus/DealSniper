@@ -22,7 +22,7 @@ DEFAULT_PRICING = {
 }
 DEAL_TYPES = ("reparation", "revente_directe")
 
-SYSTEM_PROMPT = """Tu es expert en achat-revente d'électronique d'occasion en France (leboncoin, eBay.fr, Vinted). Toutes les annonces sont en France.
+SYSTEM_PROMPT = """Tu es expert en achat-revente d'occasion en France (leboncoin, eBay.fr, Vinted) : surtout l'électronique, mais aussi sport, outillage, électroménager… Toutes les annonces sont en France.
 Pour chaque annonce, estime la rentabilité d'un achat pour revente. type_affaire : "reparation" (objet en panne ou incomplet) ou "revente_directe" (fonctionnel, vendu sous sa cote).
 
 score_rentabilite (1-10) :

@@ -534,3 +534,32 @@ def test_zone_is_eliminatory(config):
     assert asyncio.run(eng.zone_problem(near)) is None
     assert "hors zone (280 km" in asyncio.run(eng.zone_problem(far))
     assert asyncio.run(eng.zone_problem(unknown)) is None  # ville inconnue : gardée
+
+
+def test_one_off_search_rechecks_rejected_and_reports(monkeypatch, config):
+    """Recherche ponctuelle : une annonce écartée par d'anciens critères est réévaluée ; RUN_UIDS liste tout."""
+    monkeypatch.setattr(engine.analyzer, "analyze", fake_analyze)
+
+    async def go():
+        db = Database(data_dir() / "r.db")
+        async with client() as http:
+            first = await engine.Engine(config, db, http).process(FakeSite(config))
+            cfg = {**config, "recheck_rejected": True,
+                   "filters": {**config["filters"], "drop_uncategorized": False}}
+            second = await engine.Engine(cfg, db, http).process(FakeSite(cfg))
+        db.close()
+        return first, second
+
+    engine.RUN_UIDS.clear()
+    first, second = asyncio.run(go())
+    assert first["nouvelles"] == 3 and second["nouvelles"] == 2  # canapé + Latitude réévalués, ThinkPad déjà noté
+    assert len(engine.RUN_UIDS) == 3
+
+
+def test_no_hidden_budget_in_one_off_search(config):
+    from dealsniper.filters import check
+
+    cfg = {**config, "filters": {**config["filters"], "drop_uncategorized": False,
+                                 "ignore_category_budget": True, "default_max_budget": None}}
+    ski = Ad(title="Ski Rossignol 170 cm", url="https://x/ski", source="vinted", price=180)
+    assert check(ski, cfg) is None and ski.category == "Autre"

@@ -35,6 +35,8 @@ log = logging.getLogger(__name__)
 # Annulation demandée depuis l'interface (bouton « Annuler ») : le passage s'arrête proprement au
 # prochain point de contrôle (après la liste, entre deux annonces, avant l'analyse IA).
 CANCEL = threading.Event()
+# Annonces listées pendant le dernier passage (compte rendu de la recherche ponctuelle).
+RUN_UIDS: set[str] = set()
 
 
 class Engine:
@@ -94,7 +96,13 @@ class Engine:
         listed = await site.list_recent(self.http)
         if self.stopping.is_set():  # annulé pendant la recherche : rien n'est enregistré
             return {"listées": len(listed), "nouvelles": 0, "retenues": 0, "analysées": 0, "notifiées": 0}
-        new_uids = await self.db.unseen([ad.uid for ad in listed])
+        uids = [ad.uid for ad in listed]
+        RUN_UIDS.update(uids)
+        new_uids = await self.db.unseen(uids)
+        if self.config.get("recheck_rejected"):
+            # Recherche ponctuelle : critères différents → les annonces déjà écartées sont réévaluées
+            # (les annonces déjà notées par l'IA ne sont pas repayées : elles figurent dans le compte rendu).
+            new_uids |= await self.db.rejected_among(uids)
         # Annonces déjà vues mais enregistrées sans photo : on complète avec celle de la liste (aucune requête).
         await self.db.fill_images({ad.uid: ad.image for ad in listed if ad.image and ad.uid not in new_uids})
         new_ads = list({ad.uid: ad for ad in listed if ad.uid in new_uids}.values())
@@ -314,6 +322,7 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
         engine = Engine(config, db, http, progress, Market(db, config, sampler))
         spinner = asyncio.create_task(progress.animate()) if progress.live else None
         CANCEL.clear()
+        RUN_UIDS.clear()
         canceller = asyncio.create_task(_watch_cancel(engine))
         try:
             if forever:

@@ -843,17 +843,21 @@ async function pollSearch() {
   // Terminé : compte rendu + résultats.
   if (searchPoll) { clearInterval(searchPoll); searchPoll = null; }
   $("#search-live").hidden = true;
-  renderSearchReport(p, data.ads || []);
+  const found = await api(`/api/search-results?x=1${nearParam()}`).catch(() => ({ ads: [] }));
+  renderSearchReport(p, found.ads || []);
 }
 
 function renderSearchReport(p, ads) {
-  const q = normalizeFr(searchQuery);
-  const results = ads
-    .filter((a) => normalizeFr(`${a.title} ${a.description || ""}`).includes(q))
-    .sort((x, y) => (y.score ?? -1) - (x.score ?? -1));
+  // Toutes les annonces listées par CETTE recherche : notées (cartes) et écartées (avec la raison).
+  const results = ads.filter((a) => a.status === "analyzed").sort((x, y) => (y.score ?? -1) - (x.score ?? -1));
+  const rejected = ads.filter((a) => a.status === "rejected");
+  const reasons = Object.entries(rejected.reduce((m, a) => {
+    const r = String(a.reason || "?").replace(/\s*\(.*\)$/, "").replace(/ : .*$/, "");
+    m[r] = (m[r] || 0) + 1; return m;
+  }, {})).sort((x, y) => y[1] - x[1]);
   results.forEach((r) => { if (!allAds.find((a) => a.uid === r.uid)) allAds.push(r); });  // pour le « i », favoris…
   searchResults = results.map((r) => allAds.find((a) => a.uid === r.uid) || r);
-  const found = (p.sites || []).reduce((n, s) => n + (s.searches || []).reduce((m, x) => m + (x.found || 0), 0), 0);
+  const found = ads.length;
   const kpi = (label, value) => `<div class="kpi"><span>${label}</span><b>${value}</b></div>`;
   const perSite = (p.sites || []).map((s) => `<div class="prog-row done">
       <b>${esc(s.site)}</b><span class="prog-text">${esc(s.text)}</span>
@@ -864,12 +868,16 @@ function renderSearchReport(p, ads) {
       <div class="report-head">✅ Recherche « ${esc(searchQuery)} » terminée</div>
       <div class="kpis">
         ${kpi("Annonces trouvées", found || "—")}
-        ${kpi("Retenues et notées", results.length)}
+        ${kpi("Notées", results.length)}
+        ${kpi("Écartées", rejected.length)}
         ${kpi("Durée", duration(p.elapsed || 0))}
         ${kpi("Coût IA", iaCost(p.cost || 0))}
       </div>
       <div class="report-sites">${perSite || '<p class="muted small">Aucun site n\'a répondu.</p>'}</div>
-      ${results.length ? "" : '<p class="muted small">Aucune annonce retenue pour ce terme (essayez un prix max plus haut ou un terme plus large).</p>'}
+      ${rejected.length ? `<details class="check-list"><summary>✗ Écartées avant l'IA (${rejected.length}) —
+        ${reasons.slice(0, 4).map(([r, n]) => `${esc(r)} ${n}`).join(" · ")}</summary>
+        <ul>${rejected.map((a) => `<li>${siteLogo(a.source, 14)} <a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a>
+          <span class="muted small">${a.total_price != null ? euros(a.total_price) + " · " : ""}${esc(a.reason || "")}</span></li>`).join("")}</ul></details>` : ""}
     </div>`;
   renderSearchResults();
 }
