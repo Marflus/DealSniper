@@ -516,3 +516,4 @@ button.wide { width: 100%; }
 .d-risk { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
   background: color-mix(in srgb, var(--mid) 10%, var(--card)); border: 1px solid color-mix(in srgb, var(--mid) 30%, var(--line)); }
 .d-risk ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.chart-trend { fill: none; stroke: var(--accent); stroke-width: 2; }

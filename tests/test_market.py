@@ -70,3 +70,20 @@ def test_quote_from_seen_ads_then_from_ebay_sample(tmp_path):
     assert (t480.median, t480.count, t480.source) == (220, 5, "annonces")
     assert (v10.median, v10.count, v10.source) == (170, 5, "ebay")
     assert again.median == 170 and calls == ["dyson v10"]  # échantillon demandé une seule fois
+
+
+def test_price_history_monthly_median(tmp_path):
+    import asyncio
+
+    from dealsniper.db import Database
+
+    async def scenario():
+        db = Database(tmp_path / "h.db")
+        rows = [(f"u{i}", "thinkpad t480", p, 1, "ebay") for i, p in enumerate([180, 200, 220])]
+        await db.record_prices(rows)
+        hist = db.price_history("thinkpad t480")
+        db.close()
+        return hist
+
+    hist = asyncio.run(scenario())
+    assert len(hist) == 1 and hist[0]["prix"] == 200 and hist[0]["count"] == 3  # médiane du mois

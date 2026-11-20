@@ -423,6 +423,7 @@ function showDetails(uid) {
       ${row("🕒 Repérée", seen && !isNaN(seen) ? seen.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "")}
       ${row("✗ Écartée", esc(ad.reason || ""))}
     </div>
+    ${ad.history_chart || '<div id="d-history"></div>'}
     ${deepBlock(ad)}
     ${desc ? `<details class="d-desc"><summary>Description du vendeur</summary><p>${esc(desc.slice(0, 1200))}${desc.length > 1200 ? "…" : ""}</p></details>` : ""}
     ${(() => { const r = riskFlags(ad); return r.length ? `<div class="d-risk"><b>⚠️ Points de vigilance</b><ul>${r.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""; })()}
@@ -434,6 +435,14 @@ function showDetails(uid) {
     </div>
     <a class="primary d-open" href="${esc(ad.url)}" target="_blank" rel="noopener">Voir l'annonce ↗</a>`;
   $("#details").showModal();
+  // Cote du modèle dans le temps : chargée une fois, à partir des prix déjà en base (gratuit).
+  if (ad.history_chart === undefined) {
+    api(`/api/ads/${encodeURIComponent(ad.uid)}/history`).then((data) => {
+      ad.history_chart = historyChart(data.history) || "";
+      const slot = $("#d-history");
+      if (slot && ad.history_chart) slot.outerHTML = ad.history_chart;
+    }).catch(() => { ad.history_chart = ""; });
+  }
 }
 
 // Liens utiles pour réparer : tutoriel iFixit et prix de la pièce (aucune requête, simples recherches).
@@ -462,15 +471,17 @@ function deepBlock(ad) {
 
 // Nuage de points « prix × date de vente » (une série : les ventes observées sur le web).
 // SVG inline, couleurs par les tokens du thème (clair/sombre), survol natif par point.
-function salesChart(d) {
-  const sales = (d.ventes || []).filter((v) => v.prix != null && /^\d{4}-\d{2}/.test(v.date || ""));
-  if (sales.length < 2) return "";
-  const W = 320, H = 150, L = 38, R = 10, T = 10, B = 24;  // zone + marges
+// Graphique commun : nuage de points « prix × date » (+ bande/typique et ligne optionnels).
+function pointsChart(points, opts) {
+  const pts = (points || []).filter((v) => v.prix != null && /^\d{4}-\d{2}/.test(v.date || ""));
+  if (pts.length < 2) return "";
+  const { caption = "", band = null, line = false, aria = caption } = opts || {};
+  const W = 320, H = 150, L = 38, R = 10, T = 10, B = 24;
   const toMs = (v) => Date.UTC(+v.date.slice(0, 4), +v.date.slice(5, 7) - 1, +(v.date.slice(8, 10) || 15));
-  const xs = sales.map(toMs);
-  const ys = sales.map((v) => v.prix).concat([d.revente_basse, d.revente_haute].filter((x) => x != null));
+  const xs = pts.map(toMs);
+  const ys = pts.map((v) => v.prix).concat(band ? [band.low, band.high].filter((x) => x != null) : []);
   let [xMin, xMax] = [Math.min(...xs), Math.max(...xs)];
-  if (xMin === xMax) { xMin -= 2.6e9; xMax += 2.6e9; }  // un seul mois : on élargit d'un mois
+  if (xMin === xMax) { xMin -= 2.6e9; xMax += 2.6e9; }
   let [yMin, yMax] = [Math.min(...ys), Math.max(...ys)];
   const pad = (yMax - yMin) * 0.12 || 10; yMin = Math.max(0, yMin - pad); yMax += pad;
   const px = (ms) => L + ((ms - xMin) / (xMax - xMin || 1)) * (W - L - R);
@@ -478,35 +489,47 @@ function salesChart(d) {
   const euro = (v) => `${Math.round(v)} €`;
   const moisAn = (ms) => new Date(ms).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
 
-  // Bande de la fourchette estimée (bas → haut) + ligne du prix typique.
-  let band = "";
-  if (d.revente_basse != null && d.revente_haute != null) {
-    band = `<rect class="chart-band" x="${L}" y="${py(d.revente_haute).toFixed(1)}" width="${W - L - R}"
-      height="${(py(d.revente_basse) - py(d.revente_haute)).toFixed(1)}"/>`;
-    if (d.revente_typique != null) {
-      band += `<line class="chart-line" x1="${L}" y1="${py(d.revente_typique).toFixed(1)}" x2="${W - R}" y2="${py(d.revente_typique).toFixed(1)}"/>`;
+  let bandSvg = "";
+  if (band && band.low != null && band.high != null) {
+    bandSvg = `<rect class="chart-band" x="${L}" y="${py(band.high).toFixed(1)}" width="${W - L - R}"
+      height="${(py(band.low) - py(band.high)).toFixed(1)}"/>`;
+    if (band.typical != null) {
+      bandSvg += `<line class="chart-line" x1="${L}" y1="${py(band.typical).toFixed(1)}" x2="${W - R}" y2="${py(band.typical).toFixed(1)}"/>`;
     }
   }
-  // Grille + étiquettes de prix (3 niveaux).
   let grid = "";
   for (let i = 0; i <= 2; i++) {
     const v = yMin + (i / 2) * (yMax - yMin), y = py(v).toFixed(1);
     grid += `<line class="chart-grid" x1="${L}" y1="${y}" x2="${W - R}" y2="${y}"/>
       <text class="chart-lbl" x="${L - 6}" y="${y}" text-anchor="end" dominant-baseline="middle">${euro(v)}</text>`;
   }
-  // Étiquettes de dates (début / milieu / fin), ancrées pour ne pas déborder sur les bords.
   const anchors = ["start", "middle", "end"];
   const xticks = [xMin, (xMin + xMax) / 2, xMax].map((ms, i) =>
     `<text class="chart-lbl" x="${px(ms).toFixed(1)}" y="${H - 7}" text-anchor="${anchors[i]}">${moisAn(ms)}</text>`).join("");
-  const dots = sales.map((v) => `<circle class="chart-dot" cx="${px(toMs(v)).toFixed(1)}" cy="${py(v.prix).toFixed(1)}" r="4.5">
-      <title>${moisAn(toMs(v))} · ${euro(v.prix)}${v.source ? ` · ${esc(v.source)}` : ""}</title></circle>`).join("");
+  const sorted = [...pts].sort((a2, b2) => toMs(a2) - toMs(b2));
+  const polyline = line ? `<polyline class="chart-trend" points="${sorted.map((v) => `${px(toMs(v)).toFixed(1)},${py(v.prix).toFixed(1)}`).join(" ")}"/>` : "";
+  const dots = pts.map((v) => `<circle class="chart-dot" cx="${px(toMs(v)).toFixed(1)}" cy="${py(v.prix).toFixed(1)}" r="4.5">
+      <title>${moisAn(toMs(v))} · ${euro(v.prix)}${v.source ? ` · ${esc(v.source)}` : ""}${v.count ? ` · ${v.count} annonces` : ""}</title></circle>`).join("");
 
   return `<figure class="deep-chart">
-    <figcaption>Ventes observées (${sales.length}) — prix réel par date</figcaption>
-    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Nuage de points des prix de vente par date">
-      ${band}${grid}${xticks}${dots}
-    </svg>
+    <figcaption>${esc(caption)}</figcaption>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(aria)}">${bandSvg}${grid}${xticks}${polyline}${dots}</svg>
   </figure>`;
+}
+
+function salesChart(d) {
+  return pointsChart(d.ventes, {
+    caption: `Ventes observées (${(d.ventes || []).length}) — prix réel par date`,
+    band: { low: d.revente_basse, high: d.revente_haute, typical: d.revente_typique },
+    aria: "Nuage de points des prix de vente par date",
+  });
+}
+
+function historyChart(history) {
+  return pointsChart(history, {
+    caption: "Cote du modèle dans le temps (prix médian des annonces vues, par mois)",
+    line: true, aria: "Évolution de la cote du modèle par mois",
+  });
 }
 
 async function deepMarket(uid) {

@@ -314,6 +314,18 @@ def create_app() -> Flask:
             db.close()
         return jsonify(ok=found), 200 if found else 404
 
+    @app.get("/api/ads/<uid>/history")
+    def ad_history(uid: str):
+        """Cote du modèle de l'annonce dans le temps, à partir des prix déjà observés (sans IA)."""
+        db = database()
+        try:
+            ad = db.ad_data(uid)
+            model = model_key((ad or {}).get("title") or "", brands()) if ad else None
+            history = db.price_history(model) if model else []
+        finally:
+            db.close()
+        return jsonify(model=model, history=history)
+
     @app.post("/api/ads/<uid>/market-analysis")
     def market_analysis(uid: str):
         """Analyse de marché approfondie d'une annonce (gros modèle + recherche web, à la demande)."""

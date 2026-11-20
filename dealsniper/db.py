@@ -234,6 +234,19 @@ class Database:
             await self._asql("INSERT OR IGNORE INTO prices (uid, model, price, working, site, seen_at) "
                              "VALUES (?,?,?,?,?,?)", (uid, model, price, working, site, now))
 
+    def price_history(self, model: str, months: int = 12) -> list[dict]:
+        """Médiane mensuelle du prix d'un modèle (annonces en état de marche), pour le graphe de cote."""
+        import statistics as _stats
+
+        since = (_now() - timedelta(days=30 * months)).isoformat(timespec="seconds")
+        rows = self._sql("SELECT substr(seen_at, 1, 7) AS mois, price FROM prices "
+                         "WHERE model = ? AND working = 1 AND seen_at >= ? ORDER BY mois", (model, since))
+        by_month: dict[str, list[float]] = {}
+        for mois, price in rows:
+            by_month.setdefault(mois, []).append(price)
+        return [{"date": mois, "prix": round(_stats.median(prices)), "count": len(prices)}
+                for mois, prices in sorted(by_month.items())]
+
     async def working_prices(self, model: str, days: int) -> list[float]:
         since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
         rows = await self._asql("SELECT price FROM prices WHERE model = ? AND working = 1 AND seen_at >= ?",
