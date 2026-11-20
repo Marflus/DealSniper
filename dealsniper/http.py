@@ -33,9 +33,11 @@ class PoliteClient:
         timeout: float = 20.0,
         transport: httpx.AsyncBaseTransport | None = None,
         sleep=asyncio.sleep,
+        host_intervals: dict[str, float] | None = None,
     ):
         self.user_agent = user_agent
         self.min_host_interval = min_host_interval
+        self.host_intervals = {h.lower(): float(v) for h, v in (host_intervals or {}).items()}  # exceptions par site
         self.max_retries = max_retries
         self._sleep = sleep
         self._client = httpx.AsyncClient(
@@ -58,10 +60,11 @@ class PoliteClient:
 
     async def _wait_turn(self, host: str) -> None:
         """Espace les requêtes vers un même site (avec un peu d'aléa pour étaler la charge)."""
+        interval = self.host_intervals.get(host.lower(), self.min_host_interval)
         elapsed = time.monotonic() - self._last_request.get(host, 0.0)
-        wait = self.min_host_interval - elapsed
+        wait = interval - elapsed
         if wait > 0:
-            await self._sleep(wait + random.uniform(0, self.min_host_interval * 0.2))
+            await self._sleep(wait + random.uniform(0, interval * 0.2))
         self._last_request[host] = time.monotonic()
 
     async def allowed_by_robots(self, url: str) -> bool:

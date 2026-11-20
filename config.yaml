@@ -34,6 +34,7 @@ searches:
 #  Sites surveillés : un bloc par fichier de dealsniper/sites/
 #  interval : pause (secondes, tirée au hasard) entre deux passages en mode `watch`
 #  searches : recherches EN PLUS des recherches communes ; common_searches: false pour les ignorer
+#  fetch_details: false : ne lit pas la fiche de chaque annonce retenue (plus rapide, moins de requêtes)
 # -----------------------------------------------------------------------------
 sites:
   # API officielle eBay (secrets EBAY_CLIENT_ID / EBAY_CLIENT_SECRET), objets situés en France.
@@ -70,6 +71,7 @@ sites:
     city: "paris"      # ou ta ville
     limit: 20
     headless: false
+    fetch_details: false       # n'ouvre pas une fenêtre par annonce (l'IA juge sur titre + prix)
     searches:
       - {query: "tv pas d'image", max_price: 120}
 
@@ -85,6 +87,8 @@ sites:
 network:
   user_agent: "DealSniper/3.0 (veille personnelle non commerciale)"  # identification honnête
   min_host_interval: 10        # secondes minimum entre deux requêtes vers un même site
+  host_intervals:              # exceptions : l'API officielle eBay est limitée par quota, pas par rythme
+    api.ebay.com: 1
   detail_delay: [0, 1]         # pause avant chaque lecture de fiche détaillée
   access_denied_pause_hours: 6 # un refus (401/403, robots.txt) met le site en pause
 

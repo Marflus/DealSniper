@@ -60,24 +60,9 @@
             <option value="reparation">🔧 À réparer</option>
             <option value="revente_directe">💎 Revente directe</option>
           </select>
-          <select id="f-score">
-            <option value="0">Toutes les notes</option>
-            <option value="5">Note ≥ 5</option>
-            <option value="7">Note ≥ 7</option>
-            <option value="8">Note ≥ 8</option>
-          </select>
-          <select id="f-ease" title="Facilité de réparation">
-            <option value="0">Toute réparation</option>
-            <option value="5">Réparation ≥ 5</option>
-            <option value="7">Réparation ≥ 7</option>
-            <option value="9">Réparation ≥ 9</option>
-          </select>
-          <select id="f-sale" title="Facilité de vente (demande)">
-            <option value="0">Toute demande</option>
-            <option value="5">Vente ≥ 5</option>
-            <option value="7">Vente ≥ 7</option>
-            <option value="9">Vente ≥ 9</option>
-          </select>
+          <label class="field" title="Note de rentabilité donnée par l'IA">Note ≥ <input id="f-score" type="number" min="1" max="10" placeholder="—">/10</label>
+          <label class="field" title="Facilité de réparation : 10 = rien ou presque à faire">🔧 Réparation ≥ <input id="f-ease" type="number" min="1" max="10" placeholder="—">/10</label>
+          <label class="field" title="Facilité de vente : 10 = très recherché, part en quelques jours">🔥 Vente ≥ <input id="f-sale" type="number" min="1" max="10" placeholder="—">/10</label>
           <label class="field">Prix max <input id="f-price" type="number" min="0" placeholder="—"> €</label>
           <label class="field">Marge min <input id="f-margin" type="number" placeholder="—"> €</label>
           <select id="f-days">
@@ -128,18 +113,8 @@
           <div class="label">Seuils supplémentaires <span class="muted">(facultatif)</span></div>
           <div class="inline-fields">
             <label>Marge minimale<span class="affix"><input id="n-margin" type="number" placeholder="aucune"><i>€</i></span></label>
-            <label>Facilité de réparation
-              <select id="n-ease">
-                <option value="">Toutes</option><option value="5">≥ 5/10</option>
-                <option value="7">≥ 7/10 (facile)</option><option value="9">≥ 9/10 (très facile)</option>
-              </select>
-            </label>
-            <label>Facilité de vente
-              <select id="n-sale">
-                <option value="">Toutes</option><option value="5">≥ 5/10</option>
-                <option value="7">≥ 7/10 (recherché)</option><option value="9">≥ 9/10 (part très vite)</option>
-              </select>
-            </label>
+            <label>Facilité de réparation<span class="affix"><input id="n-ease" type="number" min="1" max="10" placeholder="toutes"><i>/10</i></span></label>
+            <label>Facilité de vente<span class="affix"><input id="n-sale" type="number" min="1" max="10" placeholder="toutes"><i>/10</i></span></label>
           </div>
           <div class="panel-foot"><button id="test-notif" class="ghost">🔔 Envoyer une fausse annonce pour tester</button></div>
         </div>

@@ -308,3 +308,13 @@ button.add:hover { border-color: var(--accent); color: var(--accent); background
 .sites-title { margin: 26px 2px 12px; font-size: 15px; }
 .sites-title .muted { font-weight: 400; font-size: 13px; }
 .mini-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; cursor: pointer; }
+
+/* Détail des recherches d'un passage */
+.prog-row.expandable { cursor: pointer; }
+.prog-row.expandable:hover b { color: var(--accent); }
+.prog-detail { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 10px 122px; }
+.prog-detail span { font-size: 12px; padding: 2px 9px; border-radius: 99px; background: var(--soft); color: var(--muted); }
+.prog-detail b { color: var(--fg); margin-left: 3px; }
+.prog-detail .zero { opacity: .55; }
+@media (max-width: 700px) { .prog-detail { padding-left: 0; } }
+.field input[type=number][max="10"] { width: 58px; }

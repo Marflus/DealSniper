@@ -23,6 +23,7 @@ DEFAULTS: dict[str, Any] = {
     "network": {
         "user_agent": "DealSniper/3.0 (veille personnelle non commerciale)",
         "min_host_interval": 10,         # secondes minimum entre deux requêtes vers un même site
+        "host_intervals": {"api.ebay.com": 1},  # exceptions : l'API officielle eBay est limitée par quota
         "detail_delay": [2, 6],          # pause avant chaque lecture de fiche détaillée
         "access_denied_pause_hours": 6,  # un refus (401/403, robots.txt) met le site en pause
     },

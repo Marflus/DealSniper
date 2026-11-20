@@ -45,7 +45,17 @@ class Engine:
         """Un passage complet pour un site. Renvoie des compteurs pour les logs."""
         show = self.progress.update
         show(site.label, "recherche…")
-        site.on_progress = lambda query, found: show(site.label, f'Recherche "{query}" — {found} annonces')
+        planned = len(site.cfg.get("searches") or [])
+        totals = {"done": 0, "ads": 0}
+
+        def on_search(query: str, found: int) -> None:
+            totals["done"] += 1
+            totals["ads"] += found
+            self.progress.log_search(site.label, query, found)
+            step = f" ({totals['done']}/{planned})" if planned else ""
+            show(site.label, f'Recherche "{query}"{step} — {found} annonces · {totals["ads"]} au total')
+
+        site.on_progress = on_search
         listed = await site.list_recent(self.http)
         new_uids = await self.db.unseen([ad.uid for ad in listed])
         new_ads = list({ad.uid: ad for ad in listed if ad.uid in new_uids}.values())
@@ -56,6 +66,9 @@ class Engine:
             reason = filters.check(ad, self.config)
             if reason:
                 await self.db.remember(ad, "rejected", reason=reason)
+                continue
+            if not site.cfg.get("fetch_details", True):  # pas de fiche détaillée : moins de requêtes / fenêtres
+                candidates.append(ad)
                 continue
             await self.sleep(random.uniform(*self.network["detail_delay"]))
             try:
@@ -143,7 +156,9 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
         return
     db = Database(data_dir() / "dealsniper.db")
     await db.forget_older_than(int(config["storage"]["seen_retention_days"]))
-    async with PoliteClient(config["network"]["user_agent"], float(config["network"]["min_host_interval"])) as http:
+    network = config["network"]
+    async with PoliteClient(network["user_agent"], float(network["min_host_interval"]),
+                            host_intervals=network.get("host_intervals")) as http:
         engine = Engine(config, db, http, progress)
         spinner = asyncio.create_task(progress.animate()) if progress.live else None
         try:
@@ -156,12 +171,14 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
                 log.info("Surveillance continue : %s", ", ".join(s.name for s in sites))
                 await asyncio.gather(*(engine.watch_site(s) for s in sites))
             else:
-                for site in sites:
-                    await engine.process_safely(site)
+                # Sites en parallèle : chacun garde son propre rythme, seul le total est plus court.
+                await asyncio.gather(*(engine.process_safely(site) for site in sites))
         finally:
             if spinner:
                 spinner.cancel()
                 progress.render()
+            if not forever:
+                progress.print_summary()  # détail des recherches, laissé à l'écran
             db.close()
 
 

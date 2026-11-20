@@ -13,6 +13,7 @@ import asyncio
 import logging
 import os
 import sys
+import textwrap
 import time
 
 SPINNER = "|/-\\"
@@ -46,7 +47,8 @@ class Progress:
     def _state(self, site: str) -> dict:
         state = self.sites.get(site)
         if state is None or state["done"]:  # nouveau passage pour ce site : le chrono repart
-            state = self.sites[site] = {"text": "", "done": False, "start": time.monotonic(), "end": None, "cost": 0.0}
+            state = self.sites[site] = {"text": "", "done": False, "start": time.monotonic(), "end": None, "cost": 0.0,
+                                        "searches": []}
         return state
 
     def update(self, site: str, text: str) -> None:
@@ -63,6 +65,10 @@ class Progress:
         if site in self.sites:
             self.sites[site]["text"] += text
             self.render()
+
+    def log_search(self, site: str, query: str, found: int) -> None:
+        """Garde le résultat de chaque recherche pour le résumé de fin."""
+        self._state(site)["searches"].append({"query": query, "found": found})
 
     def add_cost(self, site: str, usd: float) -> None:
         self._state(site)["cost"] += usd
@@ -85,7 +91,7 @@ class Progress:
     def snapshot(self) -> dict:
         """État pour l'interface web (durées en secondes)."""
         sites = [{"site": name, "text": s["text"], "done": s["done"], "elapsed": round(self.elapsed(s), 1),
-                  "cost": round(s["cost"], 5)} for name, s in self.sites.items()]
+                  "cost": round(s["cost"], 5), "searches": s["searches"]} for name, s in self.sites.items()]
         return {"sites": sites, "elapsed": round(self.total_elapsed, 1),
                 "cost": round(self.total_cost, 5), "done": bool(sites) and all(s["done"] for s in sites)}
 
@@ -99,6 +105,18 @@ class Progress:
         if len(lines) > 1 or self.total_cost:
             lines.append(f"Total : {duration(self.total_elapsed)} · IA {dollars(self.total_cost)}")
         return lines
+
+    def print_summary(self) -> None:
+        """Fin d'un passage : nombre d'annonces de chaque recherche, sous les lignes de progression."""
+        rows = [(name, s["searches"]) for name, s in self.sites.items() if s["searches"]]
+        if not rows:
+            return
+        print("\nDétail des recherches :")
+        for name, searches in rows:
+            print(f"  {name} ({len(searches)} recherches, {sum(x['found'] for x in searches)} annonces)")
+            print(textwrap.fill(" · ".join(f"{x['query']} {x['found']}" for x in searches), width=100,
+                                initial_indent="    ", subsequent_indent="    "))
+        self._drawn = 0  # le bloc de progression reste affiché tel quel
 
     def clear(self) -> None:
         if self.live and self._drawn:

@@ -145,3 +145,20 @@ def test_common_searches_are_merged_per_site():
     # Ailleurs : une seule recherche ps5, avec le prix max le plus large, sans `condition`.
     merged = merge_searches(common, own, uses_condition=False)
     assert merged[0] == {"query": "PS5", "max_price": 260} and len(merged) == 3
+
+
+def test_progress_keeps_search_log_and_summary(capsys):
+    from dealsniper.progress import Progress
+
+    p = Progress()
+    p.update("eBay", "recherche…")
+    p.log_search("eBay", "thinkpad", 25)
+    p.log_search("eBay", "dyson", 0)
+    p.add_cost("eBay", 0.01)
+    p.done("eBay", "25 annonces")
+    snap = p.snapshot()
+    assert snap["done"] and snap["cost"] == 0.01
+    assert snap["sites"][0]["searches"] == [{"query": "thinkpad", "found": 25}, {"query": "dyson", "found": 0}]
+    p.print_summary()
+    out = capsys.readouterr().out
+    assert "eBay (2 recherches, 25 annonces)" in out and "thinkpad 25 · dyson 0" in out

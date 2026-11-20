@@ -27,7 +27,7 @@ class Site:
         self.on_progress = None   # branché par le moteur
 
     def report(self, query: str, found: int) -> None:
-        """À appeler dans list_recent après chaque recherche : affiche « Recherche "x" — n annonces »."""
+        """À appeler dans list_recent après chaque recherche, avec le nombre d'annonces de CETTE recherche."""
         if self.on_progress:
             self.on_progress(query, found)
 

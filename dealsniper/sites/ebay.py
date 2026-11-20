@@ -127,8 +127,9 @@ class EbaySite(Site):
                       "sort": "newlyListed", "limit": min(int(search.get("limit", self.cfg["limit"])), 200)}
             resp = await http.get(SEARCH_URL, headers=headers, params=params)
             resp.raise_for_status()
-            ads += [ad for ad in map(item_to_ad, resp.json().get("itemSummaries") or []) if ad]
-            self.report(search["query"], len(ads))
+            found = [ad for ad in map(item_to_ad, resp.json().get("itemSummaries") or []) if ad]
+            ads += found
+            self.report(search["query"], len(found))
         return ads
 
     async def fetch_detail(self, http: PoliteClient, ad: Ad) -> Ad:

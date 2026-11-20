@@ -78,7 +78,7 @@ function saveFilters() {
 function restoreFilters() {
   try {
     const values = JSON.parse(localStorage.getItem("dealsniper-filters") || "{}");
-    FILTER_IDS.forEach((id) => { if (values[id] != null) $("#" + id).value = values[id]; });
+    FILTER_IDS.forEach((id) => { if (values[id] != null && values[id] !== "0") $("#" + id).value = values[id]; });
     if (values.status != null) setStatus(values.status, false);
     selectedSites = new Set(values.sites || []);
   } catch (e) { /* idem */ }
@@ -132,6 +132,7 @@ $("#f-sites").addEventListener("click", (e) => {
 // ---------- Progression d'un passage (chrono + coût IA) ----------
 const SPINNER = "|/-\\";
 let progress = null, progressAt = 0, progressClosed = false, spin = 0;
+const openedSites = new Set();  // lignes dépliées (détail des recherches)
 
 function duration(seconds) {
   const s = Math.floor(seconds);
@@ -143,6 +144,7 @@ const iaCost = (usd) => `${Number(usd || 0).toLocaleString("fr-FR", { minimumFra
 
 function renderProgress(data) {
   if (data && !data.done) progressClosed = false;  // nouveau passage : on réaffiche
+  if (data && data.done && progress && !progress.done) data.sites.forEach((l) => openedSites.add(l.site));  // fin : résumé déplié
   progress = data;
   progressAt = Date.now();
   drawProgress();
@@ -154,11 +156,18 @@ function drawProgress() {
   if (!p || !(p.sites || []).length || (p.done && progressClosed)) { box.hidden = true; return; }
   box.hidden = false;
   const live = (secs, done) => duration(done ? secs : secs + (Date.now() - progressAt) / 1000);
-  const rows = p.sites.map((l) => `<div class="prog-row ${l.done ? "done" : ""}">
-      <b>${esc(l.site)}</b><span class="prog-text">${esc(l.text)}</span>
+  const rows = p.sites.map((l) => {
+    const searches = l.searches || [];
+    const open = openedSites.has(l.site);
+    const detail = open && searches.length ? `<div class="prog-detail">${searches.map((x) =>
+      `<span class="${x.found ? "" : "zero"}">${esc(x.query)} <b>${x.found}</b></span>`).join("")}</div>` : "";
+    return `<div class="prog-row ${l.done ? "done" : ""} ${searches.length ? "expandable" : ""}" data-site-log="${esc(l.site)}"
+        title="${searches.length ? "Cliquer pour voir le détail des recherches" : ""}">
+      <b>${searches.length ? (open ? "▾ " : "▸ ") : ""}${esc(l.site)}</b><span class="prog-text">${esc(l.text)}</span>
       <span class="prog-time">⏱ ${live(l.elapsed, l.done)}</span>
       <span class="prog-cost">${l.cost ? iaCost(l.cost) : "—"}</span>
-      <span class="spin">${l.done ? "✓" : SPINNER[spin]}</span></div>`).join("");
+      <span class="spin">${l.done ? "✓" : SPINNER[spin]}</span></div>${detail}`;
+  }).join("");
   box.innerHTML = `<div class="prog-head">
       <span>${p.done ? "✅ Dernier passage terminé" : "⏳ Passage en cours…"}</span>
       ${p.done ? '<button class="icon" data-close-progress title="Masquer">✕</button>' : ""}</div>
@@ -172,7 +181,13 @@ setInterval(() => {  // chrono et « buffering » animés entre deux rafraîchis
   drawProgress();
 }, 150);
 $("#progress").addEventListener("click", (e) => {
-  if (e.target.closest("[data-close-progress]")) { progressClosed = true; drawProgress(); }
+  if (e.target.closest("[data-close-progress]")) { progressClosed = true; drawProgress(); return; }
+  const row = e.target.closest(".prog-row.expandable");
+  if (row) {
+    const site = row.dataset.siteLog;
+    openedSites.has(site) ? openedSites.delete(site) : openedSites.add(site);
+    drawProgress();
+  }
 });
 
 // ---------- Annonces ----------
@@ -290,7 +305,7 @@ function renderAds() {
 }
 
 FILTER_IDS.forEach((id) =>
-  $("#" + id).addEventListener(id === "f-text" ? "input" : "change", () => {
+  $("#" + id).addEventListener($("#" + id).tagName === "INPUT" ? "input" : "change", () => {
     saveFilters();
     if (id === "f-days") loadAds(); else renderAds();
   })
