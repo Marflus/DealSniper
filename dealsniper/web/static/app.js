@@ -355,10 +355,10 @@ function adCard(ad) {
   const margin = marginValue == null ? "—" : `${marginValue >= 0 ? "+" : ""}${euros(marginValue)}`;
   const marginClass = marginValue == null ? "" : marginValue >= 0 ? "pos" : "neg";
 
-  return `<article class="ad ${ad.status}" data-uid="${esc(ad.uid)}" ${ad.image == null ? "data-need-image" : ""}>
+  return `<article class="ad ${ad.status} ${ad.gone ? "gone" : ""}" data-uid="${esc(ad.uid)}" ${ad.image == null ? "data-need-image" : ""}>
     <a class="thumb" href="${esc(ad.url)}" target="_blank" rel="noopener">${image}</a>
     <div class="body">
-      <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${ad.watched ? '<span class="watch-badge" title="Correspond à une veille">🔭</span> ' : ""}${brandOf(ad) ? `<span class="brand-badge" title="Marque recherchée : ${esc(brandOf(ad))}">⭐</span> ` : ""}${ad.price_drop ? `<span class="drop-badge" title="Prix passé de ${esc(euros(ad.price_drop.from))} à ${esc(euros(ad.price_drop.to))}">⬇ −${esc(euros(ad.price_drop.from - ad.price_drop.to))}</span> ` : ""}${esc(ad.title)}</a>
+      <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${ad.gone ? `<span class="gone-badge" title="Vérifiée le ${esc(frDate(ad.checked_at))} : vendue ou supprimée">❌ Plus en ligne</span> ` : ""}${ad.watched ? '<span class="watch-badge" title="Correspond à une veille">🔭</span> ' : ""}${brandOf(ad) ? `<span class="brand-badge" title="Marque recherchée : ${esc(brandOf(ad))}">⭐</span> ` : ""}${ad.price_drop ? `<span class="drop-badge" title="Prix passé de ${esc(euros(ad.price_drop.from))} à ${esc(euros(ad.price_drop.to))}">⬇ −${esc(euros(ad.price_drop.from - ad.price_drop.to))}</span> ` : ""}${esc(ad.title)}</a>
       <div class="stats">
         <div><span>Achat</span><b>${buy}</b></div>
         <div title="${a.source_revente === "cote" ? "D'après la cote réelle du modèle (prix des annonces en état de marche)" : "Estimation de l'IA, rabotée par prudence"}">
@@ -480,6 +480,7 @@ function showDetails(uid) {
             ${row("Ville", esc(cleanPlace(ad.location)) + (ad.distance_km != null ? ` <span class="muted">· ${ad.distance_km} km</span>` : ""))}
             ${row("Remise", `${delivery(ad).icon} ${delivery(ad).label}`)}
             ${row("Vente", ad.price_mode === "enchere" ? "Enchère (prix provisoire)" : "Prix fixe")}
+            ${row("En ligne ?", ad.checked_at ? (ad.gone ? `❌ disparue <span class="muted">(vérifié le ${esc(frDate(ad.checked_at))})</span>` : `✅ oui <span class="muted">(vérifié le ${esc(frDate(ad.checked_at))})</span>`) : "")}
             ${row("Repérée", seen && !isNaN(seen) ? seen.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "")}`)}
           ${card("👤 Vendeur", sellerRows(ad.seller, row))}
         </div>
@@ -1314,6 +1315,80 @@ $("#reset-config").addEventListener("click", async () => {
   } catch (e) { toast("❌ " + e.message); }
 });
 $("#discard").addEventListener("click", () => { if (confirm("Annuler les modifications non enregistrées ?")) loadSettings(); });
+
+// ---------- Vérification : les annonces affichées sont-elles toujours en ligne ? ----------
+let checkPoll = null;
+const SITE_REASON = { leboncoin: "leboncoin bloque ces vérifications", facebook: "Facebook demande une connexion" };
+const shownAds = () => (document.querySelector("#tab-search:not([hidden])") ? filteredAds(searchResults) : filteredAds());
+
+$("#check-ads").addEventListener("click", async () => {
+  if (checkPoll) {  // 2e clic : arrêter
+    await api("/api/check/cancel", { method: "POST" }).catch(() => {});
+    return;
+  }
+  const ads = shownAds();
+  if (!ads.length) return toast("Aucune annonce affichée à vérifier");
+  if (ads.length > 500) toast("Seules les 500 premières annonces affichées seront vérifiées");
+  try {
+    await api("/api/check", { method: "POST", body: JSON.stringify({ uids: ads.slice(0, 500).map((a) => a.uid) }) });
+  } catch (e) { return toast(e.message); }
+  $("#check-ads").textContent = "■ Arrêter la vérification";
+  $("#check-ads").classList.add("danger");
+  checkPoll = setInterval(pollCheck, 1000);
+  pollCheck();
+});
+
+async function pollCheck() {
+  const data = await api("/api/check").catch(() => null);
+  if (!data || !data.report) return;
+  renderCheck(data.report, data.running);
+  if (data.running) return;
+  clearInterval(checkPoll); checkPoll = null;
+  $("#check-ads").textContent = "🔄 Encore en ligne ?";
+  $("#check-ads").classList.remove("danger");
+  loadAds();  // marque les disparues sur les cartes
+}
+
+function renderCheck(r, isRunning) {
+  const box = $("#check-panel");
+  box.hidden = false;
+  const gone = r.gone || [], unknown = r.unknown || [];
+  const pct = r.total ? Math.round((100 * r.done) / r.total) : 0;
+  if (isRunning) {
+    box.innerHTML = `<div class="check-head">🔄 Vérification en cours… <b>${r.done}/${r.total}</b>
+        <span class="muted small">· ${gone.length} disparue(s) pour l'instant · rythme poli, quelques secondes par annonce</span></div>
+      <div class="check-bar"><span style="width:${pct}%"></span></div>`;
+    return;
+  }
+  const line = (x) => `<li>${siteLogo(x.source, 14)} <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>
+    ${x.note ? `<span class="muted small">— ${esc(x.note)}</span>` : ""}</li>`;
+  const bySite = unknown.reduce((m, x) => ((m[x.source] = (m[x.source] || 0) + 1), m), {});
+  box.innerHTML = `<div class="check-head">${r.error ? "⚠️ Vérification interrompue" : r.cancelled ? "■ Vérification arrêtée" : "✅ Vérification terminée"}
+      <button class="icon" data-close-check title="Fermer">✕</button></div>
+    ${r.error ? `<p class="small">${esc(r.error)}</p>` : ""}
+    <div class="check-kpis">
+      <div><b>${r.done}</b><span>vérifiées</span></div>
+      <div class="ok"><b>${r.active}</b><span>toujours en ligne</span></div>
+      <div class="ko"><b>${gone.length}</b><span>disparues</span></div>
+      <div><b>${unknown.length}</b><span>non vérifiables</span></div>
+    </div>
+    ${gone.length ? `<details class="check-list" open><summary>❌ Annonces disparues (${gone.length})</summary><ul>${gone.map(line).join("")}</ul>
+      <button class="ghost" data-hide-gone>Masquer ces ${gone.length} annonce(s)</button></details>` : ""}
+    ${unknown.length ? `<details class="check-list"><summary>❔ Non vérifiables (${unknown.length}) —
+      ${Object.entries(bySite).map(([s, n]) => `${esc(siteName(s))} ${n}${SITE_REASON[s] ? ` : ${SITE_REASON[s]}` : ""}`).join(" · ")}</summary>
+      <ul>${unknown.map(line).join("")}</ul></details>` : ""}`;
+  box.dataset.gone = JSON.stringify(gone.map((x) => x.uid));
+}
+
+$("#check-panel").addEventListener("click", async (e) => {
+  if (e.target.closest("[data-close-check]")) { $("#check-panel").hidden = true; return; }
+  if (e.target.closest("[data-hide-gone]")) {
+    const uids = JSON.parse($("#check-panel").dataset.gone || "[]");
+    await api("/api/ads/hide", { method: "POST", body: JSON.stringify({ uids }) }).catch((err) => toast(err.message));
+    toast(`${uids.length} annonce(s) masquée(s)`);
+    loadAds();
+  }
+});
 
 // ---------- Export CSV (toutes les annonces filtrées, pour Excel) ----------
 $("#export-csv").addEventListener("click", () => {

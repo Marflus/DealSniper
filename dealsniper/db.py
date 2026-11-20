@@ -251,6 +251,15 @@ class Database:
         self._save_data(updates)
         return drops
 
+    def set_availability(self, statuses: dict[str, str], checked_at: str) -> None:
+        """Résultat d'une vérification : « gone » = annonce disparue (vendue, supprimée) ; « unknown » ignoré."""
+        known = {uid: s for uid, s in statuses.items() if s in ("active", "gone")}
+        if not known:
+            return
+        rows = self._sql(f"SELECT uid, data FROM seen WHERE uid IN ({_marks(len(known))})", tuple(known))
+        self._save_data([(uid, {**json.loads(data or "{}"), "gone": known[uid] == "gone", "checked_at": checked_at})
+                         for uid, data in rows])
+
     def patch_ad(self, uid: str, patch: dict) -> bool:
         """Fusionne des champs dans l'annonce stockée (ex. résultat d'analyse de marché). False si inconnue."""
         data = self.ad_data(uid)

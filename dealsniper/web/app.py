@@ -522,6 +522,59 @@ def create_app() -> Flask:
         threading.Thread(target=worker, daemon=True).start()
         return jsonify(ok=True)
 
+    # --- vérification « l'annonce est-elle toujours en ligne ? » -----------------------
+    check: dict[str, Any] = {"running": False, "report": None, "stop": False}
+
+    @app.post("/api/check")
+    def start_check():
+        """Lance la vérification des annonces données (uids) en arrière-plan."""
+        uids = [str(u) for u in (request.get_json(force=True) or {}).get("uids") or []][:500]
+        if not uids:
+            return jsonify(ok=False, error="Aucune annonce à vérifier"), 400
+        with lock:
+            if check["running"]:
+                return jsonify(ok=False, error="Une vérification est déjà en cours."), 409
+            check.update(running=True, stop=False, report={"total": len(uids), "done": 0, "active": 0,
+                                                             "gone": [], "unknown": []})
+
+        def worker() -> None:
+            from ..availability import check_ads
+
+            try:
+                with database() as db:
+                    ads = [{**(db.ad_data(uid) or {}), "uid": uid} for uid in uids]
+                report = asyncio.run(check_ads([a for a in ads if a.get("url")], load_config(config_path()),
+                                               on_progress=lambda r: check.update(report=dict(r)),
+                                               stop=lambda: check["stop"]))
+                with database() as db:
+                    db.set_availability(report.pop("statuses"), report["checked_at"])
+                check["report"] = report
+            except Exception as exc:
+                check["report"] = {**(check["report"] or {}), "error": str(exc)[:200]}
+            finally:
+                check["running"] = False
+
+        threading.Thread(target=worker, daemon=True).start()
+        return jsonify(ok=True)
+
+    @app.get("/api/check")
+    def check_status():
+        return jsonify(running=check["running"], report=check["report"])
+
+    @app.post("/api/check/cancel")
+    def cancel_check():
+        check["stop"] = True
+        return jsonify(ok=True)
+
+    @app.post("/api/ads/hide")
+    def hide_many():
+        """Masque plusieurs annonces d'un coup (ex. toutes celles qui ont disparu)."""
+        uids = [str(u) for u in (request.get_json(force=True) or {}).get("uids") or []]
+        with database() as db:
+            for uid in uids:
+                db.mark(uid, hidden=True)
+        return jsonify(ok=True, count=len(uids))
+
     @app.post("/api/cancel")
     def cancel_run():
         """Bouton « Annuler » : arrêt propre du passage en cours (au prochain point de contrôle)."""
