@@ -19,7 +19,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 from .. import progress
-from ..config import PROJECT_DIR, data_dir, load_config
+from ..config import config_file, data_dir, load_config
 from ..db import Database
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -28,9 +28,7 @@ CATEGORY_FIELDS = ("name", "max_budget", "require_include", *LIST_FIELDS)
 
 
 def config_path() -> Path:
-    import os
-
-    return Path(os.getenv("DEALSNIPER_CONFIG") or PROJECT_DIR / "config.yaml")
+    return config_file()
 
 
 def _yaml() -> YAML:

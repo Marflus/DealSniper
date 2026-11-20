@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -51,8 +52,19 @@ def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def config_file() -> Path:
+    """config.yaml personnel (ignoré par git), créé depuis config.example.yaml s'il n'existe pas encore."""
+    if os.getenv("DEALSNIPER_CONFIG"):
+        return Path(os.environ["DEALSNIPER_CONFIG"])
+    path = PROJECT_DIR / "config.yaml"
+    example = PROJECT_DIR / "config.example.yaml"
+    if not path.exists() and example.exists():
+        shutil.copyfile(example, path)
+    return path
+
+
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
-    path = Path(path or os.getenv("DEALSNIPER_CONFIG") or PROJECT_DIR / "config.yaml")
+    path = Path(path) if path else config_file()
     with open(path, encoding="utf-8") as fh:
         return _merge(DEFAULTS, yaml.safe_load(fh) or {})
 

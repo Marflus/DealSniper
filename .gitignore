@@ -29,3 +29,6 @@ Thumbs.db
 
 # Base SQLite locale
 data/
+
+# Configuration personnelle (créée depuis config.example.yaml au premier lancement)
+config.yaml

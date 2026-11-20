@@ -38,7 +38,7 @@ contourné. Les requêtes sont espacées et identifiées honnêtement (`DealSnip
 
 ```
 DealSniper/
-├── config.yaml               ← tous les réglages (sites, recherches, budgets, mots-clés, seuils)
+├── config.example.yaml       ← réglages de référence (copiés en config.yaml au premier lancement)
 ├── .env.example              ← modèle des secrets (à copier en .env)
 ├── dealsniper/
 │   ├── cli.py                commandes : run, watch, ui, test-notif, recap, reset
@@ -154,6 +154,11 @@ journalctl -u dealsniper -f
 Dans ce cas, supprimez le bloc `schedule:` du workflow GitHub pour ne pas analyser deux fois.
 
 ## Réglages principaux (`config.yaml`)
+
+`config.yaml` est **votre** fichier : il est créé automatiquement depuis `config.example.yaml` au premier
+lancement et ignoré par git, donc `git pull` ne bloque plus jamais dessus. Les nouveautés de
+`config.example.yaml` ne sont pas recopiées dans votre fichier : comparez les deux si besoin, ou
+supprimez `config.yaml` pour repartir de l'exemple.
 
 | Section | Rôle |
 |---|---|

@@ -1,5 +1,7 @@
 # =============================================================================
-#  Deal Sniper — configuration
+#  Deal Sniper — configuration d'exemple
+#  Au premier lancement, ce fichier est copié en config.yaml : c'est CE fichier-là (ignoré par git)
+#  que l'interface et vous modifiez. Celui-ci sert de référence et peut être mis à jour sans conflit.
 #  Les mots-clés sont insensibles à la casse et aux accents ("oxydé" = "OXYDE"),
 #  cherchés en mots entiers ("hs" ne trouve pas "hstore").
 # =============================================================================

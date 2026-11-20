@@ -162,3 +162,13 @@ def test_progress_keeps_search_log_and_summary(capsys):
     p.print_summary()
     out = capsys.readouterr().out
     assert "eBay (2 recherches, 25 annonces)" in out and "thinkpad 25 · dyson 0" in out
+
+
+def test_personal_config_is_created_from_example(tmp_path, monkeypatch):
+    from dealsniper import config as cfg
+
+    (tmp_path / "config.example.yaml").write_text("analyzer: {batch_size: 7}\n", encoding="utf-8")
+    monkeypatch.setattr(cfg, "PROJECT_DIR", tmp_path)
+    monkeypatch.delenv("DEALSNIPER_CONFIG", raising=False)
+    assert cfg.load_config()["analyzer"]["batch_size"] == 7
+    assert (tmp_path / "config.yaml").exists()  # copie personnelle, modifiable sans toucher à l'exemple
