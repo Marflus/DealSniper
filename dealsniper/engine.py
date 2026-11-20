@@ -20,6 +20,9 @@ from .db import Database
 from .http import AccessDenied, PoliteClient
 from .progress import LiveLogHandler, Progress
 from .sites import Site, load_sites
+from .sites import skipped as skipped_sites
+
+SITE_LABELS = {"ebay": "eBay", "leboncoin": "Leboncoin", "vinted": "Vinted", "facebook": "Facebook"}
 
 log = logging.getLogger(__name__)
 
@@ -153,6 +156,8 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
     if progress.live:
         _live_logging(progress)
     sites = load_sites(config)
+    for name, reason in skipped_sites:
+        progress.done(SITE_LABELS.get(name, name.capitalize()), f"ignoré : {reason}")
     if not sites:
         log.error("Aucun site configuré (voir config.yaml > sites et les secrets dans .env).")
         return

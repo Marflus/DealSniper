@@ -328,3 +328,4 @@ button.add:hover { border-color: var(--accent); color: var(--accent); background
 .pager .gap { color: var(--muted); padding: 0 2px; }
 .pager .where { color: var(--muted); font-size: 13px; margin: 0 6px; }
 @media (max-width: 600px) { .pager .nums { display: none; } }
+.prog-row.skipped .prog-text, .prog-row.skipped .spin { color: var(--mid); }

@@ -159,12 +159,12 @@ function drawProgress() {
     const open = openedSites.has(l.site);
     const detail = open && searches.length ? `<div class="prog-detail">${searches.map((x) =>
       `<span class="${x.found ? "" : "zero"}">${esc(x.query)} <b>${x.found}</b></span>`).join("")}</div>` : "";
-    return `<div class="prog-row ${l.done ? "done" : ""} ${searches.length ? "expandable" : ""}" data-site-log="${esc(l.site)}"
+    return `<div class="prog-row ${l.done ? "done" : ""} ${l.text.startsWith("ignoré") ? "skipped" : ""} ${searches.length ? "expandable" : ""}" data-site-log="${esc(l.site)}"
         title="${searches.length ? "Cliquer pour voir le détail des recherches" : ""}">
       <b>${searches.length ? (open ? "▾ " : "▸ ") : ""}${esc(l.site)}</b><span class="prog-text">${esc(l.text)}</span>
       <span class="prog-time">⏱ ${live(l.elapsed, l.done)}</span>
       <span class="prog-cost">${l.cost ? iaCost(l.cost) : "—"}</span>
-      <span class="spin">${l.done ? "✓" : SPINNER[spin]}</span></div>${detail}`;
+      <span class="spin">${l.text.startsWith("ignoré") ? "⚠" : l.done ? "✓" : SPINNER[spin]}</span></div>${detail}`;
   }).join("");
   box.innerHTML = `<div class="prog-head">
       <span>${p.done ? "✅ Dernier passage terminé" : "⏳ Passage en cours…"}</span>

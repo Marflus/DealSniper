@@ -23,13 +23,22 @@ SITE_MODULES = {
 }
 
 
+# Sites ignorés au dernier chargement : (nom, raison), affichés dans la progression.
+skipped: list[tuple[str, str]] = []
+
+
+def _skip(name: str, reason: str) -> None:
+    skipped.append((name, reason))
+    log.warning("Site %s ignoré : %s.", name, reason)
+
+
 def _load_class(name: str) -> type[Site] | None:
     """Importe la classe d'un site ; un site dont une dépendance manque est ignoré sans bloquer les autres."""
     module, cls = SITE_MODULES[name].split(":")
     try:
         return getattr(importlib.import_module(f".{module}", __name__), cls)
     except ImportError as exc:
-        log.warning("Site %s ignoré : dépendance manquante (%s).", name, exc.name or exc)
+        _skip(name, f"module Python manquant ({exc.name or exc})")
         return None
 
 
@@ -62,12 +71,13 @@ def merge_searches(common: list[dict], own: list[dict], uses_condition: bool) ->
 def load_sites(config: dict[str, Any]) -> list[Site]:
     """Sites activés dans config.yaml et correctement configurés."""
     sites = []
+    skipped.clear()
     common = config.get("searches") or []
     for name, cfg in config["sites"].items():
         if not (cfg or {}).get("enabled", True):
             continue
         if name not in SITE_MODULES:
-            log.warning("Site « %s » absent de SITE_MODULES (dealsniper/sites/__init__.py).", name)
+            _skip(name, "absent de SITE_MODULES (dealsniper/sites/__init__.py)")
             continue
         cls = _load_class(name)
         if cls is None:
@@ -79,5 +89,5 @@ def load_sites(config: dict[str, Any]) -> list[Site]:
         if site.is_configured():
             sites.append(site)
         else:
-            log.info("Site %s ignoré : secrets ou réglages manquants.", name)
+            _skip(name, "secrets (.env) ou recherches manquants")
     return sites
