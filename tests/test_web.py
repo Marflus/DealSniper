@@ -244,3 +244,9 @@ def test_seller_questions_on_demand(client, monkeypatch):
     assert data["ok"] and data["questions"][0].startswith("Le BIOS")
     ad = [a for a in c.get("/api/ads").get_json()["ads"] if a["uid"] == "ebay:100000000001"][0]
     assert ad["market_deep"]["questions"] == data["questions"]
+
+
+def test_progress_endpoint_is_light(client):
+    c, _ = client
+    data = c.get("/api/progress").get_json()
+    assert set(data) == {"running", "error", "progress", "cost_today", "cost_cap"}  # pas la liste des annonces

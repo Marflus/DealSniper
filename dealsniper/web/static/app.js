@@ -257,19 +257,44 @@ document.querySelectorAll("[data-mirror]").forEach((el) => {
 });
 
 // ---------- Annonces ----------
-let runPoll = null;
+let runPoll = null, runTicks = 0, lastError = null;
+
+// État du passage (budget, bouton Lancer/Annuler, erreur, progression) : commun à /api/ads et /api/progress.
+function applyStatus(data) {
+  renderBudget(data.cost_today, data.cost_cap);
+  setRunning(data.running);
+  if (data.error && data.error !== lastError) toast("Dernier passage en erreur : " + data.error);
+  lastError = data.error;
+  renderProgress(data.progress);
+}
+
+// Pendant un passage : suivi léger toutes les 1,5 s ; la liste complète des annonces toutes les 15 s seulement.
+async function pollProgress() {
+  const data = await api("/api/progress").catch(() => null);
+  if (!data) return;
+  applyStatus(data);
+  if (data.running) {
+    if (++runTicks % 10 === 0) loadAds();
+    return;
+  }
+  clearInterval(runPoll);
+  runPoll = null;
+  runTicks = 0;
+  toast("Passage terminé");
+  loadAds();
+}
+function followRun() {
+  if (!runPoll) runPoll = setInterval(pollProgress, 1500);
+}
+
 async function loadAds() {
   try {
     const serverStatus = status === "fav" || status === "hidden" ? "" : status;  // favoris / masquées : tri local
     const data = await api(`/api/ads?status=${encodeURIComponent(serverStatus)}&days=${$("#f-days").value}${nearParam()}`);
     geoState = data.geo;
     allAds = data.ads;
-    renderBudget(data.cost_today, data.cost_cap);
-    setRunning(data.running);
-    if (data.error) toast("Dernier passage en erreur : " + data.error);
-    renderProgress(data.progress);
-    if (data.running && !runPoll) runPoll = setInterval(loadAds, 1500);  // suivi rapide pendant un passage
-    if (!data.running && runPoll) { clearInterval(runPoll); runPoll = null; toast("Passage terminé"); }
+    applyStatus(data);
+    if (data.running && !searchPoll) followRun();  // la recherche ponctuelle a son propre suivi
     renderSiteChips(new Set(allAds.map((a) => a.source).filter(Boolean)));
     fillSelect("#f-category", new Set(allAds.map((a) => a.category).filter(Boolean)));
     renderAds(true);  // rafraîchissement : on reste sur la même page
@@ -837,16 +862,16 @@ $("#qs-sites").addEventListener("click", (e) => {
 
 async function pollSearch() {
   let data;
-  try { data = await api(`/api/ads?status=analyzed&days=1${nearParam()}`); } catch (e) { return; }
+  try { data = await api("/api/progress"); } catch (e) { return; }
   const p = data.progress;
-  setRunning(data.running);
-  renderProgress(p);  // progression animée (chrono, « buffering »), comme dans l'onglet Annonces
+  applyStatus(data);  // progression animée (chrono, « buffering »), comme dans l'onglet Annonces
   if (data.running) return;
   // Terminé : compte rendu + résultats.
   if (searchPoll) { clearInterval(searchPoll); searchPoll = null; }
   $("#search-live").hidden = true;
-  const found = await api(`/api/search-results?x=1${nearParam()}`).catch(() => ({ ads: [] }));
+  const found = await api(`/api/search-results?${nearParam().slice(1)}`).catch(() => ({ ads: [] }));
   renderSearchReport(p, found.ads || []);
+  loadAds();  // l'onglet Annonces profite aussi des nouvelles notes
 }
 
 function renderSearchReport(p, ads) {

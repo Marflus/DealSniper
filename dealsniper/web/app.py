@@ -344,6 +344,18 @@ def create_app() -> Flask:
         return jsonify(ads=items, cost_today=round(cost, 4), cost_cap=cap, running=state["running"],
                        error=state["error"], progress=progress.current.snapshot(), geo=geo_state, home=home)
 
+    @app.get("/api/progress")
+    def run_progress():
+        """Suivi léger d'un passage (interrogé toutes les 1,5 s) : sans la liste des annonces."""
+        with database() as db:
+            cost = asyncio.run(db.cost_today())
+        try:
+            cap = current_config()["analyzer"].get("max_daily_cost_usd")
+        except Exception:
+            cap = None
+        return jsonify(running=state["running"], error=state["error"], progress=progress.current.snapshot(),
+                       cost_today=round(cost, 4), cost_cap=cap)
+
     @app.get("/api/stats")
     def stats():
         with database() as db:
