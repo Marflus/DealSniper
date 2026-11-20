@@ -114,3 +114,13 @@ def test_old_analyses_get_the_realism_guard(client):
     assert a["realiste"] and "facilite_vente" not in a  # ancienne analyse : pas de note inventée
     assert a["valeur_revente_estimee"] == 180  # 200 € rabotés de 10 %
     assert a["marge_nette_estimee"] == 180 - 90 - 20 - 18  # revente - prix - pièce - 10 % de frais
+
+
+def test_reset_config_from_example(client):
+    c, path = client
+    example = path.read_text(encoding="utf-8").replace("min_score: 7", "min_score: 9")
+    (path.parent / "config.example.yaml").write_text(example, encoding="utf-8")
+    data = c.post("/api/settings/reset").get_json()
+    assert data["ok"] and data["backup"].startswith("config.")
+    assert (path.parent / data["backup"]).exists()  # ancienne configuration gardée
+    assert load_config(path)["notifier"]["min_score"] == 9

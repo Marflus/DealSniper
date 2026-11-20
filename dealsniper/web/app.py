@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import io
+import shutil
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -314,6 +316,20 @@ def create_app() -> Flask:
             return jsonify(read_settings())
         except Exception as exc:  # YAML invalide : l'interface affiche l'erreur
             return jsonify(error=f"config.yaml illisible : {exc}"), 500
+
+    @app.post("/api/settings/reset")
+    def reset_settings():
+        """Remplace config.yaml par config.example.yaml, après en avoir gardé une copie datée."""
+        path = config_path()
+        example = path.parent / "config.example.yaml"
+        if not example.exists():
+            return jsonify(ok=False, error="config.example.yaml introuvable"), 404
+        backup = None
+        if path.exists():
+            backup = path.with_name(f"config.{datetime.now():%Y%m%d-%H%M%S}.bak.yaml")
+            shutil.copyfile(path, backup)
+        shutil.copyfile(example, path)
+        return jsonify(ok=True, backup=backup.name if backup else None)
 
     @app.put("/api/settings")
     def put_settings():

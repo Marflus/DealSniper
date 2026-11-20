@@ -834,6 +834,15 @@ $("#save").addEventListener("click", async () => {
     $("#save-status").textContent = "❌ " + e.message;
   }
 });
+$("#reset-config").addEventListener("click", async () => {
+  if (!confirm("Remplacer votre configuration (recherches, catégories, filtres, réglages) par la configuration d'exemple ?\n\nUne copie de l'actuelle est gardée dans le dossier du projet.")) return;
+  try {
+    const data = await api("/api/settings/reset", { method: "POST" });
+    await loadSettings();
+    loadStatus();
+    toast(data.backup ? `✅ Configuration d'exemple chargée (ancienne gardée : ${data.backup})` : "✅ Configuration d'exemple chargée");
+  } catch (e) { toast("❌ " + e.message); }
+});
 $("#discard").addEventListener("click", () => { if (confirm("Annuler les modifications non enregistrées ?")) loadSettings(); });
 
 // ---------- État de l'installation ----------

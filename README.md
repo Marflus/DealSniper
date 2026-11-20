@@ -117,7 +117,8 @@ Double-cliquez sur **`update.bat`** : il ferme l'interface, récupère la derni�
 
 Votre `config.yaml` n'est jamais touché par les mises à jour (il est ignoré par git). Les nouveautés de la
 configuration d'exemple (`config.example.yaml`) ne s'y ajoutent donc pas d'elles-mêmes : pour repartir de la
-dernière version, supprimez `config.yaml`, il sera recréé au prochain lancement.
+dernière version : **Réglages → Fonctionnement → ↺ Réinitialiser** (votre configuration actuelle est d'abord
+sauvegardée dans un fichier `config.<date>.bak.yaml`).
 
 ## 5. Faire tourner sans son PC
 
