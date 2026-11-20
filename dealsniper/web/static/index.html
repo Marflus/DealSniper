@@ -33,6 +33,7 @@
   <main>
     <!-- ANNONCES -->
     <section id="tab-ads" class="page">
+      <div id="setup" class="setup" hidden></div>
       <div class="toolbar">
         <div class="toolbar-row">
           <input id="f-text" class="search" type="search" placeholder="🔍  Rechercher un modèle, une ville…">
@@ -146,6 +147,12 @@
               <input id="a-desc" type="number" min="50" step="50" class="num">
             </div>
           </details>
+        </div>
+
+        <div class="panel">
+          <div class="sec-head"><span class="sec-icon blue">🩺</span><div><h2>État de l'installation</h2>
+            <p>Clés du fichier <code>.env</code> et sites réellement lancés.</p></div></div>
+          <ul id="status-list" class="status-list"></ul>
         </div>
 
         <div class="panel">

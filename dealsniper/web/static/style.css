@@ -323,10 +323,25 @@ button.add:hover { border-color: var(--accent); color: var(--accent); background
 @media (max-width: 600px) { .pager .nums { display: none; } }
 .prog-row.skipped .prog-text, .prog-row.skipped .spin { color: var(--mid); }
 
-/* Les 3 notes sur la photo */
-.thumb-scores { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
-.pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px 3px 7px; border-radius: 99px; color: #fff;
-  font-size: 13px; line-height: 1.3; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); }
-.pill b { font-size: 14px; }
-.pill:first-child { font-size: 14px; padding: 4px 11px 4px 8px; }
-.pill:first-child b { font-size: 16px; }
+/* Les 3 notes sous les prix */
+.scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: -2px; }
+.sc { --c: var(--low); display: grid; justify-items: center; gap: 1px; padding: 5px 4px; border-radius: 10px;
+  background: color-mix(in srgb, var(--c) 13%, transparent); }
+.sc span { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.sc b { font-size: 15px; color: color-mix(in srgb, var(--c) 85%, var(--fg)); }
+.sc b small { font-size: 11px; font-weight: 500; opacity: .7; }
+.sc.good { --c: var(--good); } .sc.mid { --c: var(--mid); } .sc.low { --c: var(--bad); }
+.sc.none { background: var(--soft); } .sc.none b { color: var(--muted); }
+
+/* État de l'installation */
+.setup { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; padding: 12px 16px;
+  border-radius: var(--radius); border: 1px solid color-mix(in srgb, var(--mid) 45%, var(--line));
+  background: color-mix(in srgb, var(--mid) 9%, var(--card)); }
+.setup ul { margin: 6px 0; padding-left: 18px; }
+.setup small { color: var(--muted); }
+.setup .icon:hover { background: var(--soft); }
+.status-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.status-list li { padding: 8px 12px; border-radius: 10px; background: var(--soft); font-size: 13px; }
+.status-list li.ok::first-letter { color: var(--good); }
+.status-list li.ko { background: color-mix(in srgb, var(--mid) 12%, var(--card)); }
+.empty b { color: var(--fg); }

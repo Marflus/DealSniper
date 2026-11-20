@@ -19,7 +19,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 from .. import progress
-from ..config import config_file, data_dir, load_config
+from ..config import config_file, data_dir, env, load_config
 from ..db import Database
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -264,6 +264,24 @@ def create_app() -> Flask:
             return jsonify(image=image)
         finally:
             db.close()
+
+    @app.get("/api/status")
+    def status():
+        """Ce qui empêcherait Deal Sniper de fonctionner : clés manquantes, sites ignorés."""
+        from ..engine import SITE_LABELS
+        from ..notifier import Notifier
+        from ..sites import load_sites, skipped
+
+        report: dict[str, Any] = {"anthropic": bool(env("ANTHROPIC_API_KEY")), "channels": Notifier().channels,
+                                  "sites": [], "error": None}
+        try:
+            loaded = load_sites(load_config(config_path()))
+            report["sites"] = [{"label": s.label, "ok": True} for s in loaded] + [
+                {"label": SITE_LABELS.get(name, name.capitalize()), "ok": False, "reason": reason}
+                for name, reason in skipped]
+        except Exception as exc:  # config.yaml illisible : affiché tel quel
+            report["error"] = str(exc)
+        return jsonify(report)
 
     @app.get("/api/settings")
     def get_settings():

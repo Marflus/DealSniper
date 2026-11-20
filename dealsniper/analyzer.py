@@ -36,7 +36,8 @@ facilite_vente (1-10) : demande en occasion en France. 10 = modèle très recher
 
 Règles :
 - Montants en euros, prix_total = prix + port. Enchère : le prix est l'enchère actuelle, raisonne sur un prix final probable.
-- valeur_revente_estimee : prix d'occasion réaliste en France une fois réparé, jamais le prix neuf.
+- valeur_revente_estimee : sois PRUDENT. C'est le prix auquel ce modèle exact se VEND réellement entre particuliers en France (leboncoin, eBay vendus) en quelques semaines, une fois réparé : le bas de la fourchette, jamais le prix neuf ni le prix affiché le plus haut. L'électronique perd vite sa valeur : un ordinateur de plus de 5 ans dépasse rarement 250-350 €. Modèle, année ou configuration inconnus : prends l'entrée de gamme et score ≤ 5.
+- cout_piece_estime : prix réel de la pièce neuve ou d'occasion + petit matériel ; jamais 0 pour une réparation.
 - marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais.
 - Revente directe : panne_probable = "aucune", cout_piece_estime = 0.
 - Sans description, suppose l'objet conforme à son titre. Un titre court, tronqué ou un modèle inconnu n'est pas un indice d'arnaque ; ne parle d'arnaque que pour un prix < 30 % de la cote sur un produit récent très demandé.
@@ -154,6 +155,28 @@ def sanitize_analysis(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def make_realistic(analysis: dict[str, Any], ad: Ad, haircut: float = 0.9) -> dict[str, Any]:
+    """Garde-fou contre l'optimisme du modèle, appliqué en Python (pas de calcul confié à l'IA).
+
+    - la revente estimée est rabotée de `haircut` (0,9 = -10 %, marge de négociation des acheteurs) ;
+    - la marge est recalculée : revente - prix payé (port compris) - pièce - 10 % de frais ;
+    - une marge recalculée faible plafonne la note (< 20 € : 4/10 max ; < 40 € : 6/10 max).
+    """
+    resale = round(analysis["valeur_revente_estimee"] * haircut, 2)
+    if ad.price_mode == "enchere" or ad.total_price is None:
+        # Prix final inconnu : on garde le raisonnement du modèle, moins le rabot.
+        margin = analysis["marge_nette_estimee"] - (analysis["valeur_revente_estimee"] - resale)
+    else:
+        margin = resale - ad.total_price - analysis["cout_piece_estime"] - 0.10 * resale
+    margin = round(margin, 2)
+    score = analysis["score_rentabilite"]
+    if margin < 20:
+        score = min(score, 4)
+    elif margin < 40:
+        score = min(score, 6)
+    return {**analysis, "valeur_revente_estimee": resale, "marge_nette_estimee": margin, "score_rentabilite": score}
+
+
 class Analyzer:
     def __init__(self, config: dict[str, Any]):
         import anthropic
@@ -168,6 +191,7 @@ class Analyzer:
         if self.effort is None and not self.model.startswith("claude-haiku-4"):
             self.effort = "low"  # modèles récents : réflexion minimale, inutile pour cette tâche et facturée
         self.use_schema = bool(cfg["structured_output"])
+        self.resale_haircut = float(cfg.get("resale_haircut", 0.9))
         pricing = {**DEFAULT_PRICING, **{k: tuple(v) for k, v in (cfg.get("pricing") or {}).items()}}
         self.price_in, self.price_out = pricing.get(self.model, (1.0, 5.0))
         self.client = anthropic.Anthropic(
@@ -249,7 +273,7 @@ class Analyzer:
                 continue
         for idx, ad in enumerate(ads, 1):
             if idx in by_id:
-                ad.analysis = sanitize_analysis(by_id[idx])
+                ad.analysis = make_realistic(sanitize_analysis(by_id[idx]), ad, self.resale_haircut)
                 result.analyzed.append(ad)
             else:
                 log.warning("Pas de réponse pour « %s », reportée.", ad.title[:50])

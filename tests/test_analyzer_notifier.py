@@ -102,3 +102,14 @@ def test_notify_min_margin_and_ease(monkeypatch, config):
     direct.analysis["facilite_reparation"] = 1  # la facilité ne compte pas pour la revente directe
     sent = notify([small, hard, direct, deal(9)], cfg)
     assert [(a.score, a.deal_type) for a in sent] == [(9, "reparation"), (8, "revente_directe")]
+
+
+def test_make_realistic_recomputes_margin_and_caps_score():
+    ad = Ad(title="MacBook Pro 2017 à réparer", url="https://e.x/1", source="t", price=70)
+    optimistic = {**analyzer.sanitize_analysis(item(1, score=8)), "valeur_revente_estimee": 600,
+                  "cout_piece_estime": 60, "marge_nette_estimee": 378}
+    clean = analyzer.make_realistic(optimistic, ad, haircut=0.9)
+    assert clean["valeur_revente_estimee"] == 540
+    assert clean["marge_nette_estimee"] == 540 - 70 - 60 - 54  # recalculée, pas celle du modèle
+    thin = analyzer.make_realistic({**optimistic, "valeur_revente_estimee": 150}, ad, haircut=0.9)
+    assert thin["marge_nette_estimee"] < 20 and thin["score_rentabilite"] == 4

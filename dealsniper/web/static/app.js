@@ -243,18 +243,18 @@ function filteredAds() {
   return ads.sort(sorters[$("#f-sort").value] || sorters.recent);
 }
 
-// Les 3 notes, posées sur la photo : rentabilité (note IA), facilité de réparation, facilité de vente.
-function thumbScores(ad) {
+// Les 3 notes, sous les prix : rentabilité (note IA), facilité de réparation, facilité de vente.
+function scoreRow(ad) {
   const a = ad.analysis || {};
-  const level = (v) => (v >= 7 ? "s-good" : v >= 5 ? "s-mid" : "s-low");
-  const pill = (value, icon, title) => (value == null ? ""
-    : `<span class="pill ${level(value)}" title="${title}">${icon}<b>${value}</b></span>`);
-  const pills = [
-    pill(ad.score, "⭐", "Note de rentabilité (IA) sur 10"),
-    a.type_affaire === "revente_directe" ? "" : pill(a.facilite_reparation, "🔧", "Facilité de réparation sur 10 (10 = rien ou presque à faire)"),
-    pill(a.facilite_vente, "🔥", "Facilité de vente sur 10 (10 = très recherché, part en quelques jours)"),
-  ].join("");
-  return pills ? `<div class="thumb-scores">${pills}</div>` : "";
+  const level = (v) => (v == null ? "none" : v >= 7 ? "good" : v >= 5 ? "mid" : "low");
+  const cell = (value, icon, label, title) => `<div class="sc ${level(value)}" title="${title}">
+      <span>${icon} ${label}</span><b>${value == null ? "—" : `${value}<small>/10</small>`}</b></div>`;
+  const repair = a.type_affaire === "revente_directe" ? null : a.facilite_reparation;
+  return `<div class="scores">
+    ${cell(ad.score, "⭐", "Note", "Note de rentabilité donnée par l'IA")}
+    ${cell(repair, "🔧", "Réparation", a.type_affaire === "revente_directe" ? "Revente directe : rien à réparer" : "Facilité de réparation (10 = rien ou presque à faire)")}
+    ${cell(a.facilite_vente, "🔥", "Vente", "Facilité de vente (10 = très recherché, part en quelques jours)")}
+  </div>`;
 }
 
 // « Laon 02000 02000 » → « Laon 02000 »
@@ -274,7 +274,7 @@ function adCard(ad) {
   const place = cleanPlace(ad.location);
 
   return `<article class="ad ${ad.status}" data-uid="${esc(ad.uid)}" ${ad.image == null ? "data-need-image" : ""}>
-    <a class="thumb" href="${esc(ad.url)}" target="_blank" rel="noopener">${image}${ad.analysis ? thumbScores(ad) : ""}</a>
+    <a class="thumb" href="${esc(ad.url)}" target="_blank" rel="noopener">${image}</a>
     <div class="body">
       <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${esc(ad.title)}</a>
       <div class="stats">
@@ -282,6 +282,7 @@ function adCard(ad) {
         <div><span>Revente</span><b>${a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "—"}</b></div>
         <div class="${marginClass}"><span>Marge</span><b>${margin}</b></div>
       </div>
+      ${ad.analysis ? scoreRow(ad) : ""}
       ${fault ? `<div class="fault">🩺 ${esc(fault)}</div>` : ""}
       ${ad.reason ? `<div class="reason">✗ ${esc(ad.reason)}</div>` : ""}
       <div class="meta">
@@ -306,7 +307,9 @@ function renderAds(keepPage = false) {
     : `0 annonce sur ${allAds.length}`;
   $("#ads").innerHTML = ads.length
     ? ads.slice(first, first + PAGE_SIZE).map(adCard).join("")
-    : '<div class="empty">Aucune annonce ne correspond à ces filtres.</div>';
+    : allAds.length
+      ? '<div class="empty">Aucune annonce ne correspond à ces filtres. <button class="link" data-reset-filters>Réinitialiser les filtres</button></div>'
+      : '<div class="empty"><b>Aucune annonce pour l\'instant.</b><br>Cliquez sur <b>▶ Lancer un passage</b> en haut à droite pour lancer une première recherche.</div>';
   renderPager(pages);
   loadMissingImages();
 }
@@ -346,6 +349,8 @@ function renderPager(pages) {
     <span class="where">Page ${page} sur ${pages}</span>
     <button data-page="${page + 1}" ${page === pages ? "disabled" : ""}>Suivante ›</button>`;
 }
+
+$("#ads").addEventListener("click", (e) => { if (e.target.matches("[data-reset-filters]")) $("#reset-filters").click(); });
 
 $("#pager").addEventListener("click", (e) => {
   const button = e.target.closest("[data-page]");
@@ -736,7 +741,38 @@ $("#save").addEventListener("click", async () => {
 });
 $("#discard").addEventListener("click", () => { if (confirm("Annuler les modifications non enregistrées ?")) loadSettings(); });
 
+// ---------- État de l'installation ----------
+async function loadStatus() {
+  const s = await api("/api/status").catch(() => null);
+  if (!s) return;
+  const items = [
+    { ok: s.anthropic, text: s.anthropic ? "Clé Anthropic présente : les annonces sont notées par l'IA"
+      : "Clé Anthropic manquante : ajoutez ANTHROPIC_API_KEY dans .env, sinon aucune annonce n'est notée" },
+    { ok: s.channels.length > 0, text: s.channels.length ? `Notifications : ${s.channels.join(" + ")}`
+      : "Aucune notification : ajoutez TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (ou DISCORD_WEBHOOK_URL) dans .env" },
+    ...s.sites.map((site) => ({ ok: site.ok, text: site.ok ? `${site.label} : lancé à chaque passage` : `${site.label} ignoré : ${site.reason}` })),
+  ];
+  if (s.error) items.push({ ok: false, text: `config.yaml illisible : ${s.error}` });
+  $("#status-list").innerHTML = items.map((i) => `<li class="${i.ok ? "ok" : "ko"}">${i.ok ? "✓" : "⚠"} ${esc(i.text)}</li>`).join("");
+
+  // Bandeau sur l'onglet Annonces : seulement les problèmes, masquable.
+  const problems = items.filter((i) => !i.ok);
+  const key = problems.map((p) => p.text).join("|");
+  let hidden = "";
+  try { hidden = localStorage.getItem("dealsniper-setup-hidden") || ""; } catch (e) { /* stockage indisponible */ }
+  $("#setup").hidden = !problems.length || hidden === key;
+  $("#setup").innerHTML = `<div><b>À régler pour profiter de tout Deal Sniper</b>
+      <ul>${problems.map((p) => `<li>${esc(p.text)}</li>`).join("")}</ul>
+      <small>Après avoir modifié <code>.env</code>, relancez <code>start_ui.bat</code>.</small></div>
+    <button class="icon" title="Masquer" data-hide-setup>✕</button>`;
+  $("#setup [data-hide-setup]").addEventListener("click", () => {
+    $("#setup").hidden = true;
+    try { localStorage.setItem("dealsniper-setup-hidden", key); } catch (e) { /* idem */ }
+  });
+}
+
 restoreFilters();
+loadStatus();
 try { showTab(localStorage.getItem("dealsniper-tab") || "ads"); } catch (e) { showTab("ads"); }
 loadAds();
 setInterval(loadAds, 60000);
