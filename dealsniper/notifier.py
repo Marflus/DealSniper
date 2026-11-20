@@ -259,6 +259,18 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
     return sent
 
 
+def auction_reminder(ad: Ad) -> str:
+    """Message court de rappel de fin d'enchère."""
+    import contextlib
+    from datetime import datetime
+    end = ""
+    with contextlib.suppress(ValueError, TypeError):
+        end = datetime.fromisoformat(str(ad.ends_at).replace("Z", "+00:00")).astimezone().strftime("%H:%M")
+    price = _eur(ad.price)
+    return (f"⏰ Enchère bientôt finie{f' ({end})' if end else ''} — {ad.title}\n"
+            f"Enchère actuelle : {price}\n{ad.url}")
+
+
 def demo_ad() -> Ad:
     """Fausse annonce utilisée par `test-notif`."""
     return Ad(

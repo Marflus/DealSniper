@@ -44,7 +44,7 @@ DEFAULTS: dict[str, Any] = {
                  "deep_model": "claude-sonnet-5-5", "market_min_margin": 15, "max_retries": 4, "timeout_seconds": 90,
                  "structured_output": True, "pricing": {}},
     "notifier": {"min_score": 7, "watch_score": 5, "instant_min_score": 8, "instant_min_margin": None,
-                 "deal_types": ["reparation", "revente_directe"],
+                 "deal_types": ["reparation", "revente_directe"], "auction_reminder_minutes": 10,
                  "min_margin": None, "min_ease": None, "min_sale": None},
     "storage": {"seen_retention_days": 90},
 }

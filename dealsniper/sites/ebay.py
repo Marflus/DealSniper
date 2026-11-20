@@ -91,6 +91,7 @@ def item_to_ad(item: dict[str, Any]) -> Ad | None:
         description=f"État : {item['condition']}" if item.get("condition") else "",
         location=_place(item.get("itemLocation") or {}),
         price_mode="enchere" if auction else "fixe",
+        ends_at=item.get("itemEndDate") if auction else None,
         seller=_seller(item.get("seller") or {}),
         image=_image(item),
     )

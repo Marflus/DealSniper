@@ -195,6 +195,21 @@ class Engine:
             log.exception("%s : passage en échec (nouvel essai au prochain passage)", site.name)
             self.progress.done(site.label, f"erreur : {exc}"[:120])
 
+    async def auction_reminders(self) -> None:
+        """En surveillance continue : prévient ~N minutes avant la fin d'une enchère bien notée."""
+        minutes = float(self.config["notifier"].get("auction_reminder_minutes") or 10)
+        while not self.stopping.is_set():
+            try:
+                ending = await asyncio.to_thread(self.db.ending_soon, int(minutes) + 5)
+                for ad in ending:
+                    await asyncio.to_thread(notifier.Notifier().send_text, notifier.auction_reminder(ad))
+                    await asyncio.to_thread(self.db.mark_reminded, ad.uid)
+                    if ending:
+                        log.info("Rappel d'enchère : %s", ad.title[:50])
+            except Exception:
+                log.exception("Vérification des fins d'enchère en échec")
+            await self.sleep(120)
+
     async def watch_site(self, site: Site) -> None:
         await self.sleep(random.uniform(0, 30))  # démarrages étalés
         while not self.stopping.is_set():
@@ -243,7 +258,10 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
                     with contextlib.suppress(NotImplementedError):  # Windows
                         asyncio.get_running_loop().add_signal_handler(sig, engine.stopping.set)
                 log.info("Surveillance continue : %s", ", ".join(s.name for s in sites))
-                await asyncio.gather(*(engine.watch_site(s) for s in sites))
+                tasks = [engine.watch_site(s) for s in sites]
+                if float(config["notifier"].get("auction_reminder_minutes") or 0) > 0:
+                    tasks.append(engine.auction_reminders())  # rappels de fin d'enchère
+                await asyncio.gather(*tasks)
             else:
                 # Sites en parallèle : chacun garde son propre rythme, seul le total est plus court.
                 await asyncio.gather(*(engine.process_safely(site) for site in sites))

@@ -198,6 +198,28 @@ class Database:
                 ad["image"] = images[uid]
                 await self._asql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(ad, ensure_ascii=False), uid))
 
+    def ending_soon(self, minutes: int) -> list[Ad]:
+        """Enchères notées qui se terminent dans la fenêtre à venir et pas encore rappelées."""
+        now = _now()
+        until = now + timedelta(minutes=minutes)
+        rows = self._sql("SELECT data FROM seen WHERE status = 'analyzed'")
+        out = []
+        for (data,) in rows:
+            ad = json.loads(data or "{}")
+            end = ad.get("ends_at")
+            if ad.get("price_mode") != "enchere" or not end or ad.get("reminded"):
+                continue
+            try:
+                when = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if now <= when <= until:
+                out.append(Ad.from_dict(ad))
+        return out
+
+    def mark_reminded(self, uid: str) -> None:
+        self.patch_ad(uid, {"reminded": True})
+
     def analyzed_since(self, hours: int) -> list[Ad]:
         """Annonces notées par Claude ces dernières `hours` heures (meilleures d'abord)."""
         since = (_now() - timedelta(hours=hours)).isoformat(timespec="seconds")

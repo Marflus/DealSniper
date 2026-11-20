@@ -362,3 +362,36 @@ def test_watched_ad_is_always_notified(monkeypatch, config):
              analysis={"score_rentabilite": 3, "type_affaire": "reparation"})
     low.watched = True  # une veille passe malgré une note faible
     assert notify([low], cfg) == [low]
+
+
+def test_ending_soon_selects_unreminded_auctions(tmp_path):
+    import asyncio
+    from datetime import UTC, datetime, timedelta
+
+    from dealsniper.db import Database
+    from dealsniper.models import Ad
+    from dealsniper.notifier import auction_reminder
+
+    soon = (datetime.now(UTC) + timedelta(minutes=8)).isoformat()
+    late = (datetime.now(UTC) + timedelta(hours=5)).isoformat()
+
+    async def scenario():
+        db = Database(tmp_path / "a.db")
+        a = Ad(title="PS5 enchère", url="https://www.ebay.fr/itm/1", source="ebay", price=120,
+               price_mode="enchere", ends_at=soon, analysis={"score_rentabilite": 8})
+        b = Ad(title="PS5 plus tard", url="https://www.ebay.fr/itm/2", source="ebay", price=120,
+               price_mode="enchere", ends_at=late, analysis={"score_rentabilite": 8})
+        fixe = Ad(title="PS5 prix fixe", url="https://www.ebay.fr/itm/3", source="ebay", price=120,
+                  analysis={"score_rentabilite": 8})
+        for ad in (a, b, fixe):
+            await db.remember(ad, "analyzed")
+        first = [x.uid for x in db.ending_soon(15)]
+        db.mark_reminded(a.uid)
+        second = db.ending_soon(15)
+        msg = auction_reminder(a)
+        db.close()
+        return first, second, msg
+
+    first, second, msg = asyncio.run(scenario())
+    assert len(first) == 1 and second == []  # seule l'enchère proche, une seule fois
+    assert "Enchère bientôt finie" in msg and "PS5 enchère" in msg
