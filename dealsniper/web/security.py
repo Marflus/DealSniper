@@ -101,5 +101,7 @@ def protect(app: Flask, token: str) -> None:
         # Lien « ?token=… » ouvert une fois : le jeton est gardé dans un cookie (1 an).
         given = request.args.get("token")
         if given and request.remote_addr not in LOOPBACK and hmac.compare_digest(given.encode(), token.encode()):
-            response.set_cookie(COOKIE, token, max_age=365 * 24 * 3600, httponly=True, samesite="Strict")
+            # Lax (pas Strict) : un lien ouvert depuis une autre appli (Telegram…) garde l'accès ; les requêtes
+            # qui modifient quelque chose restent protégées par la vérification d'origine ci-dessus.
+            response.set_cookie(COOKIE, token, max_age=365 * 24 * 3600, httponly=True, samesite="Lax")
         return response

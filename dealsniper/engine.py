@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 MAX_AI_ATTEMPTS = 3  # échecs d'analyse propres à une annonce avant de l'abandonner (évite de repayer sans fin)
 
 # Annulation demandée depuis l'interface (bouton « Annuler ») : le passage s'arrête proprement au
-# prochain point de contrôle (après la liste, entre deux annonces, avant l'analyse IA).
+# prochain point de contrôle (entre deux recherches, entre deux annonces, entre deux lots d'analyse IA).
 CANCEL = threading.Event()
 
 

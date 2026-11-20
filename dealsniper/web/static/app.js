@@ -879,7 +879,7 @@ async function pollSearch() {
   $("#search-live").hidden = true;
   if (data.error) {  // ex. un autre passage tournait déjà : pas de faux « terminé »
     $("#search-report").hidden = false;
-    $("#search-report").innerHTML = `<div class="panel search-report"><div class="report-head">⚠️ Recherche « ${esc(searchQuery)} » non lancée</div>
+    $("#search-report").innerHTML = `<div class="panel search-report"><div class="report-head">⚠️ Recherche « ${esc(searchQuery)} » : erreur</div>
       <p class="small">${esc(data.error)}</p></div>`;
     return;
   }
