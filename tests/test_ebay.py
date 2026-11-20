@@ -78,3 +78,37 @@ def test_auction_with_best_offer_and_missing_id(config):
             return await site.fetch_detail(http, no_id)
 
     assert asyncio.run(go()).url == "https://exemple.fr/annonce"  # aucune requête envoyée
+
+
+def test_search_paginates_and_deduplicates(config):
+    import httpx
+
+    from dealsniper.http import PoliteClient
+    from dealsniper.sites import ebay
+
+    def item(i):
+        return {"title": f"ThinkPad {i}", "itemWebUrl": f"https://www.ebay.fr/itm/{i}",
+                "price": {"value": "50", "currency": "EUR"}, "buyingOptions": ["FIXED_PRICE"]}
+
+    calls = []
+
+    def handler(request):
+        if request.url.path.endswith("/token"):
+            return httpx.Response(200, json={"access_token": "tok", "expires_in": 7200})
+        offset = int(request.url.params.get("offset", 0))
+        calls.append(offset)
+        if offset == 0:
+            return httpx.Response(200, json={"itemSummaries": [item(i) for i in range(200)]})
+        return httpx.Response(200, json={"itemSummaries": [item(i) for i in range(190, 240)]})  # recoupe 190-199
+
+    site = ebay.EbaySite({**config["sites"]["ebay"], "limit": 300,
+                          "searches": [{"query": "thinkpad", "max_price": 120}]}, config)
+
+    async def go():
+        async with PoliteClient("t", 0, transport=httpx.MockTransport(handler)) as http:
+            return await site.list_recent(http)
+
+    ads = asyncio.run(go())
+    assert calls == [0, 200]              # deux pages demandées (limit 300)
+    assert len(ads) == 240                # 200 + 50 − 10 doublons (190-199)
+    assert len({a.uid for a in ads}) == 240

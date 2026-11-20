@@ -73,6 +73,13 @@ def is_available(item: dict[str, Any]) -> bool:
     return True
 
 
+def _summary_description(item: dict[str, Any]) -> str:
+    """État + court résumé (fieldgroup EXTENDED) : plus d'infos pour le filtre et l'IA, dès la liste."""
+    state = f"État : {item['condition']}" if item.get("condition") else ""
+    short = clean_html(item.get("shortDescription") or "")[:300]
+    return " | ".join(p for p in (state, short) if p)
+
+
 def item_to_ad(item: dict[str, Any]) -> Ad | None:
     """Une entrée de résultat de recherche eBay → Ad."""
     if not (item.get("itemWebUrl") and item.get("title")):
@@ -88,7 +95,7 @@ def item_to_ad(item: dict[str, Any]) -> Ad | None:
         source="ebay",
         price=price,
         shipping=min(shipping_costs) if shipping_costs else None,
-        description=f"État : {item['condition']}" if item.get("condition") else "",
+        description=_summary_description(item),
         location=_place(item.get("itemLocation") or {}),
         price_mode="enchere" if auction else "fixe",
         ends_at=item.get("itemEndDate") if auction else None,
@@ -123,16 +130,30 @@ class EbaySite(Site):
         return {"Authorization": f"Bearer {self._token}", "X-EBAY-C-MARKETPLACE-ID": self.cfg["marketplace"]}
 
     async def list_recent(self, http: PoliteClient) -> list[Ad]:
-        """ÉTAPE 1 : une recherche par entrée de `searches`, les plus récentes d'abord."""
-        headers, ads = await self._headers(http), []
+        """ÉTAPE 1 : une recherche par entrée de `searches`, les plus récentes d'abord.
+
+        Pagination (jusqu'à `limit`, par pages de 200) pour mieux couvrir, dédoublonnage des
+        annonces revenant dans plusieurs recherches, et champs enrichis (shortDescription).
+        """
+        headers, ads, seen = await self._headers(http), [], set()
         for search in self.cfg["searches"]:
-            params = {"q": search["query"], "filter": build_filter(search, self.cfg["country"]),
-                      "sort": "newlyListed", "limit": min(int(search.get("limit", self.cfg["limit"])), 200)}
-            resp = await http.get(SEARCH_URL, headers=headers, params=params)
-            resp.raise_for_status()
-            found = [ad for ad in map(item_to_ad, resp.json().get("itemSummaries") or []) if ad]
-            ads += found
-            self.report(search["query"], len(found))
+            flt = build_filter(search, self.cfg["country"])
+            want = min(int(search.get("limit", self.cfg["limit"])), 500)
+            count = 0
+            for offset in range(0, want, 200):
+                params = {"q": search["query"], "filter": flt, "sort": "newlyListed",
+                          "limit": min(200, want - offset), "offset": offset, "fieldgroups": "EXTENDED"}
+                resp = await http.get(SEARCH_URL, headers=headers, params=params)
+                resp.raise_for_status()
+                items = resp.json().get("itemSummaries") or []
+                for ad in map(item_to_ad, items):
+                    if ad and ad.uid not in seen:  # même annonce vue via une autre recherche : ignorée
+                        seen.add(ad.uid)
+                        ads.append(ad)
+                        count += 1
+                if len(items) < 200:
+                    break  # dernière page atteinte
+            self.report(search["query"], count)
         return ads
 
     async def sample_prices(self, http: PoliteClient, query: str) -> list[tuple[str, float]]:

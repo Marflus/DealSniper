@@ -43,7 +43,7 @@ sites:
     interval: [600, 900]       # 13 recherches toutes les 10-15 min ≈ 1 500 appels/jour (quota : 5 000)
     marketplace: EBAY_FR
     country: FR
-    limit: 100                 # annonces récentes par recherche (max 200)
+    limit: 100                 # annonces récentes par recherche, par pages de 200 (jusqu'à 500 ; attention au quota)
     searches:
       - {query: "thinkpad (t480,t490,t14,x280,x390)", condition: used, max_price: 170}
       - {query: "macbook air m1", condition: used, max_price: 380}
