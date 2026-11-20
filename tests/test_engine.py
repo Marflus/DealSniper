@@ -132,3 +132,16 @@ def test_missing_dependency_does_not_block_other_sites(monkeypatch, config):
     monkeypatch.setenv("EBAY_CLIENT_SECRET", "secret")
     cfg = {**config, "sites": {"absent": {"enabled": True}, "ebay": config["sites"]["ebay"]}}
     assert [s.name for s in sites.load_sites(cfg)] == ["ebay"]
+
+
+def test_common_searches_are_merged_per_site():
+    from dealsniper.sites import merge_searches
+
+    common = [{"query": "ps5", "condition": "parts", "max_price": 200},
+              {"query": "PS5", "condition": "used", "max_price": 260}, {"query": "dyson", "max_price": 80}]
+    own = [{"query": "tv pas d'image", "category": "16", "max_price": 120}]
+    # eBay filtre l'état : les deux recherches ps5 restent distinctes.
+    assert len(merge_searches(common, own, uses_condition=True)) == 4
+    # Ailleurs : une seule recherche ps5, avec le prix max le plus large, sans `condition`.
+    merged = merge_searches(common, own, uses_condition=False)
+    assert merged[0] == {"query": "PS5", "max_price": 260} and len(merged) == 3

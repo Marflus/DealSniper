@@ -49,6 +49,7 @@ def test_settings_roundtrip_keeps_comments(client):
     settings["categories"][0]["max_budget"] = "200"
     settings["filters"]["global_exclude_keywords"] = "oxyde, icloud ,"
     settings["notifier"]["min_score"] = "8"
+    settings["searches"] = [{"query": "dyson", "condition": "parts", "max_price": "80"}]
     assert c.put("/api/settings", json=settings).get_json() == {"ok": True}
 
     cfg = load_config(path)
@@ -56,6 +57,7 @@ def test_settings_roundtrip_keeps_comments(client):
     assert cfg["categories"][0]["max_budget"] == 200
     assert cfg["filters"]["global_exclude_keywords"] == ["oxyde", "icloud"]
     assert cfg["notifier"]["min_score"] == 8
+    assert cfg["searches"] == [{"query": "dyson", "condition": "parts", "max_price": 80}]
     assert "# ---" in path.read_text(encoding="utf-8")  # commentaires conservés
 
 

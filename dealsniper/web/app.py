@@ -90,10 +90,22 @@ def _words(value: Any) -> list[DoubleQuotedScalarString]:
     return [DoubleQuotedScalarString(str(w).strip()) for w in value or [] if str(w).strip()]
 
 
+def _search_rows(rows: list[dict], old: Any) -> CommentedSeq:
+    """Lignes de recherche reçues de l'interface → liste YAML (lignes sans recherche ignorées)."""
+    searches = []
+    for row in rows or []:
+        row = {k: (_number(v) if k in ("max_price", "min_price", "limit") else str(v).strip())
+               for k, v in row.items() if str(v).strip() != ""}
+        if row.get("query"):
+            searches.append(_flow_map(row))
+    return _seq(old, searches)
+
+
 def read_settings() -> dict[str, Any]:
     """Partie de config.yaml modifiable depuis l'interface."""
     doc = _yaml().load(config_path().read_text(encoding="utf-8")) or {}
     return {
+        "searches": _plain(doc.get("searches") or []),
         "sites": _plain(doc.get("sites") or {}),
         "categories": _plain(doc.get("categories") or []),
         "filters": _plain(doc.get("filters") or {}),
@@ -124,18 +136,17 @@ def write_settings(new: dict[str, Any]) -> None:
     yaml = _yaml()
     doc = yaml.load(path.read_text(encoding="utf-8")) or CommentedMap()
 
+    if "searches" in new:
+        doc["searches"] = _search_rows(new["searches"], doc.get("searches"))
+
     for name, site in (new.get("sites") or {}).items():
         target = doc.setdefault("sites", CommentedMap()).setdefault(name, CommentedMap())
         target["enabled"] = bool(site.get("enabled", True))
         if site.get("interval"):
             target["interval"] = _seq(target.get("interval"), [int(_number(v) or 0) for v in site["interval"]], True)
-        searches = []
-        for row in site.get("searches") or []:
-            row = {k: (_number(v) if k in ("max_price", "min_price", "limit") else str(v).strip())
-                   for k, v in row.items() if str(v).strip() != ""}
-            if row.get("query"):
-                searches.append(_flow_map(row))
-        target["searches"] = _seq(target.get("searches"), searches)
+        target["searches"] = _search_rows(site.get("searches"), target.get("searches"))
+        if "common_searches" in site and (not site["common_searches"] or "common_searches" in target):
+            target["common_searches"] = bool(site["common_searches"])
 
     if "categories" in new:
         # Mise à jour sur place des catégories existantes (leurs commentaires sont conservés).

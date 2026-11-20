@@ -5,76 +5,73 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
+#  Recherches communes : lancées sur TOUS les sites activés (base commune).
+#  condition (parts = pour pièces / HS, used = occasion, any = tout) ne sert qu'à eBay ;
+#  sur les autres sites, deux recherches identiques sont fusionnées (prix max le plus haut).
+#  Ciblage : objets très demandés, pannes connues et simples, pièces faciles à trouver.
+# -----------------------------------------------------------------------------
+searches:
+  # --- À réparer : panne simple, forte demande ---
+  - {query: "thinkpad", condition: parts, max_price: 130}         # sans SSD/RAM, batterie, clavier, charnière
+  - {query: "macbook", condition: parts, max_price: 200}          # batterie, clavier, SSD (évite carte mère / liquide)
+  - {query: "dell latitude", condition: parts, max_price: 100}
+  - {query: "thinkcentre", condition: any, max_price: 90}         # mini-PC très demandés (homelab), souvent sans disque
+  - {query: "ps5", condition: parts, max_price: 200}              # port HDMI, lecteur, surchauffe
+  - {query: "ps4 pro", condition: parts, max_price: 80}           # surchauffe : nettoyage + pâte thermique
+  - {query: "nintendo switch", condition: parts, max_price: 110}  # joy-con, lecteur de cartes, ventilateur
+  - {query: "steam deck", condition: parts, max_price: 220}       # joysticks, SSD, écran
+  - {query: "xbox series", condition: parts, max_price: 160}
+  - {query: "dyson", condition: parts, max_price: 80}             # batterie HS : pièce standard, revente rapide
+  - {query: "sonos", condition: parts, max_price: 80}             # alimentation, très recherché
+  # --- Revente directe : fonctionnel, sous la cote ---
+  - {query: "ps5", condition: used, max_price: 260}
+  - {query: "nintendo switch oled", condition: used, max_price: 180}
+  - {query: "steam deck", condition: used, max_price: 260}
+  - {query: "makita sans batterie", condition: any, max_price: 80}
+  - {query: "dewalt machine nue", condition: any, max_price: 80}
+
+# -----------------------------------------------------------------------------
 #  Sites surveillés : un bloc par fichier de dealsniper/sites/
 #  interval : pause (secondes, tirée au hasard) entre deux passages en mode `watch`
+#  searches : recherches EN PLUS des recherches communes ; common_searches: false pour les ignorer
 # -----------------------------------------------------------------------------
 sites:
   # API officielle eBay (secrets EBAY_CLIENT_ID / EBAY_CLIENT_SECRET), objets situés en France.
   #   condition : parts (pour pièces), used (occasion), any (tout) ; max_price en euros
+  #   eBay comprend « (a,b) » = a OU b : « thinkpad (t480,t490) »
   ebay:
     enabled: true
-    interval: [600, 900]       # 16 recherches toutes les 10-15 min ≈ 2 000 appels/jour (quota : 5 000)
+    interval: [720, 1080]      # 18 recherches toutes les 12-18 min ≈ 1 800 appels/jour (quota : 5 000)
     marketplace: EBAY_FR
     country: FR
     limit: 100                 # annonces récentes par recherche (max 200)
     searches:
-      # --- À réparer ---
-      - {query: "thinkpad", condition: parts, max_price: 120}
-      - {query: "dell latitude", condition: parts, max_price: 120}
-      - {query: "hp elitebook", condition: parts, max_price: 120}
-      - {query: "macbook", condition: parts, max_price: 180}
-      - {query: "ps5", condition: parts, max_price: 180}
-      - {query: "ps4", condition: parts, max_price: 80}
-      - {query: "xbox series", condition: parts, max_price: 150}
-      - {query: "nintendo switch", condition: parts, max_price: 100}
-      - {query: "steam deck", condition: parts, max_price: 200}
-      - {query: "tv led", condition: parts, max_price: 100}
-      - {query: "ecran pc", condition: parts, max_price: 60}
-      # --- Revente directe (occasion fonctionnelle, prix bas) ---
-      - {query: "thinkpad t480", condition: used, max_price: 150}
-      - {query: "ps5", condition: used, max_price: 250}
-      - {query: "nintendo switch oled", condition: used, max_price: 160}
-      - {query: "makita sans batterie", condition: any, max_price: 80}
-      - {query: "dewalt machine nue", condition: any, max_price: 80}
+      - {query: "thinkpad (t480,t490,t14,x280,x390)", condition: used, max_price: 170}
+      - {query: "macbook air m1", condition: used, max_price: 380}
 
   vinted:
     enabled: true
-    interval: [300, 600]
+    interval: [900, 1500]      # recherches communes : passages plus espacés pour rester discret
     limit: 25
-    searches:
-      - {query: "thinkpad", max_price: 150}
-      - {query: "macbook hs", max_price: 180}
-      - {query: "ps5 hs", max_price: 180}
-      - {query: "ps4 hs", max_price: 80}
-      - {query: "nintendo switch hs", max_price: 100}
-      - {query: "steam deck", max_price: 200}
-      - {query: "makita sans batterie", max_price: 80}
+    searches: []
 
   leboncoin:
     enabled: true
     headless: false
-    interval: [300, 600]
+    interval: [900, 1500]
     limit: 25
     searches:
       # Catégories LBC : 15=Informatique, 16=Image&Son, 43=Consoles, 21=Bricolage
-      - {query: "thinkpad", category: '15', max_price: 150}
-      - {query: "dell latitude", category: '15', max_price: 120}
-      - {query: "macbook hs", category: '15', max_price: 180}
-      - {query: "ps5 hs", category: '43', max_price: 180}
-      - {query: "nintendo switch", category: '43', max_price: 160}
-      - {query: "tv led panne", category: '16', max_price: 100}
-      - {query: "makita sans batterie", category: '21', max_price: 80}
+      - {query: "tv pas d'image", category: '16', max_price: 120}  # rétroéclairage : réparation simple, retrait sur place
 
   facebook:
     enabled: true
-    interval: [600, 900]
+    interval: [900, 1500]
     city: "paris"      # ou ta ville
     limit: 20
     headless: false
     searches:
-      - {query: "ps5 hs", max_price: 180}
-      - {query: "thinkpad", max_price: 150}
-      - {query: "nintendo switch", max_price: 150}
+      - {query: "tv pas d'image", max_price: 120}
 
   # Vos propres sites : copiez dealsniper/sites/_template.py, puis ajoutez un bloc ici.
   # mon_site:
@@ -203,7 +200,7 @@ categories:
     require_include: false
 
   - name: "Mini-PC"
-    keywords: ["mini pc", "mini-pc", "nuc", "optiplex micro", "thinkcentre tiny", "thinkcentre m7", "elitedesk mini", "prodesk mini", "mac mini"]
+    keywords: ["mini pc", "mini-pc", "nuc", "thinkcentre", "m720q", "m920q", "m710q", "m75q", "tiny", "optiplex micro", "elitedesk mini", "prodesk mini", "mac mini"]
     max_budget: 120
     include_keywords: ["sans disque", "sans ssd", "sans ram", "sans memoire", "sans os", "sans alimentation", "sans chargeur"]
 
@@ -229,6 +226,18 @@ categories:
     max_budget: 150
     exclude_keywords: ["dalle cassee", "dalle fissuree", "ecran fissure", "fissure", "impact", "pied seul", "telecommande seule"]
     include_keywords: ["retroeclairage", "backlight", "ecran noir avec son", "son mais pas d'image", "pas d'image", "led", "alimentation", "ne s'allume plus", "clignote"]
+
+  - name: "Aspirateurs Dyson & robots"
+    keywords: ["dyson", "roborock", "roomba"]
+    max_budget: 90
+    exclude_keywords: ["tete seule", "brosse seule", "chargeur seul", "batterie seule", "support seul", "accessoires seuls", "filtre seul"]
+    include_keywords: ["batterie hs", "batterie morte", "ne charge plus", "s'arrete", "se coupe", "clignote", "pulse", "bouton", "filtre"]
+
+  - name: "Enceintes & audio"
+    keywords: ["sonos", "bose", "marshall", "jbl charge", "jbl boombox", "ultimate ears"]
+    max_budget: 90
+    exclude_keywords: ["support seul", "cable seul", "housse seule", "telecommande seule"]
+    include_keywords: ["ne s'allume plus", "ne s'allume pas", "alimentation", "batterie hs", "ne charge plus", "bluetooth"]
 
   - name: "Outillage sans fil"
     keywords: ["makita", "dewalt", "milwaukee", "bosch pro", "hikoki", "metabo", "festool", "ryobi"]

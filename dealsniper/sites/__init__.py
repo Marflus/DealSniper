@@ -33,9 +33,36 @@ def _load_class(name: str) -> type[Site] | None:
         return None
 
 
+def merge_searches(common: list[dict], own: list[dict], uses_condition: bool) -> list[dict]:
+    """Recherches communes + recherches propres au site, sans doublon.
+
+    Un site qui ne sait pas filtrer l'état (Vinted, Leboncoin…) ignore `condition` :
+    « ps5 pour pièces ≤ 200 € » et « ps5 occasion ≤ 260 € » y deviennent une seule recherche « ps5 ≤ 260 € ».
+    """
+    merged: dict[tuple, dict] = {}
+    for search in [*common, *own]:
+        search = dict(search)
+        query = str(search.get("query") or "").strip()
+        if not query:
+            continue
+        if not uses_condition:
+            search.pop("condition", None)
+        key = (query.lower(), search.get("condition")) if uses_condition else (query.lower(),)
+        previous = merged.get(key)
+        if previous and not uses_condition:
+            prices = [previous.get("max_price"), search.get("max_price")]
+            search["max_price"] = None if None in prices else max(prices)  # le plus large des deux
+            search = {**previous, **search}
+            if search["max_price"] is None:
+                search.pop("max_price")
+        merged[key] = search
+    return list(merged.values())
+
+
 def load_sites(config: dict[str, Any]) -> list[Site]:
     """Sites activés dans config.yaml et correctement configurés."""
     sites = []
+    common = config.get("searches") or []
     for name, cfg in config["sites"].items():
         if not (cfg or {}).get("enabled", True):
             continue
@@ -45,6 +72,9 @@ def load_sites(config: dict[str, Any]) -> list[Site]:
         cls = _load_class(name)
         if cls is None:
             continue
+        own = cfg.get("searches") or []
+        use_common = cfg.get("common_searches", True)
+        cfg = {**cfg, "searches": merge_searches(common if use_common else [], own, cls.uses_condition)}
         site = cls(cfg, config)
         if site.is_configured():
             sites.append(site)

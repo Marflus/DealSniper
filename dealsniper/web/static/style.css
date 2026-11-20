@@ -301,3 +301,10 @@ button.add:hover { border-color: var(--accent); color: var(--accent); background
   .search-row.head { display: none; }
   .search-list .search-row { padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 }
+
+/* Recherches communes */
+.site-card.common { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.site-card.common .site-logo { font-size: 22px; background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
+.sites-title { margin: 26px 2px 12px; font-size: 15px; }
+.sites-title .muted { font-weight: 400; font-size: 13px; }
+.mini-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; cursor: pointer; }

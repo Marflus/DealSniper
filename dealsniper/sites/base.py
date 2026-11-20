@@ -16,6 +16,7 @@ class Site:
     name = "site"                 # clé du site dans config.yaml > sites
     label = ""                    # nom affiché (par défaut : name avec une majuscule)
     reads_web_pages = False       # True pour un site lu en HTML : robots.txt sera vérifié
+    uses_condition = False        # True si le site sait filtrer l'état (« pour pièces », « occasion »)
 
     def __init__(self, cfg: dict[str, Any], config: dict[str, Any]):
         self.cfg = cfg            # le bloc config.yaml > sites > <name>

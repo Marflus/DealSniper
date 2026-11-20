@@ -4,7 +4,7 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const euros = (v) => (v == null ? "?" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`);
 const FILTER_IDS = ["f-text", "f-category", "f-type", "f-score", "f-ease", "f-sale", "f-price", "f-margin", "f-days", "f-sort"];
-const SEARCH_FIELDS = { ebay: ["query", "condition", "max_price"], leboncoin: ["query", "category", "max_price"],
+const SEARCH_FIELDS = { common: ["query", "condition", "max_price"], ebay: ["query", "condition", "max_price"], leboncoin: ["query", "category", "max_price"],
                         default: ["query", "max_price"] };
 const LBC_CATEGORIES = { "": "Toutes catégories", 15: "Informatique", 43: "Consoles & jeux vidéo", 16: "Image & son", 21: "Bricolage" };
 const FIELD_LABELS = { query: "Recherche", condition: "État", max_price: "Prix max", category: "Catégorie" };
@@ -402,26 +402,47 @@ function searchRow(site, row) {
     <button class="icon danger" data-remove title="Supprimer cette recherche">🗑</button></div>`;
 }
 
+function searchTable(key, rows) {
+  const fields = SEARCH_FIELDS[key] || SEARCH_FIELDS.default;
+  const label = (f) => (key === "common" && f === "condition" ? "État (eBay)" : FIELD_LABELS[f] || f);
+  return `<div class="site-body" style="--cols: ${fields.map((f) => (f === "query" ? "minmax(0, 2fr)" : f === "max_price" ? "120px" : "minmax(0, 1fr)")).join(" ")} 38px">
+        <div class="search-row head">${fields.map((f) => `<span>${label(f)}</span>`).join("")}<span></span></div>
+        <div class="search-list">${rows.map((r) => searchRow(key, r)).join("")}</div>
+        <button class="add" data-add-search>＋ Ajouter une recherche</button>
+      </div>`;
+}
+
+const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
+
 function renderSites() {
-  $("#sites").innerHTML = Object.entries(settings.sites).map(([name, site]) => {
-    const fields = SEARCH_FIELDS[name] || SEARCH_FIELDS.default;
+  const common = settings.searches || [];
+  const commonCard = `<div class="site-card common" data-common-card data-site="common">
+      <div class="site-head">
+        <button class="collapse" data-collapse title="Replier">▾</button>
+        <span class="site-logo">🌐</span>
+        <div class="site-name"><b>Tous les sites</b><small><span data-count>${plural(common.length, "recherche")}</span>
+          communes, lancées sur chaque site activé — l'état ne sert qu'à eBay</small></div>
+      </div>
+      ${searchTable("common", common)}
+    </div>
+    <h3 class="sites-title">Recherches propres à chaque site <span class="muted">(en plus des communes)</span></h3>`;
+  $("#sites").innerHTML = commonCard + Object.entries(settings.sites).map(([name, site]) => {
     const minutes = (site.interval || ["", ""]).map((v) => (v === "" ? "" : Math.round(v / 60)));
     const count = (site.searches || []).length;
     return `<div class="site-card ${site.enabled === false ? "off" : ""}" data-site="${esc(name)}">
       <div class="site-head">
         <button class="collapse" data-collapse title="Replier">▾</button>
         <span class="site-logo">${siteLogo(name, 26)}</span>
-        <div class="site-name"><b>${esc(siteName(name))}</b><small data-count>${count} recherche${count > 1 ? "s" : ""}</small></div>
+        <div class="site-name"><b>${esc(siteName(name))}</b><small><span data-count>${plural(count, "recherche")}</span>
+          <span data-common-note>${site.common_searches === false ? "· sans les communes" : `+ ${common.length} communes`}</span></small></div>
         <label class="interval" title="Rythme en surveillance continue (commande watch)">⏱ toutes les
           <input type="number" min="1" data-interval="0" value="${esc(minutes[0])}"> –
           <input type="number" min="1" data-interval="1" value="${esc(minutes[1])}"> min</label>
+        <label class="mini-switch" title="Lancer aussi les recherches communes sur ce site">🌐
+          <span class="switch"><input type="checkbox" data-use-common ${site.common_searches !== false ? "checked" : ""}><span></span></span></label>
         <label class="switch" title="Activer / désactiver ce site"><input type="checkbox" data-enabled ${site.enabled !== false ? "checked" : ""}><span></span></label>
       </div>
-      <div class="site-body" style="--cols: ${fields.map((f) => (f === "query" ? "minmax(0, 2fr)" : f === "max_price" ? "120px" : "minmax(0, 1fr)")).join(" ")} 38px">
-        <div class="search-row head">${fields.map((f) => `<span>${FIELD_LABELS[f] || f}</span>`).join("")}<span></span></div>
-        <div class="search-list">${(site.searches || []).map((r) => searchRow(name, r)).join("")}</div>
-        <button class="add" data-add-search>＋ Ajouter une recherche</button>
-      </div>
+      ${searchTable(name, site.searches || [])}
     </div>`;
   }).join("");
 }
@@ -447,6 +468,11 @@ $("#sites").addEventListener("click", (e) => {
 });
 $("#sites").addEventListener("change", (e) => {
   if (e.target.matches("[data-enabled]")) e.target.closest("[data-site]").classList.toggle("off", !e.target.checked);
+  if (e.target.matches("[data-use-common]")) {
+    const n = document.querySelectorAll("[data-common-card] .search-list .search-row").length;
+    e.target.closest("[data-site]").querySelector("[data-common-note]").textContent =
+      e.target.checked ? `+ ${n} communes` : "· sans les communes";
+  }
 });
 $("#search-filter").addEventListener("input", () => {
   const q = $("#search-filter").value.trim().toLowerCase();
@@ -581,16 +607,22 @@ async function loadSettings() {
 
 $("#n-watch-on").addEventListener("change", () => $("#n-watch-row").classList.toggle("disabled", !$("#n-watch-on").checked));
 
+function searchRows(card) {
+  return [...card.querySelectorAll(".search-list .search-row")].map((row) => ({
+    ...JSON.parse(row.dataset.extra || "{}"),
+    ...Object.fromEntries([...row.querySelectorAll("[data-field]")].map((i) => [i.dataset.field, i.value])),
+  }));
+}
+
 function collectSettings() {
   const sites = {};
-  document.querySelectorAll("#sites [data-site]").forEach((card) => {
+  const commonCard = $("[data-common-card]");
+  document.querySelectorAll("#sites [data-site]:not([data-common-card])").forEach((card) => {
     sites[card.dataset.site] = {
       enabled: card.querySelector("[data-enabled]").checked,
+      common_searches: card.querySelector("[data-use-common]").checked,
       interval: [...card.querySelectorAll("[data-interval]")].map((i) => i.value).filter((v) => v !== "").map((m) => m * 60),
-      searches: [...card.querySelectorAll(".search-list .search-row")].map((row) => ({
-        ...JSON.parse(row.dataset.extra || "{}"),
-        ...Object.fromEntries([...row.querySelectorAll("[data-field]")].map((i) => [i.dataset.field, i.value])),
-      })),
+      searches: searchRows(card),
     };
   });
   const categories = [...document.querySelectorAll("#categories .cat-editor")].map((ed) => {
@@ -605,7 +637,7 @@ function collectSettings() {
   if ($("#n-repair").checked) dealTypes.push("reparation");
   if ($("#n-direct").checked) dealTypes.push("revente_directe");
   return {
-    sites, categories,
+    searches: commonCard ? searchRows(commonCard) : settings.searches, sites, categories,
     filters: { global_exclude_keywords: getTags("#g-exclude"), deal_signals: getTags("#g-signals"),
                buyer_ad_keywords: getTags("#g-buyer"), min_price: $("#g-minprice").value,
                sold_title_keywords: getTags("#g-sold-title"), sold_phrases: getTags("#g-sold-desc"),

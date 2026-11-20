@@ -97,6 +97,7 @@ def item_to_ad(item: dict[str, Any]) -> Ad | None:
 class EbaySite(Site):
     name = "ebay"
     label = "eBay"
+    uses_condition = True
 
     def __init__(self, cfg: dict[str, Any], config: dict[str, Any]):
         super().__init__(cfg, config)
