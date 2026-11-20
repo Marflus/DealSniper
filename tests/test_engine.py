@@ -592,3 +592,29 @@ def test_ai_failures_are_given_up_after_three_tries(monkeypatch, config):
     assert calls == [1, 1, 1]  # 3 essais pour le ThinkPad, puis plus aucun appel
     thinkpad = next(a for a in seen if a["uid"] == "ebay:100000000001")
     assert thinkpad["status"] == "rejected" and "3 essais" in thinkpad["reason"]
+
+
+def test_cancel_interrupts_between_searches(config):
+    """Annuler pendant la liste : le site s'arrête après la recherche en cours, sans attendre les suivantes."""
+    class ManySearches(FakeSite):
+        async def list_recent(self, http):
+            for i in range(5):
+                self.details.append(i)
+                if i == 1:
+                    eng.stopping.set()  # l'utilisateur clique « Annuler » pendant la 2e recherche
+                self.report(f"recherche {i}", 3)
+            return []
+
+    async def go():
+        nonlocal eng
+        db = Database(data_dir() / "x.db")
+        async with client() as http:
+            eng = engine.Engine(config, db, http)
+            stats = await eng.process(site)
+        db.close()
+        return stats
+
+    eng = None
+    site = ManySearches(config)
+    stats = asyncio.run(go())
+    assert site.details == [0, 1] and stats["listées"] == 6 and stats["analysées"] == 0

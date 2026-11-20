@@ -37,6 +37,13 @@ MAX_AI_ATTEMPTS = 3  # échecs d'analyse propres à une annonce avant de l'aband
 # Annulation demandée depuis l'interface (bouton « Annuler ») : le passage s'arrête proprement au
 # prochain point de contrôle (après la liste, entre deux annonces, avant l'analyse IA).
 CANCEL = threading.Event()
+
+
+class RunCancelled(Exception):
+    """Levée par le suivi des recherches quand un arrêt est demandé : interrompt `list_recent` entre deux
+    recherches, quel que soit le site (chaque connecteur appelle `report` après chaque recherche)."""
+
+
 # Annonces listées pendant le dernier passage (compte rendu de la recherche ponctuelle).
 RUN_UIDS: set[str] = set()
 
@@ -93,11 +100,17 @@ class Engine:
             self.progress.log_search(site.label, query, found)
             step = f" ({totals['done']}/{planned})" if planned else ""
             show(site.label, f'Recherche "{query}"{step} — {found} annonces · {totals["ads"]} au total')
+            if self.stopping.is_set():
+                raise RunCancelled  # arrêt demandé : on n'attend pas la fin des recherches de ce site
 
         site.on_progress = on_search
-        listed = await site.list_recent(self.http)
+        try:
+            listed = await site.list_recent(self.http)
+        except RunCancelled:
+            listed = []
         if self.stopping.is_set():  # annulé pendant la recherche : rien n'est enregistré
-            return {"listées": len(listed), "nouvelles": 0, "retenues": 0, "analysées": 0, "notifiées": 0}
+            return {"listées": max(len(listed), totals["ads"]), "nouvelles": 0, "retenues": 0,
+                    "analysées": 0, "notifiées": 0}
         uids = [ad.uid for ad in listed]
         RUN_UIDS.update(uids)
         new_uids = await self.db.unseen(uids)
