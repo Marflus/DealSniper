@@ -25,9 +25,15 @@ réparé, jamais sur le prix neuf.
 
 Donne une fourchette prudente (bas / typique / haut), une confiance (« faible » / « moyenne » / « élevée »)
 selon le nombre de prix réels trouvés, et 2 à 4 sources courtes au format « site : fourchette » (ex.
-« eBay vendus : 180-210 € »). Termine TOUJOURS par un unique bloc JSON, sans rien après :
+« eBay vendus : 180-210 € »).
+
+Donne aussi « ventes » : jusqu'à 12 ventes ou annonces RÉELLEMENT observées pendant ta recherche, chacune avec
+son mois (date) et son prix. N'invente aucun point : si tu n'as pas trouvé de prix daté, renvoie une liste vide.
+
+Termine TOUJOURS par un unique bloc JSON, sans rien après :
 {"revente_basse": n, "revente_typique": n, "revente_haute": n, "confiance": "faible|moyenne|élevée",
- "sources": ["...", "..."], "resume": "une phrase", "pieges": "pièges éventuels en 8 mots max"}"""
+ "sources": ["...", "..."], "resume": "une phrase", "pieges": "pièges éventuels en 8 mots max",
+ "ventes": [{"date": "AAAA-MM", "prix": n, "source": "ebay|leboncoin|vinted|backmarket"}]}"""
 
 WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5,
                    "user_location": {"type": "approximate", "country": "FR"}}
@@ -68,10 +74,26 @@ def sanitize(raw: dict[str, Any], ad: Ad) -> dict[str, Any]:
     sources = [str(s)[:80] for s in (raw.get("sources") or []) if str(s).strip()][:4]
     return {
         "revente_basse": low, "revente_typique": typical, "revente_haute": high,
-        "confiance": confiance, "sources": sources,
+        "confiance": confiance, "sources": sources, "ventes": _sales(raw.get("ventes")),
         "resume": str(raw.get("resume", ""))[:300], "pieges": str(raw.get("pieges", ""))[:120],
         "prix_achat_max": max_buy,
     }
+
+
+def _sales(rows: Any) -> list[dict[str, Any]]:
+    """Ventes observées (date AAAA-MM et prix), nettoyées pour le graphique."""
+    import re
+
+    out = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        date = re.match(r"(\d{4})-(\d{2})(?:-(\d{2}))?", str(row.get("date", "")))
+        price = _clamp(row.get("prix"))
+        if date and price:
+            out.append({"date": date.group(0), "prix": price,
+                        "source": str(row.get("source", ""))[:20].lower()})
+    return sorted(out, key=lambda v: v["date"])[:20]
 
 
 def analyze_market(ad: Ad, config: dict[str, Any], client: Any = None) -> dict[str, Any]:

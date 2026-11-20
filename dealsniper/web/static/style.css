@@ -479,3 +479,14 @@ button.wide { width: 100%; }
   dialog.details { width: calc(100vw - 16px); padding: 16px; }
   .p-fields { grid-template-columns: 1fr 1fr; }
 }
+
+/* Graphique des ventes observées (analyse approfondie) */
+.deep-chart { margin: 12px 0 6px; }
+.deep-chart figcaption { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.deep-chart svg { width: 100%; height: auto; display: block; }
+.chart-band { fill: color-mix(in srgb, var(--accent) 12%, transparent); }
+.chart-line { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .8; }
+.chart-grid { stroke: var(--line); stroke-width: 1; }
+.chart-lbl { fill: var(--muted); font-size: 9px; font-family: inherit; }
+.chart-dot { fill: var(--accent); stroke: var(--card); stroke-width: 1.5; cursor: help; }
+.chart-dot:hover { fill: var(--good); }

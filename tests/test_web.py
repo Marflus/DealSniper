@@ -124,7 +124,8 @@ def test_market_analysis_endpoint(client, monkeypatch):
         captured["title"] = ad.title
         return {"revente_basse": 170, "revente_typique": 195, "revente_haute": 220, "confiance": "élevée",
                 "sources": ["eBay vendus : 180-210 €"], "resume": "Modèle recherché.", "pieges": "vérifier l'écran",
-                "prix_achat_max": 120, "cost_usd": 0.02, "model": "claude-sonnet-5-5"}
+                "prix_achat_max": 120, "cost_usd": 0.02, "model": "claude-sonnet-5-5",
+                "ventes": [{"date": "2026-02", "prix": 190, "source": "ebay"}]}
 
     monkeypatch.setattr("dealsniper.deep.analyze_market", fake)
     uid = next(a["uid"] for a in c.get("/api/ads").get_json()["ads"] if a["title"] == "ThinkPad T480 sans SSD")
@@ -132,5 +133,5 @@ def test_market_analysis_endpoint(client, monkeypatch):
     assert data["ok"] and data["market_deep"]["revente_typique"] == 195 and captured["title"]
     # Résultat mémorisé sur l'annonce et coût ajouté.
     ad = next(a for a in c.get("/api/ads").get_json()["ads"] if a["uid"] == uid)
-    assert ad["market_deep"]["confiance"] == "élevée"
+    assert ad["market_deep"]["confiance"] == "élevée" and ad["market_deep"]["ventes"][0]["prix"] == 190
     assert c.post("/api/ads/inconnue/market-analysis").status_code == 404

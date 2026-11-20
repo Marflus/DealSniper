@@ -428,12 +428,62 @@ function deepBlock(ad) {
     <div class="deep-head">📊 Analyse du marché <span class="conf ${CONF_LEVEL[d.confiance] || "mid"}">confiance ${esc(d.confiance)}</span></div>
     <div class="d-row"><span>Revente réelle estimée</span><b>${range}</b></div>
     ${d.prix_achat_max != null ? `<div class="d-row"><span>Acheter au maximum</span><b>${euros(d.prix_achat_max)} <span class="muted">(pour +30 € net)</span></b></div>` : ""}
+    ${salesChart(d)}
     ${d.resume ? `<p class="deep-summary">${esc(d.resume)}</p>` : ""}
     ${d.pieges ? `<p class="deep-warn">⚠️ ${esc(d.pieges)}</p>` : ""}
     ${(d.sources || []).length ? `<ul class="deep-sources">${d.sources.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
     <div class="deep-foot"><small class="muted">${esc(d.model || "")} · ${d.cost_usd ? `${iaCost(d.cost_usd)}` : ""}</small>
       <button class="link" data-deep="${esc(ad.uid)}">Refaire l'analyse</button></div>
   </div>`;
+}
+
+// Nuage de points « prix × date de vente » (une série : les ventes observées sur le web).
+// SVG inline, couleurs par les tokens du thème (clair/sombre), survol natif par point.
+function salesChart(d) {
+  const sales = (d.ventes || []).filter((v) => v.prix != null && /^\d{4}-\d{2}/.test(v.date || ""));
+  if (sales.length < 2) return "";
+  const W = 320, H = 150, L = 38, R = 10, T = 10, B = 24;  // zone + marges
+  const toMs = (v) => Date.UTC(+v.date.slice(0, 4), +v.date.slice(5, 7) - 1, +(v.date.slice(8, 10) || 15));
+  const xs = sales.map(toMs);
+  const ys = sales.map((v) => v.prix).concat([d.revente_basse, d.revente_haute].filter((x) => x != null));
+  let [xMin, xMax] = [Math.min(...xs), Math.max(...xs)];
+  if (xMin === xMax) { xMin -= 2.6e9; xMax += 2.6e9; }  // un seul mois : on élargit d'un mois
+  let [yMin, yMax] = [Math.min(...ys), Math.max(...ys)];
+  const pad = (yMax - yMin) * 0.12 || 10; yMin = Math.max(0, yMin - pad); yMax += pad;
+  const px = (ms) => L + ((ms - xMin) / (xMax - xMin || 1)) * (W - L - R);
+  const py = (v) => T + (1 - (v - yMin) / (yMax - yMin || 1)) * (H - T - B);
+  const euro = (v) => `${Math.round(v)} €`;
+  const moisAn = (ms) => new Date(ms).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+
+  // Bande de la fourchette estimée (bas → haut) + ligne du prix typique.
+  let band = "";
+  if (d.revente_basse != null && d.revente_haute != null) {
+    band = `<rect class="chart-band" x="${L}" y="${py(d.revente_haute).toFixed(1)}" width="${W - L - R}"
+      height="${(py(d.revente_basse) - py(d.revente_haute)).toFixed(1)}"/>`;
+    if (d.revente_typique != null) {
+      band += `<line class="chart-line" x1="${L}" y1="${py(d.revente_typique).toFixed(1)}" x2="${W - R}" y2="${py(d.revente_typique).toFixed(1)}"/>`;
+    }
+  }
+  // Grille + étiquettes de prix (3 niveaux).
+  let grid = "";
+  for (let i = 0; i <= 2; i++) {
+    const v = yMin + (i / 2) * (yMax - yMin), y = py(v).toFixed(1);
+    grid += `<line class="chart-grid" x1="${L}" y1="${y}" x2="${W - R}" y2="${y}"/>
+      <text class="chart-lbl" x="${L - 6}" y="${y}" text-anchor="end" dominant-baseline="middle">${euro(v)}</text>`;
+  }
+  // Étiquettes de dates (début / milieu / fin), ancrées pour ne pas déborder sur les bords.
+  const anchors = ["start", "middle", "end"];
+  const xticks = [xMin, (xMin + xMax) / 2, xMax].map((ms, i) =>
+    `<text class="chart-lbl" x="${px(ms).toFixed(1)}" y="${H - 7}" text-anchor="${anchors[i]}">${moisAn(ms)}</text>`).join("");
+  const dots = sales.map((v) => `<circle class="chart-dot" cx="${px(toMs(v)).toFixed(1)}" cy="${py(v.prix).toFixed(1)}" r="4.5">
+      <title>${moisAn(toMs(v))} · ${euro(v.prix)}${v.source ? ` · ${esc(v.source)}` : ""}</title></circle>`).join("");
+
+  return `<figure class="deep-chart">
+    <figcaption>Ventes observées (${sales.length}) — prix réel par date</figcaption>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Nuage de points des prix de vente par date">
+      ${band}${grid}${xticks}${dots}
+    </svg>
+  </figure>`;
 }
 
 async function deepMarket(uid) {
