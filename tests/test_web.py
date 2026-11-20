@@ -1,36 +1,4 @@
-import asyncio
-import shutil
-
-import pytest
-
-from dealsniper.config import data_dir, load_config
-from dealsniper.db import Database
-from dealsniper.models import Ad
-from dealsniper.web.app import create_app
-
-
-@pytest.fixture
-def client(tmp_path, monkeypatch, config):
-    # Copie d'un config.yaml valide, modifiable sans toucher au vrai fichier.
-    import os
-
-    source = os.environ["DEALSNIPER_CONFIG"]
-    path = tmp_path / "config.yaml"
-    shutil.copy(source, path)
-    monkeypatch.setenv("DEALSNIPER_CONFIG", str(path))
-
-    async def seed():
-        db = Database(data_dir() / "dealsniper.db")
-        good = Ad(title="ThinkPad T480 sans SSD", url="https://www.ebay.fr/itm/100000000001", source="ebay", price=90,
-                  category="PC portables pros", analysis={"score_rentabilite": 8, "marge_nette_estimee": 80,
-                                                   "valeur_revente_estimee": 200, "cout_piece_estime": 20})
-        bad = Ad(title="Canapé", url="https://www.ebay.fr/itm/100000000002", source="ebay", price=50)
-        await db.remember(good, "analyzed", notified=True)
-        await db.remember(bad, "rejected", reason="hors catégorie")
-        db.close()
-
-    asyncio.run(seed())
-    return create_app().test_client(), path
+from dealsniper.config import load_config
 
 
 def test_ads_listing_and_status_filter(client):

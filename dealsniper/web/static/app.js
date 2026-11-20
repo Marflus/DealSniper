@@ -3,7 +3,8 @@
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const euros = (v) => (v == null ? "?" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`);
-const FILTER_IDS = ["f-text", "f-category", "f-type", "f-score", "f-ease", "f-sale", "f-price", "f-margin", "f-days", "f-sort"];
+const FILTER_IDS = ["f-text", "f-category", "f-type", "f-score", "f-ease", "f-sale", "f-price", "f-margin", "f-distance",
+  "f-days", "f-sort"];
 const SEARCH_FIELDS = { common: ["query", "condition", "max_price"], ebay: ["query", "condition", "max_price"], leboncoin: ["query", "category", "max_price"],
                         default: ["query", "max_price"] };
 const LBC_CATEGORIES = { "": "Toutes catégories", 15: "Informatique", 43: "Consoles & jeux vidéo", 16: "Image & son", 21: "Bricolage" };
@@ -25,6 +26,7 @@ function siteLogo(site, size = 16) {
 }
 
 let allAds = [];
+let geoState = "";  // distances : ok / chargement / erreur / inactif
 let status = "analyzed";
 let selectedSites = new Set();  // vide = tous les sites
 let settings = null;
@@ -49,8 +51,9 @@ async function api(url, options = {}) {
 function showTab(tab) {
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".page").forEach((p) => (p.hidden = p.id !== `tab-${tab}`));
-  $("#savebar").hidden = tab === "ads";
-  if (tab !== "ads" && !settings) loadSettings();
+  $("#savebar").hidden = tab === "ads" || tab === "purchases";  // ces deux onglets n'éditent pas config.yaml
+  if (tab === "purchases") loadPurchases();
+  else if (tab !== "ads" && !settings) loadSettings();
   try { localStorage.setItem("dealsniper-tab", tab); } catch (e) { /* stockage indisponible */ }
 }
 document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
@@ -73,10 +76,7 @@ function saveFilters() {
   } catch (e) { /* stockage indisponible */ }
 }
 
-function restoreFilters() {
-  try {
-    const values = JSON.parse(localStorage.getItem("dealsniper-filters") || "{}");
-    // Téléphone : filtres repliés derrière un bouton qui indique combien sont actifs.
+// Téléphone : filtres repliés derrière un bouton qui indique combien sont actifs.
 function countActiveFilters() {
   const active = FILTER_IDS.filter((id) => id !== "f-sort" && id !== "f-days" && id !== "f-text" && $("#" + id).value).length
     + (selectedSites.size ? 1 : 0);
@@ -89,7 +89,10 @@ $("#toggle-filters").addEventListener("click", () => {
 document.querySelector(".toolbar").addEventListener("change", countActiveFilters);
 document.querySelector(".toolbar").addEventListener("click", () => setTimeout(countActiveFilters));
 
-FILTER_IDS.forEach((id) => { if (values[id] != null && values[id] !== "0") $("#" + id).value = values[id]; });
+function restoreFilters() {
+  try {
+    const values = JSON.parse(localStorage.getItem("dealsniper-filters") || "{}");
+    FILTER_IDS.forEach((id) => { if (values[id] != null && values[id] !== "0") $("#" + id).value = values[id]; });
     if (values.status != null) setStatus(values.status, false);
     selectedSites = new Set(values.sites || []);
   } catch (e) { /* idem */ }
@@ -205,7 +208,9 @@ $("#progress").addEventListener("click", (e) => {
 let runPoll = null;
 async function loadAds() {
   try {
-    const data = await api(`/api/ads?status=${encodeURIComponent(status)}&days=${$("#f-days").value}`);
+    const serverStatus = status === "fav" || status === "hidden" ? "" : status;  // favoris / masquées : tri local
+    const data = await api(`/api/ads?status=${encodeURIComponent(serverStatus)}&days=${$("#f-days").value}`);
+    geoState = data.geo;
     allAds = data.ads;
     renderBudget(data.cost_today, data.cost_cap);
     $("#run").disabled = data.running;
@@ -230,9 +235,12 @@ function filteredAds() {
   const minSale = Number($("#f-sale").value || 0);
   const maxPrice = $("#f-price").value === "" ? null : Number($("#f-price").value);
   const minMargin = $("#f-margin").value === "" ? null : Number($("#f-margin").value);
+  const maxDistance = $("#f-distance").value === "" ? null : Number($("#f-distance").value);
 
   const ads = allAds.filter((ad) => {
     const a = ad.analysis || {};
+    if (status === "fav" ? !ad.favorite : status === "hidden" ? !ad.hidden : ad.hidden) return false;
+    if (maxDistance != null && (ad.distance_km ?? Infinity) > maxDistance) return false;
     if (text && !`${ad.title} ${ad.description} ${ad.location} ${ad.category}`.toLowerCase().includes(text)) return false;
     if (selectedSites.size && !selectedSites.has(ad.source)) return false;
     if (category && ad.category !== category) return false;
@@ -252,6 +260,7 @@ function filteredAds() {
     margin: (x, y) => margin(y) - margin(x),
     sale: (x, y) => ((y.analysis || {}).facilite_vente ?? -1) - ((x.analysis || {}).facilite_vente ?? -1) || margin(y) - margin(x),
     price: (x, y) => (x.total_price ?? 1e9) - (y.total_price ?? 1e9),
+    distance: (x, y) => (x.distance_km ?? 1e9) - (y.distance_km ?? 1e9),
   };
   return ads.sort(sorters[$("#f-sort").value] || sorters.recent);
 }
@@ -289,14 +298,19 @@ function adCard(ad) {
       <a class="title" href="${esc(ad.url)}" target="_blank" rel="noopener">${esc(ad.title)}</a>
       <div class="stats">
         <div><span>Achat</span><b>${buy}</b></div>
-        <div><span>Revente</span><b>${a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "—"}</b></div>
+        <div title="${a.source_revente === "cote" ? "D'après la cote réelle du modèle (prix des annonces en état de marche)" : "Estimation de l'IA, rabotée par prudence"}">
+          <span>Revente${a.source_revente === "cote" ? ' <i class="src">cote</i>' : ""}</span><b>${a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "—"}</b></div>
         <div class="${marginClass}"><span>Marge</span><b>${margin}</b></div>
       </div>
       ${ad.analysis ? scoreRow(ad) : ""}
       ${ad.reason ? `<div class="reason">✗ ${esc(ad.reason)}</div>` : ""}
       <div class="meta">
-        <div class="site-line">${siteLogo(ad.source, 14)} ${esc(siteName(ad.source))}${ad.category ? ` · ${esc(ad.category)}` : ""}</div>
-        <button class="info" data-info="${esc(ad.uid)}" title="Détails, panne, ville, questions à poser">i</button>
+        <div class="site-line">${ad.distance_km != null ? `📍 ${ad.distance_km} km · ` : ""}${siteLogo(ad.source, 14)} ${esc(siteName(ad.source))}${ad.category ? ` · ${esc(ad.category)}` : ""}</div>
+        <div class="card-actions">
+          <button class="mini ${ad.favorite ? "on" : ""}" data-fav="${esc(ad.uid)}" title="${ad.favorite ? "Retirer des favoris" : "Mettre en favori"}">${ad.favorite ? "★" : "☆"}</button>
+          <button class="mini" data-hide="${esc(ad.uid)}" title="${ad.hidden ? "Ne plus masquer" : "Masquer cette annonce"}">${ad.hidden ? "↺" : "⊘"}</button>
+          <button class="info" data-info="${esc(ad.uid)}" title="Détails, panne, ville, questions à poser">i</button>
+        </div>
       </div>
     </div>
   </article>`;
@@ -361,11 +375,13 @@ function showDetails(uid) {
     <h3>${esc(ad.title)}</h3>
     <div class="d-grid">
       ${row("🩺 Panne probable", esc(faultText(a)))}
-      ${row("📍 Ville", esc(cleanPlace(ad.location)))}
+      ${row("📍 Ville", esc(cleanPlace(ad.location)) + (ad.distance_km != null ? ` <span class="muted">(${ad.distance_km} km)</span>` : ""))}
       ${row("🏷️ Type de vente", ad.price_mode === "enchere" ? "Enchère (prix provisoire)" : "Prix fixe")}
       ${row("💶 Achat", buy)}
       ${row("🔩 Pièce estimée", a.cout_piece_estime ? euros(a.cout_piece_estime) : "")}
-      ${row("📈 Revente estimée", a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "")}
+      ${row("📊 Cote du marché", ad.market ? `${euros(ad.market.median)} <span class="muted">(${esc(ad.market.model)}, ${ad.market.count} ${ad.market.source === "ebay" ? "occasions eBay" : "annonces"})</span>` : "")}
+      ${row("🤖 Estimation de l'IA", a.valeur_revente_ia != null ? euros(a.valeur_revente_ia) : "")}
+      ${row("📈 Revente retenue", a.valeur_revente_estimee != null ? `${euros(a.valeur_revente_estimee)} <span class="muted">(prudence −10 %)</span>` : "")}
       ${row("🧮 Marge nette", a.marge_nette_estimee != null ? `${a.marge_nette_estimee >= 0 ? "+" : ""}${euros(a.marge_nette_estimee)}` : "")}
       ${sellerRows(ad.seller, row)}
       ${row("✨ Signaux repérés", esc((ad.signals || []).join(", ")))}
@@ -375,14 +391,62 @@ function showDetails(uid) {
     </div>
     ${desc ? `<details class="d-desc"><summary>Description du vendeur</summary><p>${esc(desc.slice(0, 1200))}${desc.length > 1200 ? "…" : ""}</p></details>` : ""}
     <div class="d-questions"><b>💬 Questions à poser au vendeur</b><ul>${sellerQuestions(ad).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
+    ${repairLinks(ad)}
+    <div class="d-actions">
+      <button class="ghost" data-fav="${esc(ad.uid)}">${ad.favorite ? "★ En favori" : "☆ Favori"}</button>
+      <button class="ghost" data-buy="${esc(ad.uid)}">🛒 Je l'ai acheté</button>
+    </div>
     <a class="primary d-open" href="${esc(ad.url)}" target="_blank" rel="noopener">Voir l'annonce ↗</a>`;
   $("#details").showModal();
 }
 
-$("#ads").addEventListener("click", (e) => {
-  const button = e.target.closest("[data-info]");
-  if (button) showDetails(button.dataset.info);
-});
+// Liens utiles pour réparer : tutoriel iFixit et prix de la pièce (aucune requête, simples recherches).
+function repairLinks(ad) {
+  const a = ad.analysis || {};
+  if (a.type_affaire === "revente_directe") return "";
+  const model = (ad.market && ad.market.model) || ad.title.split(/[-–|,(]/)[0].trim().split(/\s+/).slice(0, 4).join(" ");
+  const fault = String(a.panne_probable || "").toLowerCase();
+  const part = ["batterie", "écran", "ecran", "clavier", "ssd", "chargeur", "ventilateur", "charnière", "nappe", "alimentation",
+    "carte", "port", "moteur", "dalle"].find((w) => fault.includes(w)) || "";
+  const q = encodeURIComponent(`${model} ${part}`.trim());
+  return `<div class="d-links"><b>🔧 Réparer</b>
+    <a href="https://www.ifixit.com/Search?query=${q}" target="_blank" rel="noopener">Tutoriels iFixit ↗</a>
+    <a href="https://www.ebay.fr/sch/i.html?_nkw=${q}" target="_blank" rel="noopener">Pièce sur eBay ↗</a>
+    <a href="https://fr.aliexpress.com/w/wholesale-${q}.html" target="_blank" rel="noopener">Pièce sur AliExpress ↗</a></div>`;
+}
+
+async function markAd(uid, change) {
+  const ad = allAds.find((x) => x.uid === uid);
+  if (!ad) return;
+  try {
+    await api(`/api/ads/${encodeURIComponent(uid)}/mark`, { method: "POST", body: JSON.stringify(change) });
+    Object.assign(ad, change);
+    renderAds(true);
+    if ($("#details").open) showDetails(uid);
+    if (change.hidden) toast("Annonce masquée (voir « Masquées » pour la retrouver)");
+  } catch (e) { toast("❌ " + e.message); }
+}
+
+async function buyAd(uid) {
+  const ad = allAds.find((x) => x.uid === uid);
+  const price = prompt("Prix payé (€) ?", ad ? (ad.total_price ?? ad.price ?? "") : "");
+  if (price === null) return;
+  try {
+    await api("/api/purchases", { method: "POST", body: JSON.stringify({ uid, buy_price: price }) });
+    toast("🛒 Ajouté à l'onglet Achats");
+  } catch (e) { toast("❌ " + e.message); }
+}
+
+function onAdAction(e) {
+  const t = e.target.closest("[data-info],[data-fav],[data-hide],[data-buy]");
+  if (!t) return;
+  if (t.dataset.info) showDetails(t.dataset.info);
+  else if (t.dataset.fav) markAd(t.dataset.fav, { favorite: !allAds.find((x) => x.uid === t.dataset.fav)?.favorite });
+  else if (t.dataset.hide) markAd(t.dataset.hide, { hidden: !allAds.find((x) => x.uid === t.dataset.hide)?.hidden });
+  else if (t.dataset.buy) buyAd(t.dataset.buy);
+}
+$("#ads").addEventListener("click", onAdAction);
+$("#details-body").addEventListener("click", onAdAction);
 $("#details").addEventListener("click", (e) => {
   // Fermeture : bouton ✕ ou clic à côté de la fenêtre (Échap fonctionne d'office).
   if (e.target.closest("[data-close-details]") || e.target === $("#details")) $("#details").close();
@@ -397,9 +461,11 @@ function renderAds(keepPage = false) {
   const pages = Math.max(1, Math.ceil(ads.length / PAGE_SIZE));
   page = keepPage ? Math.min(page, pages) : 1;  // un filtre qui change ramène à la page 1
   const first = (page - 1) * PAGE_SIZE;
-  $("#summary").textContent = ads.length
+  const geoNote = geoState === "chargement" ? " · distances en cours de préparation…"
+    : geoState === "erreur" ? " · distances indisponibles (pas de connexion à geo.api.gouv.fr)" : "";
+  $("#summary").textContent = (ads.length
     ? `${ads.length} annonce(s) sur ${allAds.length} · ${first + 1}–${Math.min(first + PAGE_SIZE, ads.length)} affichées`
-    : `0 annonce sur ${allAds.length}`;
+    : `0 annonce sur ${allAds.length}`) + geoNote;
   $("#ads").innerHTML = ads.length
     ? ads.slice(first, first + PAGE_SIZE).map(adCard).join("")
     : allAds.length
@@ -745,6 +811,7 @@ async function loadSettings() {
   setTags("#g-sold-desc", f.sold_phrases);
   $("#g-minprice").value = f.min_price ?? "";
   $("#g-france").checked = l.france_only !== false;
+  $("#g-home").value = l.home || "";
   $("#g-overseas").checked = l.exclude_overseas !== false;
   $("#g-uncat").checked = f.drop_uncategorized !== false;
   $("#g-noprice").checked = f.keep_unknown_price !== false;
@@ -813,7 +880,7 @@ function collectSettings() {
                buyer_ad_keywords: getTags("#g-buyer"), min_price: $("#g-minprice").value,
                sold_title_keywords: getTags("#g-sold-title"), sold_phrases: getTags("#g-sold-desc"),
                drop_uncategorized: $("#g-uncat").checked, keep_unknown_price: $("#g-noprice").checked },
-    location: { france_only: $("#g-france").checked, exclude_overseas: $("#g-overseas").checked },
+    location: { france_only: $("#g-france").checked, exclude_overseas: $("#g-overseas").checked, home: $("#g-home").value },
     notifier: { min_score: $("#n-min").value, watch_score: $("#n-watch-on").checked ? $("#n-watch").value : "",
                 deal_types: dealTypes, min_margin: $("#n-margin").value, min_ease: $("#n-ease").value,
                 min_sale: $("#n-sale").value },
@@ -844,6 +911,99 @@ $("#reset-config").addEventListener("click", async () => {
   } catch (e) { toast("❌ " + e.message); }
 });
 $("#discard").addEventListener("click", () => { if (confirm("Annuler les modifications non enregistrées ?")) loadSettings(); });
+
+// ---------- Export CSV (toutes les annonces filtrées, pour Excel) ----------
+$("#export-csv").addEventListener("click", () => {
+  const ads = filteredAds();
+  const cols = [
+    ["Repérée", (ad) => (ad.seen_at || "").slice(0, 16).replace("T", " ")],
+    ["Site", (ad) => siteName(ad.source)], ["Titre", (ad) => ad.title], ["Catégorie", (ad) => ad.category],
+    ["Prix (€)", (ad) => ad.total_price ?? ad.price], ["Revente (€)", (ad) => (ad.analysis || {}).valeur_revente_estimee],
+    ["Marge (€)", (ad) => (ad.analysis || {}).marge_nette_estimee], ["Cote (€)", (ad) => ad.market && ad.market.median],
+    ["Note", (ad) => ad.score], ["Réparation", (ad) => (ad.analysis || {}).facilite_reparation],
+    ["Vente", (ad) => (ad.analysis || {}).facilite_vente], ["Panne", (ad) => (ad.analysis || {}).panne_probable],
+    ["Ville", (ad) => cleanPlace(ad.location)], ["Distance (km)", (ad) => ad.distance_km],
+    ["Statut", (ad) => (ad.status === "rejected" ? `écartée : ${ad.reason || ""}` : "notée")], ["Lien", (ad) => ad.url],
+  ];
+  // Excel en français : séparateur « ; », décimales avec virgule, BOM pour les accents.
+  const cell = (v) => {
+    if (v == null) return "";
+    const text = typeof v === "number" ? String(v).replace(".", ",") : String(v);
+    return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const csv = [cols.map((c) => c[0]).join(";"), ...ads.map((ad) => cols.map((c) => cell(c[1](ad))).join(";"))].join("\r\n");
+  const link = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" })),
+    download: `dealsniper-${new Date().toISOString().slice(0, 10)}.csv`,
+  });
+  link.click();
+  URL.revokeObjectURL(link.href);
+  toast(`⬇ ${ads.length} annonce(s) exportée(s)`);
+});
+
+// ---------- Achats ----------
+const frDate = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "");
+const money = (v) => (v == null ? "—" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} €`);
+
+async function loadPurchases() {
+  let data;
+  try { data = await api("/api/purchases"); } catch (e) { toast("❌ " + e.message); return; }
+  const s = data.summary, c = data.calibration;
+  const kpi = (label, value, cls = "") => `<div class="kpi ${cls}"><span>${label}</span><b>${value}</b></div>`;
+  $("#p-summary").innerHTML = kpi("Achats", `${s.count} <small>(${s.in_stock} en stock)</small>`)
+    + kpi("Investi", money(s.invested)) + kpi("Revendu", money(s.revenue))
+    + kpi("Bénéfice", `${s.profit >= 0 ? "+" : ""}${money(s.profit)}`, s.profit >= 0 ? "pos" : "neg")
+    + kpi("Rentabilité", s.roi_pct == null ? "—" : `${s.roi_pct.toLocaleString("fr-FR")} %`);
+  $("#p-calibration").innerHTML = c.ratio == null
+    ? `🎯 <b>Calibrage des estimations</b> : ${c.sales}/${c.needed} ventes avec estimation. Dès ${c.needed}, Deal Sniper compare
+       vos prix de revente réels à ses estimations et ajuste sa prudence tout seul.`
+    : `🎯 <b>Calibrage</b> : vos ventes se font à <b>${Math.round(c.ratio * 100)} %</b> de l'estimation (${c.sales} ventes).
+       Prudence appliquée : × ${String(c.haircut).replace(".", ",")} au lieu de × ${String(c.base).replace(".", ",")}.`;
+  const field = (p, key, label, type = "number") => `<label class="pf"><span>${label}</span>
+      <input data-pid="${p.id}" data-key="${key}" type="${type}" ${type === "number" ? 'step="0.01" min="0"' : ""} value="${esc(p[key] ?? "")}"></label>`;
+  $("#p-list").innerHTML = data.purchases.length ? data.purchases.map((p) => {
+    const cost = (p.buy_price || 0) + (p.repair_cost || 0);
+    const profit = p.sold_price != null ? p.sold_price - cost : null;
+    return `<article class="purchase ${p.sold_price != null ? "sold" : ""}">
+      <div class="p-head">
+        <div><b>${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>` : esc(p.title)}</b>
+          <small>${p.source ? `${esc(siteName(p.source))} · ` : ""}acheté le ${esc(frDate(p.bought_at))}${p.sold_at ? ` · revendu le ${esc(frDate(p.sold_at))}` : ""}</small></div>
+        <span class="p-profit ${profit == null ? "" : profit >= 0 ? "pos" : "neg"}">${profit == null ? "En stock" : `${profit >= 0 ? "+" : ""}${money(profit)}`}</span>
+        <button class="icon danger" data-del="${p.id}" title="Supprimer cet achat">🗑</button>
+      </div>
+      <div class="p-fields">
+        ${field(p, "buy_price", "Prix payé (€)")}${field(p, "repair_cost", "Réparation (€)")}
+        ${field(p, "sold_price", "Revendu (€)")}
+        <label class="pf"><span>Estimation</span><b>${money(p.estimated_resale)}</b></label>
+        ${field(p, "notes", "Notes", "text")}
+      </div>
+    </article>`;
+  }).join("") : '<div class="empty">Aucun achat suivi pour l\'instant.</div>';
+}
+
+$("#p-list").addEventListener("change", async (e) => {
+  const input = e.target.closest("[data-pid]");
+  if (!input) return;
+  try {
+    await api(`/api/purchases/${input.dataset.pid}`, { method: "PUT", body: JSON.stringify({ [input.dataset.key]: input.value }) });
+    loadPurchases();
+  } catch (err) { toast("❌ " + err.message); }
+});
+$("#p-list").addEventListener("click", async (e) => {
+  const del = e.target.closest("[data-del]");
+  if (!del || !confirm("Supprimer cet achat ?")) return;
+  await api(`/api/purchases/${del.dataset.del}`, { method: "DELETE" }).catch(() => null);
+  loadPurchases();
+});
+$("#p-add").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target);
+  try {
+    await api("/api/purchases", { method: "POST", body: JSON.stringify(Object.fromEntries(form)) });
+    e.target.reset();
+    loadPurchases();
+  } catch (err) { toast("❌ " + err.message); }
+});
 
 // ---------- État de l'installation ----------
 async function loadStatus() {

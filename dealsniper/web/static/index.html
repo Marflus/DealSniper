@@ -16,6 +16,7 @@
     <div class="brand"><img src="/static/logo.svg" alt="" width="30" height="30"><span>Deal<b>Sniper</b></span></div>
     <nav class="tabs">
       <button class="tab active" data-tab="ads">Annonces</button>
+      <button class="tab" data-tab="purchases">Achats</button>
       <button class="tab" data-tab="searches">Recherches</button>
       <button class="tab" data-tab="categories">Catégories</button>
       <button class="tab" data-tab="filters">Filtres</button>
@@ -42,6 +43,8 @@
             <button data-value="analyzed" class="on">Notées</button>
             <button data-value="rejected">Écartées</button>
             <button data-value="">Toutes</button>
+            <button data-value="fav" title="Annonces mises en favori">★ Favoris</button>
+            <button data-value="hidden" title="Annonces que vous avez masquées">Masquées</button>
           </div>
           <select id="f-sort" title="Trier">
             <option value="recent">Plus récentes</option>
@@ -49,6 +52,7 @@
             <option value="margin">Meilleure marge</option>
             <option value="sale">Se vend le plus vite</option>
             <option value="price">Prix croissant</option>
+            <option value="distance">Plus proches</option>
           </select>
         </div>
         <div class="toolbar-row">
@@ -66,12 +70,14 @@
           <label class="field" title="Facilité de vente : 10 = très recherché, part en quelques jours">🔥 Vente ≥ <input id="f-sale" type="number" min="1" max="10" placeholder="—">/10</label>
           <label class="field">Prix max <input id="f-price" type="number" min="0" placeholder="—"> €</label>
           <label class="field">Marge min <input id="f-margin" type="number" placeholder="—"> €</label>
+          <label class="field" title="Distance depuis chez vous (code postal à régler dans Filtres)">📍 ≤ <input id="f-distance" type="number" min="0" placeholder="—"> km</label>
           <select id="f-days">
             <option value="1">24 heures</option>
             <option value="7" selected>7 jours</option>
             <option value="30">30 jours</option>
           </select>
           <button id="reset-filters" class="link">Réinitialiser</button>
+          <button id="export-csv" class="ghost push" title="Toutes les annonces filtrées, ouvrable dans Excel">⬇ Export CSV</button>
         </div>
       </div>
       <div id="progress" class="progress" hidden></div>
@@ -81,6 +87,24 @@
     </section>
 
     <div id="settings-error" class="banner error" hidden></div>
+
+    <!-- ACHATS -->
+    <section id="tab-purchases" class="page" hidden>
+      <div class="page-head">
+        <h1>Achats</h1>
+        <p>Vos achats et reventes : bénéfice réel, et calibrage automatique des estimations. Ajoutez un achat avec
+          le bouton <b>i</b> d'une annonce (« Je l'ai acheté ») ou à la main ci-dessous.</p>
+      </div>
+      <div id="p-summary" class="kpis"></div>
+      <div id="p-calibration" class="calibration"></div>
+      <div id="p-list" class="purchase-list"></div>
+      <form id="p-add" class="panel purchase-add">
+        <b>Ajouter un achat à la main</b>
+        <input name="title" placeholder="Objet (ex. ThinkPad T480 sans SSD)" required>
+        <span class="affix"><input name="buy_price" type="number" min="0" step="0.01" placeholder="Prix payé"><i>€</i></span>
+        <button class="primary">Ajouter</button>
+      </form>
+    </section>
 
     <!-- RÉGLAGES -->
     <section id="tab-settings" class="page" hidden>
@@ -243,6 +267,10 @@
         <div class="panel">
           <div class="sec-head"><span class="sec-icon purple">📍</span><div><h2>Localisation et prix</h2>
             <p>Ce qui est toujours écarté.</p></div></div>
+          <div class="setting">
+            <div><b>Chez vous</b><small>Code postal ou ville : affiche la distance de chaque annonce</small></div>
+            <input id="g-home" placeholder="ex. 69003" class="home-input">
+          </div>
           <div class="setting">
             <div><b>France uniquement</b><small>Écarte les pays et devises étrangers</small></div>
             <label class="switch"><input id="g-france" type="checkbox"><span></span></label>
