@@ -124,3 +124,25 @@ def test_reset_config_from_example(client):
     assert data["ok"] and data["backup"].startswith("config.")
     assert (path.parent / data["backup"]).exists()  # ancienne configuration gardée
     assert load_config(path)["notifier"]["min_score"] == 9
+
+
+def test_marks_and_purchases_api(client):
+    c, _ = client
+    uid = next(a["uid"] for a in c.get("/api/ads").get_json()["ads"] if a["title"] == "ThinkPad T480 sans SSD")
+    assert c.post(f"/api/ads/{uid}/mark", json={"favorite": True}).get_json()["ok"]
+    assert c.post("/api/ads/inconnue/mark", json={"hidden": True}).status_code == 404
+    ad = next(a for a in c.get("/api/ads").get_json()["ads"] if a["uid"] == uid)
+    assert ad["favorite"] and not ad["hidden"]
+
+    created = c.post("/api/purchases", json={"uid": uid}).get_json()
+    assert created["ok"]
+    data = c.get("/api/purchases").get_json()
+    p = data["purchases"][0]
+    assert p["buy_price"] == 90 and p["estimated_resale"] == 180 and p["model"] == "thinkpad t480"
+    assert c.put(f"/api/purchases/{p['id']}", json={"sold_price": "200", "repair_cost": "25"}).get_json()["ok"]
+    data = c.get("/api/purchases").get_json()
+    assert data["purchases"][0]["sold_at"] and data["summary"]["profit"] == 85
+    assert data["calibration"]["haircut"] is None and data["calibration"]["sales"] == 1
+    assert c.post("/api/purchases", json={"title": "", "buy_price": 10}).status_code == 400
+    c.delete(f"/api/purchases/{p['id']}")
+    assert c.get("/api/purchases").get_json()["purchases"] == []

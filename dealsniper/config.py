@@ -29,7 +29,7 @@ DEFAULTS: dict[str, Any] = {
         "access_denied_pause_hours": 6,  # un refus (401/403, robots.txt) met le site en pause
     },
     "searches": [],  # recherches communes, lancées sur tous les sites
-    "location": {"france_only": True, "exclude_overseas": True},
+    "location": {"france_only": True, "exclude_overseas": True, "home": ""},
     "filters": {"drop_uncategorized": True, "keep_unknown_price": True, "min_price": 5,
                 "deal_signals": [], "buyer_ad_keywords": [], "global_exclude_keywords": [],
                 "sold_title_keywords": ["vendu", "reserve"],

@@ -20,9 +20,11 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
-from .. import progress
+from .. import progress, purchases
 from ..config import config_file, data_dir, env, load_config
 from ..db import Database
+from ..geo import Geo
+from ..market import model_key
 
 STATIC_DIR = Path(__file__).parent / "static"
 LIST_FIELDS = ("keywords", "exclude_keywords", "include_keywords")
@@ -190,6 +192,9 @@ def write_settings(new: dict[str, Any]) -> None:
         for key in keys:
             if key in (new.get(section) or {}):
                 doc.setdefault(section, CommentedMap())[key] = bool(new[section][key])
+    if "home" in (new.get("location") or {}):  # chez vous : code postal ou ville, pour les distances
+        home = DoubleQuotedScalarString(str(new["location"]["home"]).strip())
+        doc.setdefault("location", CommentedMap())["home"] = home
 
     notifier = new.get("notifier") or {}
     target = doc.setdefault("notifier", CommentedMap())
@@ -248,6 +253,25 @@ def create_app() -> Flask:
     def database() -> Database:
         return Database(data_dir() / "dealsniper.db")
 
+    geo = Geo(data_dir() / "communes.json")
+
+    def add_distances(items: list[dict], home: str) -> None:
+        """Distance depuis chez vous ; la liste des communes se charge en arrière-plan la première fois."""
+        if not home:
+            return
+        if not geo.ready:
+            if not state.get("geo_loading") and not geo.error:
+                state["geo_loading"] = True
+                threading.Thread(target=lambda: (geo.load(), state.update(geo_loading=False)), daemon=True).start()
+            return
+        point = geo.locate(home)
+        for item in items:
+            item["distance_km"] = geo.distance(point, item.get("location"))
+
+    def brands() -> list[str]:
+        config = load_config(config_path())
+        return sorted({k for cat in config["categories"] for k in cat.get("keywords") or []}, key=len, reverse=True)
+
     @app.get("/")
     def index():
         return send_from_directory(STATIC_DIR, "index.html")
@@ -268,11 +292,96 @@ def create_app() -> Flask:
         finally:
             db.close()
         try:
-            cap = load_config(config_path())["analyzer"].get("max_daily_cost_usd")
-        except Exception:  # config.yaml invalide : le plafond n'est simplement pas affiché
-            cap = None
+            config = load_config(config_path())
+            cap, home = config["analyzer"].get("max_daily_cost_usd"), str(config["location"].get("home") or "")
+        except Exception:  # config.yaml invalide : plafond et distances simplement absents
+            cap, home = None, ""
+        add_distances(items, home)
+        geo_state = "ok" if geo.ready else "erreur" if geo.error else "chargement" if home else "inactif"
         return jsonify(ads=items, cost_today=round(cost, 4), cost_cap=cap, running=state["running"],
-                       error=state["error"], progress=progress.current.snapshot())
+                       error=state["error"], progress=progress.current.snapshot(), geo=geo_state, home=home)
+
+    @app.post("/api/ads/<uid>/mark")
+    def mark_ad(uid: str):
+        """Favori ou masquée : {"favorite": true} / {"hidden": true}."""
+        body = request.get_json(force=True) or {}
+        db = database()
+        try:
+            found = db.mark(uid, favorite=body.get("favorite"), hidden=body.get("hidden"))
+        finally:
+            db.close()
+        return jsonify(ok=found), 200 if found else 404
+
+    # --- achats -------------------------------------------------------------------
+    @app.get("/api/purchases")
+    def list_purchases():
+        db = database()
+        try:
+            rows = db.purchases()
+        finally:
+            db.close()
+        try:
+            base = float(load_config(config_path())["analyzer"]["resale_haircut"])
+        except Exception:
+            base = 0.9
+        return jsonify(purchases=rows, summary=purchases.summary(rows),
+                       calibration={**purchases.calibration(rows, base), "base": base})
+
+    @app.post("/api/purchases")
+    def add_purchase():
+        """Depuis une annonce (« uid ») ou à la main (« title », « buy_price »)."""
+        body = request.get_json(force=True) or {}
+        db = database()
+        try:
+            values: dict[str, Any] = {"title": str(body.get("title") or "").strip(),
+                                      "buy_price": _number(body.get("buy_price"))}
+            ad = db.ad_data(body["uid"]) if body.get("uid") else None
+            if ad:
+                items = [ad]
+                _realistic(items)
+                analysis = items[0].get("analysis") or {}
+                values.update(uid=body["uid"], title=ad.get("title"), url=ad.get("url"), source=ad.get("source"),
+                              category=ad.get("category"), model=model_key(ad.get("title") or "", brands()),
+                              estimated_resale=analysis.get("valeur_revente_estimee"))
+                if values["buy_price"] is None:
+                    values["buy_price"] = ad.get("total_price") or ad.get("price")
+            if not values["title"]:
+                return jsonify(ok=False, error="Titre manquant"), 400
+            purchase_id = db.add_purchase(values)
+        finally:
+            db.close()
+        return jsonify(ok=True, id=purchase_id)
+
+    @app.put("/api/purchases/<int:purchase_id>")
+    def update_purchase(purchase_id: int):
+        body = request.get_json(force=True) or {}
+        values: dict[str, Any] = {}
+        for key in ("buy_price", "repair_cost", "sold_price", "estimated_resale"):
+            if key in body:
+                values[key] = _number(body[key])
+        for key in ("title", "notes", "sold_at", "bought_at"):
+            if key in body:
+                values[key] = str(body[key] or "").strip() or None
+        if values.get("sold_price") is not None and not values.get("sold_at"):
+            values["sold_at"] = datetime.now().date().isoformat()
+        db = database()
+        try:
+            db.update_purchase(purchase_id, values)
+            row = next((p for p in db.purchases() if p["id"] == purchase_id), None)
+            if row:
+                db.record_sale(purchase_id, row.get("model"), row.get("sold_price"))  # vraie vente → cote
+        finally:
+            db.close()
+        return jsonify(ok=row is not None)
+
+    @app.delete("/api/purchases/<int:purchase_id>")
+    def delete_purchase(purchase_id: int):
+        db = database()
+        try:
+            db.delete_purchase(purchase_id)
+        finally:
+            db.close()
+        return jsonify(ok=True)
 
     @app.get("/api/image/<uid>")
     def ad_image(uid: str):

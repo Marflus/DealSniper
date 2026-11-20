@@ -96,6 +96,7 @@ network:
 location:
   france_only: true           # rejette « Provenance : Chine », « Lieu : Allemagne », prix en £ / $…
   exclude_overseas: true      # rejette aussi les DOM-TOM (codes postaux 971-976, 986-989)
+  home: ""                    # votre code postal ou ville (ex. "69003") : distance de chaque annonce
 
 # -----------------------------------------------------------------------------
 #  Pré-filtre (Python pur, 0 token)
