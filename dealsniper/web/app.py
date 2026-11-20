@@ -309,6 +309,7 @@ def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
     protect(app, ui_token(data_dir()))  # anti-CSRF, anti-rebinding DNS, jeton pour le réseau local
     state = {"running": False, "error": None}
+    check: dict[str, Any] = {"running": False, "report": None, "stop": False}  # « Encore en ligne ? »
     lock = threading.Lock()
 
     def database() -> Database:
@@ -588,6 +589,8 @@ def create_app() -> Flask:
         with lock:
             if state["running"]:
                 return jsonify(ok=False, message="Un passage est déjà en cours."), 409
+            if check["running"]:
+                return jsonify(ok=False, message="Une vérification « Encore en ligne ? » est en cours."), 409
             state["running"], state["error"] = True, None
 
         def worker() -> None:
@@ -607,7 +610,6 @@ def create_app() -> Flask:
         return jsonify(ok=True)
 
     # --- vérification « l'annonce est-elle toujours en ligne ? » -----------------------
-    check: dict[str, Any] = {"running": False, "report": None, "stop": False}
 
     @app.post("/api/check")
     def start_check():

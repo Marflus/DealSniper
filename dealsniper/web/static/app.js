@@ -877,6 +877,12 @@ async function pollSearch() {
   // Terminé : compte rendu + résultats.
   if (searchPoll) { clearInterval(searchPoll); searchPoll = null; }
   $("#search-live").hidden = true;
+  if (data.error) {  // ex. un autre passage tournait déjà : pas de faux « terminé »
+    $("#search-report").hidden = false;
+    $("#search-report").innerHTML = `<div class="panel search-report"><div class="report-head">⚠️ Recherche « ${esc(searchQuery)} » non lancée</div>
+      <p class="small">${esc(data.error)}</p></div>`;
+    return;
+  }
   const found = await api(`/api/search-results?${nearParam().slice(1)}`).catch(() => ({ ads: [] }));
   renderSearchReport(p, found.ads || []);
   loadAds();  // l'onglet Annonces profite aussi des nouvelles notes

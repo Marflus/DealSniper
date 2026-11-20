@@ -63,3 +63,26 @@ def test_availability_saved_and_endpoint(client, monkeypatch, tmp_path):
     gone = [a for a in c.get("/api/ads").get_json()["ads"] if a["uid"] == "ebay:100000000001"]
     assert gone and gone[0]["gone"] is True
     assert c.post("/api/ads/hide", json={"uids": ["ebay:100000000001"]}).get_json()["count"] == 1
+
+
+def test_run_refused_while_checking(client, monkeypatch):
+    import threading
+
+    c, _ = client
+    release = threading.Event()
+
+    async def slow_check(ads, config, on_progress=None, stop=None):
+        release.wait(5)
+        return {"total": 0, "done": 0, "active": 0, "gone": [], "unknown": [], "cancelled": False,
+                "statuses": {}, "checked_at": "2026-11-20T10:00:00+00:00"}
+
+    monkeypatch.setattr("dealsniper.availability.check_ads", slow_check)
+    assert c.post("/api/check", json={"uids": ["ebay:100000000001"]}).get_json()["ok"]
+    try:
+        assert c.post("/api/run").status_code == 409
+        assert c.post("/api/search-now", json={"query": "ski"}).status_code == 409
+    finally:
+        release.set()
+    deadline = time.monotonic() + 10
+    while c.get("/api/check").get_json()["running"] and time.monotonic() < deadline:
+        time.sleep(0.05)
