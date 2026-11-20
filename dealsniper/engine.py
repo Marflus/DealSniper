@@ -25,6 +25,7 @@ from .market import Market, Quote, category_brands, fingerprint, free_estimate
 from .models import Ad
 from .progress import LiveLogHandler, Progress
 from .purchases import calibrated_config
+from .runlock import run_lock
 from .sites import Site, load_sites
 from .sites import skipped as skipped_sites
 
@@ -393,8 +394,12 @@ async def _main(config: dict[str, Any], forever: bool, live: bool = False) -> No
 
 
 def run_once(config: dict[str, Any], live: bool = False) -> None:
-    asyncio.run(_main(config, forever=False, live=live))
+    """Un passage. Lève runlock.Busy si un autre passage tourne déjà (autre fenêtre, `watch`…)."""
+    with run_lock(data_dir(), "un passage"):
+        asyncio.run(_main(config, forever=False, live=live))
 
 
 def watch(config: dict[str, Any], live: bool = False) -> None:
-    asyncio.run(_main(config, forever=True, live=live))
+    """Surveillance continue : garde le verrou tant qu'elle tourne (pas de passage en double)."""
+    with run_lock(data_dir(), "la surveillance continue"):
+        asyncio.run(_main(config, forever=True, live=live))

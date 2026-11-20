@@ -584,20 +584,24 @@ def create_app() -> Flask:
         with lock:
             if check["running"]:
                 return jsonify(ok=False, error="Une vérification est déjà en cours."), 409
+            if state["running"]:  # même verrou que les passages : jamais deux fois le rythme vers un site
+                return jsonify(ok=False, error="Un passage est en cours : vérifiez une fois qu'il est fini."), 409
             check.update(running=True, stop=False, report={"total": len(uids), "done": 0, "active": 0,
                                                              "gone": [], "unknown": []})
 
         def worker() -> None:
             from ..availability import check_ads
+            from ..runlock import run_lock
 
             try:
-                with database() as db:
-                    ads = [{**(db.ad_data(uid) or {}), "uid": uid} for uid in uids]
-                report = asyncio.run(check_ads([a for a in ads if a.get("url")], current_config(),
-                                               on_progress=lambda r: check.update(report=dict(r)),
-                                               stop=lambda: check["stop"]))
-                with database() as db:
-                    db.set_availability(report.pop("statuses"), report["checked_at"])
+                with run_lock(data_dir(), "une vérification"):  # pas en même temps qu'un passage
+                    with database() as db:
+                        ads = [{**(db.ad_data(uid) or {}), "uid": uid} for uid in uids]
+                    report = asyncio.run(check_ads([a for a in ads if a.get("url")], current_config(),
+                                                   on_progress=lambda r: check.update(report=dict(r)),
+                                                   stop=lambda: check["stop"]))
+                    with database() as db:
+                        db.set_availability(report.pop("statuses"), report["checked_at"])
                 check["report"] = report
             except Exception as exc:
                 check["report"] = {**(check["report"] or {}), "error": str(exc)[:200]}

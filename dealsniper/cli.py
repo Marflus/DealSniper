@@ -9,6 +9,7 @@ import sys
 import yaml
 
 from .config import data_dir, load_config, load_env, setup_logging
+from .runlock import Busy
 
 
 def cmd_run(args, config) -> int:
@@ -140,5 +141,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.sites:
             only_sites(config, args.sites)
         return args.func(args, config)
+    except Busy as exc:  # un autre passage tourne déjà
+        print(exc, file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         return 130
