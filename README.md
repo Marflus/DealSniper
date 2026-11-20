@@ -97,6 +97,7 @@ suppression de compte, choisissez l'exemption *« Not persisting eBay data »*.
 ## Interface
 
 Le plus simple : double-cliquez sur **`start_ui.bat`** (Windows) ou lancez `./start_ui.sh` (Linux / Mac).
+Pour mettre à jour : **`update.bat`** (ou `./update.sh`) ferme l'interface, fait `git pull` et la relance.
 Au premier lancement, le script crée l'environnement Python `.venv` et installe les dépendances, puis
 ouvre l'interface dans le navigateur.
 

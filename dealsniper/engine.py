@@ -58,6 +58,8 @@ class Engine:
         site.on_progress = on_search
         listed = await site.list_recent(self.http)
         new_uids = await self.db.unseen([ad.uid for ad in listed])
+        # Annonces déjà vues mais enregistrées sans photo : on complète avec celle de la liste (aucune requête).
+        await self.db.fill_images({ad.uid: ad.image for ad in listed if ad.image and ad.uid not in new_uids})
         new_ads = list({ad.uid: ad for ad in listed if ad.uid in new_uids}.values())
 
         candidates = []

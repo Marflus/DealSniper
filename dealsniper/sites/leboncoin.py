@@ -18,6 +18,33 @@ from ..models import Ad
 from ..utils.text import clean_html
 from .base import Site
 
+
+def ad_image(item: dict[str, Any]) -> str | None:
+    """Photo principale d'une annonce du JSON de recherche, quel que soit le format de `images`."""
+    images = item.get("images") or {}
+    if isinstance(images, list):  # liste d'URL ou de {"url": …}
+        images = {"urls": [i.get("url") if isinstance(i, dict) else i for i in images]}
+    for key in ("urls_large", "urls", "urls_thumb"):
+        urls = [u for u in images.get(key) or [] if isinstance(u, str) and u.startswith("http")]
+        if urls:
+            return urls[0]
+    for key in ("large_url", "small_url", "thumb_url", "url"):
+        if str(images.get(key) or "").startswith("http"):
+            return images[key]
+    return _first_image_url(item)
+
+
+def _first_image_url(value: Any) -> str | None:
+    """Dernier recours : première URL d'image trouvée n'importe où dans l'annonce."""
+    if isinstance(value, str):
+        return value if value.startswith("http") and ("img.leboncoin" in value or "/images/" in value) else None
+    children = value.values() if isinstance(value, dict) else value if isinstance(value, list) else []
+    for child in children:
+        found = _first_image_url(child)
+        if found:
+            return found
+    return None
+
 log = logging.getLogger(__name__)
 
 
@@ -90,8 +117,7 @@ class LeboncoinSite(Site):
                     price = float(prices[0]) if prices else None
                     loc = item.get("location") or {}
                     place = " ".join(p for p in (loc.get("city_label") or loc.get("city"), loc.get("zipcode")) if p)
-                    images = item.get("images") or {}
-                    image = (images.get("urls") or [None])[0] or images.get("small_url") or images.get("thumb_url")
+                    image = ad_image(item)
 
                     ads.append(
                         Ad(

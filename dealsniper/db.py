@@ -94,6 +94,18 @@ class Database:
             data["image"] = image or ""
             self._sql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(data, ensure_ascii=False), uid))
 
+    async def fill_images(self, images: dict[str, str]) -> None:
+        """Ajoute la photo des annonces déjà en base qui n'en ont pas."""
+        if not images:
+            return
+        marks = ",".join("?" * len(images))
+        rows = await self._asql(f"SELECT uid, data FROM seen WHERE uid IN ({marks})", tuple(images))
+        for uid, data in rows:
+            ad = json.loads(data or "{}")
+            if not ad.get("image"):
+                ad["image"] = images[uid]
+                await self._asql("UPDATE seen SET data = ? WHERE uid = ?", (json.dumps(ad, ensure_ascii=False), uid))
+
     def analyzed_since(self, hours: int) -> list[Ad]:
         """Annonces notées par Claude ces dernières `hours` heures (meilleures d'abord)."""
         since = (_now() - timedelta(hours=hours)).isoformat(timespec="seconds")

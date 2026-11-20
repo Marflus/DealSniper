@@ -172,3 +172,41 @@ def test_personal_config_is_created_from_example(tmp_path, monkeypatch):
     monkeypatch.delenv("DEALSNIPER_CONFIG", raising=False)
     assert cfg.load_config()["analyzer"]["batch_size"] == 7
     assert (tmp_path / "config.yaml").exists()  # copie personnelle, modifiable sans toucher à l'exemple
+
+
+def test_leboncoin_image_formats():
+    import sys
+    import types
+
+    if "patchright" not in sys.modules:  # le connecteur importe patchright ; inutile pour lire le JSON
+        try:
+            import patchright.async_api  # noqa: F401
+        except ImportError:
+            fake = types.ModuleType("patchright.async_api")
+            fake.TimeoutError, fake.async_playwright = TimeoutError, None
+            sys.modules["patchright"] = types.ModuleType("patchright")
+            sys.modules["patchright.async_api"] = fake
+    from dealsniper.sites.leboncoin import ad_image
+
+    assert ad_image({"images": {"urls_large": ["https://img.leboncoin.fr/a.jpg"]}}) == "https://img.leboncoin.fr/a.jpg"
+    assert ad_image({"images": {"thumb_url": "https://img.leboncoin.fr/t.jpg"}}) == "https://img.leboncoin.fr/t.jpg"
+    assert ad_image({"images": [{"url": "https://img.leboncoin.fr/l.jpg"}]}) == "https://img.leboncoin.fr/l.jpg"
+    assert ad_image({"pictures": {"x": ["https://img.leboncoin.fr/api/v1/p.jpg"]}}) == "https://img.leboncoin.fr/api/v1/p.jpg"
+    assert ad_image({"images": {"nb_images": 0}}) is None
+
+
+def test_known_ads_get_their_missing_image(tmp_path):
+    import asyncio
+    from dealsniper.db import Database
+    from dealsniper.models import Ad
+
+    async def scenario():
+        db = Database(tmp_path / "t.db")
+        ad = Ad(title="PS5", url="https://www.leboncoin.fr/ad/consoles/1", source="leboncoin", price=100)
+        await db.remember(ad, "analyzed")
+        await db.fill_images({ad.uid: "https://img.leboncoin.fr/1.jpg"})
+        image = db.ad_data(ad.uid)["image"]
+        db.close()
+        return image
+
+    assert asyncio.run(scenario()) == "https://img.leboncoin.fr/1.jpg"

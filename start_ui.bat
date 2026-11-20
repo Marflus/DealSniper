@@ -1,6 +1,7 @@
 @echo off
 rem Deal Sniper : lance l'interface web (double-clic). Crée l'environnement Python au premier lancement.
 cd /d "%~dp0"
+title DealSniper-UI
 
 if not exist ".venv\Scripts\python.exe" (
     echo Premier lancement : creation de l'environnement Python...
