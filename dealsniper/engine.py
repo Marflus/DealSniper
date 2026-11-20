@@ -137,12 +137,6 @@ class Engine:
         if not candidates or self.stopping.is_set():  # annulé : les retenues seront revues au prochain passage
             return stats
 
-        candidates.sort(key=filters.priority)  # les plus prometteuses d'abord
-        max_ads = self.config["analyzer"].get("max_ads_per_run")
-        if max_ads and len(candidates) > int(max_ads):
-            # On garde les plus prometteuses ; le reste n'est pas « vu » et sera analysé au prochain passage.
-            candidates = candidates[: int(max_ads)]
-            stats["retenues"] = len(candidates)
         if not self.config["analyzer"].get("enabled", True):
             return await self._process_without_ai(site, candidates, prints, stats)
 
@@ -207,8 +201,13 @@ class Engine:
 
     async def _select(self, site: Site, listed: list[Ad], new_ads: list[Ad],
                       prints: dict[str, str | None]) -> list[Ad]:
-        """Tri des nouvelles annonces : doublons, filtre, cote, puis fiche détaillée et second filtre."""
-        candidates, rejected = [], []
+        """Tri des nouvelles annonces, en deux temps :
+        1. gratuit (aucune requête) : doublons, filtre, zone, cote ;
+        2. fiche détaillée + second filtre, seulement pour les plus prometteuses, dans la limite de
+           `max_ads_per_run` : les autres ne sont pas « vues » et reviendront au prochain passage,
+           sans qu'on ait lu leur fiche pour rien.
+        """
+        kept, rejected = [], []
         for i, ad in enumerate(new_ads, 1):
             if self.stopping.is_set():
                 break  # annulé : les annonces restantes ne sont pas « vues », elles reviendront
@@ -216,27 +215,42 @@ class Engine:
             prints[ad.uid] = fingerprint(ad, self.brands)
             ad.watched = watchlist_match.matches(ad, self.config.get("watchlist") or [])
             duplicate = prints[ad.uid] and await self.db.duplicate_of(prints[ad.uid], ad.source)
-            # Une annonce surveillée passe outre la catégorie et la cote (mais pas les doublons).
+            # Une annonce surveillée passe outre la catégorie, la zone et la cote (mais pas les doublons).
             if duplicate:
                 reason = f"doublon d'une annonce déjà vue sur {SITE_LABELS.get(duplicate, duplicate)}"
             else:
                 reason = self._check(ad) or (None if ad.watched else await self.zone_problem(ad))
                 problem = None if reason else await self.market_problem(ad)  # renseigne aussi la cote
                 reason = reason or (None if ad.watched else problem)
-            if not reason and site.cfg.get("fetch_details", True):  # sinon : moins de requêtes / fenêtres
-                await self.sleep(random.uniform(*self.network["detail_delay"]))
-                try:
-                    ad = await site.fetch_detail(self.http, ad)
-                except AccessDenied:
-                    raise
-                except Exception as exc:  # fiche illisible : on garde les infos de la liste
-                    log.debug("%s : fiche non lue (%s)", site.name, exc)
-                reason = self._check(ad)  # la description complète peut révéler une panne grave, « vendu »…
             if reason:
                 rejected.append((ad, "rejected", False, reason, prints[ad.uid]))
             else:
+                kept.append(ad)
+        await self.db.remember_many(rejected)
+
+        # Les plus prometteuses d'abord (veilles, puis signaux, puis prix) ; plafond d'analyse appliqué ici.
+        kept.sort(key=lambda ad: (not ad.watched, *filters.priority(ad)))
+        cap = int(self.config["analyzer"].get("max_ads_per_run") or 0)
+        candidates, rejected = [], []
+        try:
+            for ad in kept:
+                if self.stopping.is_set() or (cap and len(candidates) >= cap):
+                    break  # le reste reviendra au prochain passage
+                if site.cfg.get("fetch_details", True):  # sinon : moins de requêtes / fenêtres
+                    await self.sleep(random.uniform(*self.network["detail_delay"]))
+                    try:
+                        ad = await site.fetch_detail(self.http, ad)
+                    except AccessDenied:
+                        raise
+                    except Exception as exc:  # fiche illisible : on garde les infos de la liste
+                        log.debug("%s : fiche non lue (%s)", site.name, exc)
+                    reason = self._check(ad)  # la description complète peut révéler une panne grave, « vendu »…
+                    if reason:
+                        rejected.append((ad, "rejected", False, reason, prints[ad.uid]))
+                        continue
                 candidates.append(ad)
-        await self.db.remember_many(rejected)  # une seule écriture pour tout le lot
+        finally:
+            await self.db.remember_many(rejected)  # même si le site refuse l'accès en cours de route
         return candidates
 
     async def _process_without_ai(self, site: Site, candidates: list[Ad], prints: dict[str, str | None],

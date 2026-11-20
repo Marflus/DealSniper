@@ -618,3 +618,28 @@ def test_cancel_interrupts_between_searches(config):
     site = ManySearches(config)
     stats = asyncio.run(go())
     assert site.details == [0, 1] and stats["listées"] == 6 and stats["analysées"] == 0
+
+
+def test_cap_applies_before_reading_details(monkeypatch, config):
+    """Plafond « IA max » : seules les annonces analysées voient leur fiche lue (pas de requêtes pour rien)."""
+    monkeypatch.setattr(engine.analyzer, "analyze", fake_analyze)
+    cfg = {**config, "analyzer": {**config["analyzer"], "max_ads_per_run": 2}}
+
+    class SixThinkPads(FakeSite):
+        async def list_recent(self, http):
+            return [Ad(title=f"ThinkPad T480 sans SSD n°{i}", url=f"https://www.ebay.fr/itm/20000000000{i}",
+                       source="ebay", price=60 + i) for i in range(6)]
+
+    async def go():
+        db = Database(data_dir() / "cap2.db")
+        site = SixThinkPads(cfg)
+        async with client() as http:
+            stats = await engine.Engine(cfg, db, http).process(site)
+            unseen = await db.unseen([f"ebay:20000000000{i}" for i in range(6)])
+        db.close()
+        return site, stats, unseen
+
+    site, stats, unseen = asyncio.run(go())
+    assert len(site.details) == 2 and stats["analysées"] == 2
+    assert site.details == ["ebay:200000000000", "ebay:200000000001"]  # les moins chères d'abord
+    assert len(unseen) == 4  # les 4 autres reviendront au prochain passage
