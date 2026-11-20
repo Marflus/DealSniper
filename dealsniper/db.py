@@ -245,14 +245,18 @@ class Database:
             names = [d[0] for d in cur.description]
             return [dict(zip(names, row, strict=True)) for row in cur.fetchall()]
 
-    def search(self, status: str | None = None, days: int = 30, limit: int = 2000) -> list[dict]:
-        """Annonces récentes pour l'interface (les filtres fins sont faits dans le navigateur)."""
+    def search(self, status: str | None = None, days: int = 30, limit: int = 2000,
+               only: str | None = None) -> list[dict]:
+        """Annonces récentes pour l'interface (les filtres fins sont faits dans le navigateur).
+        `only` : "favorite" ou "hidden" pour ne lire que les favoris / les masquées (vues dédiées)."""
         since = _stamp(-timedelta(days=days))
         query = "SELECT data, status, score, notified, seen_at, reason, favorite, hidden FROM seen WHERE seen_at >= ?"
         params: list = [since]
         if status:
             query += " AND status = ?"
             params.append(status)
+        if only in ("favorite", "hidden"):
+            query += f" AND {only} = 1"  # nom de colonne choisi parmi deux valeurs fixes
         rows = self._sql(query + " ORDER BY seen_at DESC LIMIT ?", (*params, limit))
         ads = []
         for data, row_status, score, notified, seen_at, reason, favorite, hidden in rows:

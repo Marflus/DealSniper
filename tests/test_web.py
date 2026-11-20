@@ -275,3 +275,16 @@ def test_missing_photo_is_retried_later_except_blocked_sites(client, monkeypatch
         db.patch_ad(uid, {"source": "leboncoin", "image_checked_at": "2000-01-01T00:00:00+00:00"})
     c.get(f"/api/image/{uid}")
     assert len(calls) == 2
+
+
+def test_favorites_view_ignores_the_period(client):
+    from dealsniper.config import data_dir
+    from dealsniper.db import Database
+
+    c, _ = client
+    c.post("/api/ads/ebay:100000000001/mark", json={"favorite": True})
+    with Database(data_dir() / "dealsniper.db") as db:  # favori vieux de 6 mois
+        db._sql("UPDATE seen SET seen_at = '2026-05-01T00:00:00+00:00' WHERE uid = 'ebay:100000000001'")
+    assert not [a for a in c.get("/api/ads?days=7").get_json()["ads"] if a["favorite"]]
+    favs = c.get("/api/ads?days=3650&only=favorite").get_json()["ads"]
+    assert [a["uid"] for a in favs] == ["ebay:100000000001"]

@@ -350,7 +350,9 @@ def create_app() -> Flask:
         with database() as db:
             status = request.args.get("status") or None
             days = request.args.get("days", 30, type=int)
-            items = db.search(status=status if status in ("analyzed", "rejected") else None, days=days)
+            only = request.args.get("only")  # vues Favoris / Masquées : lues directement en base
+            items = db.search(status=status if status in ("analyzed", "rejected") else None, days=days,
+                              only=only if only in ("favorite", "hidden") else None)
             _realistic(items)
             cost = asyncio.run(db.cost_today())
         for item in items:  # photo à rechercher de nouveau : l'interface la redemandera

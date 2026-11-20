@@ -317,7 +317,11 @@ function followRun() {
 async function loadAds() {
   try {
     const serverStatus = status === "fav" || status === "hidden" ? "" : status;  // favoris / masquées : tri local
-    const data = await api(`/api/ads?status=${encodeURIComponent(serverStatus)}&days=${$("#f-days").value}${nearParam()}`);
+    // Favoris : gardés indéfiniment, donc affichés quelle que soit la période choisie (lus à part en base,
+    // pour ne pas être noyés sous les annonces récentes).
+    const only = { fav: "favorite", hidden: "hidden" }[status] || "";
+    const days = status === "fav" ? 3650 : $("#f-days").value;
+    const data = await api(`/api/ads?status=${encodeURIComponent(serverStatus)}&days=${days}&only=${only}${nearParam()}`);
     geoState = data.geo;
     allAds = data.ads;
     applyStatus(data);
