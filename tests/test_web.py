@@ -334,3 +334,10 @@ def test_notifications_switch_and_silent_one_off_search(client, monkeypatch, con
     monkeypatch.setattr(notifier.Notifier, "send_ad", lambda *a: (_ for _ in ()).throw(AssertionError("envoi")))
     assert notifier.notify([], config) == []
     assert notifier.enabled({"notifier": {}})  # absent = activé (anciennes configurations)
+
+
+def test_search_results_say_which_search_they_belong_to(client):
+    """Après un rechargement, l'interface réaffiche le compte rendu de la dernière recherche ponctuelle."""
+    c, _ = client
+    data = c.get("/api/search-results").get_json()
+    assert data["query"] is None and data["running"] is False  # aucune recherche lancée

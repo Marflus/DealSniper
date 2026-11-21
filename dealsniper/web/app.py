@@ -30,7 +30,7 @@ from ..config import DESIRABLE_BRANDS, config_file, data_dir, env, load_config
 from ..db import Database
 from ..geo import Geo
 from ..market import category_brands, model_key
-from ..utils.products import query_words
+from ..utils.products import matches_query, query_words
 from ..utils.text import normalize
 from .security import protect, ui_token
 
@@ -777,14 +777,15 @@ def create_app(demo: bool = False) -> Flask:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True)
 
-    def start_run(prepare: Callable[[dict[str, Any]], None] | None = None):
-        """Lance un passage en arrière-plan (un seul à la fois) ; `prepare` adapte la configuration."""
+    def start_run(prepare: Callable[[dict[str, Any]], None] | None = None, query: str | None = None):
+        """Lance un passage en arrière-plan (un seul à la fois) ; `prepare` adapte la configuration.
+        `query` : terme d'une recherche ponctuelle, gardé pour réafficher son compte rendu après rechargement."""
         with lock:
             if state["running"]:
                 return jsonify(ok=False, message="Un passage est déjà en cours."), 409
             if check["running"]:
                 return jsonify(ok=False, message="Une vérification « Encore en ligne ? » est en cours."), 409
-            state["running"], state["error"] = True, None
+            state["running"], state["error"], state["query"] = True, None, query
 
         def worker() -> None:
             from ..engine import run_once
@@ -923,7 +924,7 @@ def create_app(demo: bool = False) -> Flask:
             if max_ads:
                 config["analyzer"]["max_ads_per_run"] = int(max_ads)
 
-        return start_run(prepare)
+        return start_run(prepare, query)
 
     @app.get("/api/search-results")
     def search_results():
@@ -942,7 +943,12 @@ def create_app(demo: bool = False) -> Flask:
         except Exception:
             home = ""
         add_distances(items, (request.args.get("near") or "").strip() or home)
-        return jsonify(ads=items)
+        if state.get("query"):  # annonces déjà notées par une autre recherche et sans rapport avec celle-ci
+            words = query_words(state["query"])
+            items = [i for i in items if i.get("status") != "analyzed"
+                     or matches_query(f"{i.get('title', '')} {i.get('description', '')}", words)]
+        # query : None après un passage normal (ces annonces ne sont pas celles d'une recherche)
+        return jsonify(ads=items, query=state.get("query"), running=state["running"])
 
     @app.post("/api/test-notif")
     def test_notif():

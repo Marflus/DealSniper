@@ -1803,6 +1803,23 @@ async function loadStatus() {
   });
 }
 
+// Page rechargée (téléphone, F5) : le compte rendu de la dernière recherche ponctuelle revient, ou son suivi
+// reprend si elle tourne encore.
+async function restoreLastSearch() {
+  const data = await api(`/api/search-results?${nearParam().slice(1)}`).catch(() => null);
+  if (!data || !data.query) return;
+  searchQuery = data.query;
+  if (!$("#qs-query").value) $("#qs-query").value = data.query;
+  if (data.running) {
+    setRunning(true);
+    if (!searchPoll) searchPoll = setInterval(pollSearch, 1200);
+    return;
+  }
+  if (!(data.ads || []).length) return;
+  const prog = await api("/api/progress").catch(() => ({ progress: {} }));
+  renderSearchReport(prog.progress || {}, data.ads);
+}
+
 restoreFilters();
 syncMirrors();
 countActiveFilters();
@@ -1810,5 +1827,5 @@ loadStatus();
 api("/api/preferences").then((d) => { preferences = d.categories || {}; renderAds(true); }).catch(() => {});
 showSettingsSection(store.get("set", "set-notif"));
 showTab(store.get("tab", "ads"));
-loadAds();
+loadAds().then(restoreLastSearch).catch(() => {});
 setInterval(loadAds, 60000);
