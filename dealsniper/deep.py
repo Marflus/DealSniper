@@ -21,7 +21,8 @@ SYSTEM_PROMPT = """Tu es un expert de l'achat-revente d'occasion en France (éle
 Pour l'annonce donnée, trouve le PRIX DE REVENTE RÉEL du modèle EXACT (même génération, même configuration)
 sur le marché français de l'occasion. Utilise la recherche web : annonces en cours et surtout ventes récentes
 sur leboncoin, eBay.fr (objets vendus), Vinted, Backmarket. Raisonne sur un appareil EN ÉTAT DE MARCHE une fois
-réparé, jamais sur le prix neuf.
+réparé, jamais sur le prix neuf. Si l'annonce vend un JEU ou un ACCESSOIRE qui cite une console
+(« Zelda … Nintendo Switch », « Manette PS5 »), cherche le prix de ce jeu / accessoire, pas celui de la console.
 
 Donne une fourchette prudente (bas / typique / haut), une confiance (« faible » / « moyenne » / « élevée »)
 selon le nombre de prix réels trouvés, et 2 à 4 sources courtes au format « site : fourchette » (ex.

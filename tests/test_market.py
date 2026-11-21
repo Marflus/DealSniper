@@ -87,3 +87,28 @@ def test_price_history_monthly_median(tmp_path):
 
     hist = asyncio.run(scenario())
     assert len(hist) == 1 and hist[0]["prix"] == 200 and hist[0]["count"] == 3  # médiane du mois
+
+
+def test_game_or_accessory_is_not_the_console(config):
+    """« Zelda … NINTENDO Switch » vend un jeu : ni cote de console, ni prix de console pour l'IA."""
+    from dealsniper.filters import check
+    from dealsniper.market import Market, is_the_device
+    from dealsniper.models import Ad
+    from dealsniper.utils.products import game_or_accessory
+
+    games = ["The legend of Zelda Echoes of Wisdom NINTENDO Switch", "Manette PS5 DualSense", "FIFA 24 PS4",
+             "Super Mario Odyssey Switch", "Jeu Switch Pokemon Violet", "Coque Switch OLED", "Pokémon Jaune Game Boy"]
+    consoles = ["Nintendo Switch OLED + 3 jeux", "PS5 digital + manette", "Console PS4 slim 500 Go",
+                "Lot Nintendo Switch + Mario Kart", "Sony PlayStation 5 slim", "Steam Deck OLED 512",
+                "Switch Lite turquoise", "Game Boy Color jaune", "Xbox Series X 1To"]
+    others = ["Carte graphique RTX 3080", "Casque Sony WH-1000XM4", "Mario Kart 8 Deluxe"]
+    assert all(game_or_accessory(t) for t in games)
+    assert not any(game_or_accessory(t) for t in consoles + others)
+
+    zelda = Ad(title=games[0], url="https://www.leboncoin.fr/ad/x/1", source="leboncoin", price=35)
+    assert not is_the_device(zelda.title)  # son prix ne fausse pas la cote des consoles
+    config["categories"].append({"name": "Consoles", "keywords": ["switch", "ps5"], "max_budget": 300})
+    config["filters"]["drop_uncategorized"] = False
+    assert Market(db=None, config=config).key(zelda) is None  # pas de cote de console
+    check(zelda, config)
+    assert any("jeu ou accessoire" in s for s in zelda.signals)  # transmis à l'IA

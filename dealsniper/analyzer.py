@@ -43,6 +43,7 @@ Règles :
 - marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais.
 - Revente directe : panne_probable = "aucune", cout_piece_estime = 0.
 - Sans description, suppose l'objet conforme à son titre. Un titre court, tronqué ou un modèle inconnu n'est pas un indice d'arnaque ; ne parle d'arnaque que pour un prix < 30 % de la cote sur un produit récent très demandé.
+- Jeu ou accessoire (signal « jeu ou accessoire », ou titre comme « Zelda … Nintendo Switch », « Manette PS5 ») : estime le prix de CE jeu / accessoire d'occasion (souvent 10-50 €), JAMAIS celui de la console citée dans le titre.
 - Signal « marque recherchée » (Apple, ThinkPad, Dyson, Sonos, Makita…) : qualité reconnue, cote stable et vente rapide → facilite_vente élevée et +1 au score si la marge tient ; une marque d'entrée de gamme ou inconnue se revend lentement et mal → facilite_vente ≤ 5.
 - Vendeur (si fourni) : < 95 % d'avis positifs ou < 5 avis = risque plus élevé, baisse le score d'un point.
 - panne_probable : 6 mots max. Une entrée par annonce, avec son id."""

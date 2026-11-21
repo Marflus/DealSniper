@@ -22,6 +22,7 @@ from typing import Any
 
 from .filters import desirable_brand
 from .models import Ad
+from .utils.products import game_or_accessory
 from .utils.text import first_keyword, normalize
 
 log = logging.getLogger(__name__)
@@ -123,7 +124,7 @@ def is_the_device(title: str) -> bool:
     """Faux pour un accessoire ou une pièce vendus seuls (leur prix fausserait la cote)."""
     text = normalize(title)
     first_words = re.findall(r"[a-z]+", text)[:2]
-    if ACCESSORY_FIRST.intersection(first_words):
+    if ACCESSORY_FIRST.intersection(first_words) or game_or_accessory(title):  # « Zelda … Switch » : un jeu
         return False
     return first_keyword(text, list(NOT_THE_DEVICE)) is None
 
@@ -194,6 +195,9 @@ class Market:
         self._since = time.monotonic()
 
     def key(self, ad: Ad) -> str | None:
+        """Modèle de l'appareil vendu ; None pour un jeu ou un accessoire qui le cite (pas sa cote)."""
+        if game_or_accessory(ad.title):
+            return None
         return model_key(ad.title, self.brands)
 
     async def observe(self, ads: list[Ad]) -> None:
