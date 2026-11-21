@@ -376,7 +376,9 @@ function filteredAds(source = allAds) {
     price: (x, y) => (x.total_price ?? 1e9) - (y.total_price ?? 1e9),
     distance: (x, y) => (x.distance_km ?? 1e9) - (y.distance_km ?? 1e9),
   };
-  return ads.sort(sorters[$("#f-sort").value] || sorters.recent);
+  const order = sorters[$("#f-sort").value] || sorters.recent;
+  // Annonces vérifiées « plus en ligne » toujours en bas, quel que soit le tri (vendues : rien à acheter).
+  return ads.sort((x, y) => (!!x.gone - !!y.gone) || order(x, y));
 }
 
 // Les 3 notes, sous les prix : rentabilité (note IA), facilité de réparation, facilité de vente.
