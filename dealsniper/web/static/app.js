@@ -553,7 +553,7 @@ function deepVerdict(ad, d) {
   const price = ad.total_price ?? ad.price, max = d.prix_achat_max;
   const doubt = d.confiance === "faible" ? " Confiance faible : vérifiez avant." : "";
   if (max == null || price == null) return { cls: "maybe", icon: "🤔", title: "À vérifier", text: "Prix ou fourchette inconnus." };
-  if (max <= 0) return { cls: "pass", icon: "⛔", title: "Ne pas acheter", text: `Même très bas, la revente ne laisse pas +30 € net.${doubt}` };
+  if (max <= 0) return { cls: "pass", icon: "⛔", title: "Ne pas acheter", text: `Même très bas, la revente ne laisse pas +${d.marge_visee ?? 30} € net.${doubt}` };
   if (ad.price_mode === "enchere") return { cls: "buy", icon: "🎯", title: `Enchérir jusqu'à ${euros(max)}`, text: `Au-delà, la marge visée n'est plus atteinte.${doubt}` };
   if (price <= max) return { cls: "buy", icon: "✅", title: "À acheter", text: `${euros(price)} demandés, maximum conseillé ${euros(max)} : la marge est là.${doubt}` };
   if (price <= max * 1.25) return { cls: "nego", icon: "🤝", title: `À négocier : proposez ${euros(max)}`, text: `${euros(price)} demandés, soit ${Math.round(100 * (1 - max / price))} % de trop.${doubt}` };
@@ -592,7 +592,7 @@ function deepBlock(ad) {
       <div class="deep-facts">
         <div class="d-tiles three">
           <div class="d-tile"><span>Revente réelle</span><b>${range}</b>${d.revente_typique != null ? `<small>typique ${euros(d.revente_typique)}</small>` : ""}</div>
-          <div class="d-tile ${d.prix_achat_max != null && d.prix_achat_max <= 0 ? "neg" : ""}"><span>Achat max</span><b>${d.prix_achat_max != null ? euros(d.prix_achat_max) : "—"}</b><small>pour +30 € net</small></div>
+          <div class="d-tile ${d.prix_achat_max != null && d.prix_achat_max <= 0 ? "neg" : ""}"><span>Achat max</span><b>${d.prix_achat_max != null ? euros(d.prix_achat_max) : "—"}</b><small>pour +${d.marge_visee ?? 30} € net</small></div>
           <div class="d-tile"><span>Demandé</span><b>${euros(ad.total_price ?? ad.price)}</b><small>${ad.shipping ? "port compris" : "&nbsp;"}</small></div>
         </div>
         ${d.resume ? `<p class="deep-summary">${esc(d.resume)}</p>` : ""}

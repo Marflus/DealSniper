@@ -20,13 +20,15 @@ def test_cost_counts_web_searches(config, monkeypatch):
     result = analyze_market(Ad(title="ThinkPad T480", url="https://x/1", source="ebay", price=90), config, client)
     tokens = 2 * (1_000 * 2.00 + 500 * 10.00) / 1e6  # Sonnet 5.5, deux réponses
     assert result["cost_usd"] == round(tokens + 3 * 0.01, 4)  # + 3 recherches web à 0,01 $
-    assert result["prix_achat_max"] == 150  # 200 × 0,9 − 30
+    assert result["prix_achat_max"] == 120  # 200 × 0,9 − 60 (30 % de 200)
 
 
 def test_max_buy_uses_typical_resale():
-    assert max_buy(200) == 150 and max_buy(200, piece=25) == 125 and max_buy(None) is None
+    # marge visée proportionnelle : 30 % de la revente, au moins 10 €
+    assert max_buy(200) == 120 and max_buy(200, piece=25) == 95 and max_buy(None) is None
+    assert max_buy(25) == 12  # petit objet : achat max positif (−16 € avec l'ancien +30 € fixe)
     old = {"revente_basse": 60, "revente_typique": 80, "prix_achat_max": -21}
-    assert refresh(old, piece=10)["prix_achat_max"] == 32  # 80 × 0,9 − 10 − 30
+    assert refresh(old, piece=10)["prix_achat_max"] == 38  # 80 × 0,9 − 10 − 24 (30 % de 80)
 
 
 def test_empty_or_refused_analysis_is_not_saved_but_charged(client, monkeypatch):

@@ -481,6 +481,7 @@ def create_app(demo: bool = False) -> Flask:
     def ad_negotiation(uid: str):
         """Message de négociation prêt à copier, basé sur le prix conseillé de l'analyse."""
         from ..deep import build_negotiation_message
+        from ..deep import max_buy as advised_max
         from ..models import Ad
 
         with database() as db:
@@ -497,13 +498,13 @@ def create_app(demo: bool = False) -> Flask:
         ad = Ad.from_dict(ad_dict)
         max_buy = deep.get("prix_achat_max")
         if max_buy is None:
-            # Sans analyse approfondie : prix qui laisse +30 € net avec la revente estimée
-            # (même formule que la marge : revente − prix − pièce − 10 % de frais = 30 €).
+            # Sans analyse approfondie : prix qui laisse la marge visée avec la revente estimée
+            # (même formule que l'analyse approfondie : 30 % de la revente, au moins 10 €).
             analysis = ad.analysis or {}
             resale = analysis.get("valeur_revente_estimee")
             piece = float(analysis.get("cout_piece_estime") or 0)
             if resale:
-                candidate = round(float(resale) * 0.9 - piece - 30)
+                candidate = advised_max(float(resale), piece)
                 if candidate > 0:
                     max_buy = candidate
         msg = build_negotiation_message(ad, max_buy)

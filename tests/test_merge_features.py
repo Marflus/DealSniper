@@ -14,7 +14,7 @@ def test_negotiation_message_uses_advised_price():
     msg = build_negotiation_message(ad, 120)
     assert "120 €" in msg and "ssd absent" in msg
     assert "€" not in build_negotiation_message(ad, 200)  # prix déjà sous le conseillé : simple prise de contact
-    deep = sanitize({"revente_typique": 200, "revente_basse": 180}, ad)
+    deep = sanitize({"revente_typique": 250, "revente_basse": 180}, ad)  # 250 × 0,9 − 75 = 150
     assert deep["prix_achat_max"] == 150 and "150 €" not in deep["message_negociation"]  # 150 = prix demandé
     deep = sanitize({"revente_typique": 200, "message_negociation": "Bonjour, 110 € ?"}, ad)
     assert deep["message_negociation"] == "Bonjour, 110 € ?"  # message de l'IA gardé tel quel

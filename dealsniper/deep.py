@@ -36,7 +36,8 @@ son mois (date) et son prix. N'invente aucun point : si tu n'as pas trouvé de p
 
 Et « message_negociation » : un message court (2-3 phrases), poli, naturel et prêt à copier-coller pour le
 vendeur (leboncoin/Vinted/Facebook), proposant un prix d'environ 90 % de ta revente typique, moins le coût de
-la réparation éventuelle, moins 30 € (ce qui laisse une marge nette à l'acheteur).
+la réparation éventuelle, moins la marge visée : 30 % de la revente typique, au moins 10 € (ce qui laisse une
+marge nette à l'acheteur).
 
 Si une PHOTO de l'annonce est jointe, regarde-la attentivement : état visible (rayures, chocs, écran fissuré,
 oxydation, usure, pièces manquantes), panne visible, cohérence avec le titre (bon modèle ? photo de catalogue
@@ -193,26 +194,35 @@ def sanitize(raw: dict[str, Any], ad: Ad) -> dict[str, Any]:
         "confiance": confiance, "sources": sources, "ventes": _sales(raw.get("ventes")),
         "resume": str(raw.get("resume", ""))[:300], "pieges": str(raw.get("pieges", ""))[:120],
         "prix_achat_max": limit,
+        "marge_visee": target_profit(typical),
         "message_negociation": message or build_negotiation_message(ad, limit),  # repli sans IA
         "photo": _photo(raw.get("photo")),
     }
 
 
-TARGET_PROFIT = 30  # bénéfice net visé (€) pour le prix d'achat maximum conseillé
+TARGET_SHARE = 0.30  # bénéfice net visé : 30 % de la revente…
+TARGET_MIN = 10      # … et au moins 10 € (choix de Marius : un objet revendu 25 € peut encore valoir le coup)
+
+
+def target_profit(typical: float | None) -> float:
+    """Bénéfice net visé (€) : proportionnel à la revente (un fixe de +30 € rendait les petits objets
+    impossibles à acheter : achat max négatif pour une revente de 25 €)."""
+    return round(max(TARGET_MIN, TARGET_SHARE * float(typical or 0)))
 
 
 def max_buy(typical: float | None, piece: float = 0.0) -> float | None:
-    """Prix d'achat à ne pas dépasser pour viser +30 € net :
-    revente TYPIQUE − 10 % (frais, négociation) − pièce − 30 €.
+    """Prix d'achat à ne pas dépasser pour viser la marge : revente TYPIQUE − 10 % (frais, négociation)
+    − pièce − marge visée (30 % de la revente, au moins 10 €).
     (La revente basse servait de base avant : avec les 10 %, la prudence était comptée deux fois.)"""
-    return round(typical * 0.9 - piece - TARGET_PROFIT) if typical else None
+    return round(typical * 0.9 - piece - target_profit(typical)) if typical else None
 
 
 def refresh(deep: dict[str, Any], piece: float = 0.0) -> dict[str, Any]:
     """Recalcule le prix d'achat max d'une analyse déjà enregistrée (formule à jour)."""
     if not deep:
         return deep
-    return {**deep, "prix_achat_max": max_buy(deep.get("revente_typique") or deep.get("revente_basse"), piece)}
+    typical = deep.get("revente_typique") or deep.get("revente_basse")
+    return {**deep, "prix_achat_max": max_buy(typical, piece), "marge_visee": target_profit(typical)}
 
 
 def _sales(rows: Any) -> list[dict[str, Any]]:
