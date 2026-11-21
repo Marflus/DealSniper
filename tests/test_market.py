@@ -191,3 +191,17 @@ def test_longer_searches_need_half_of_their_words():
     shoes = query_words("chaussures blanches taille 43")
     assert matches_query("Nike Air Force 1 blanc Taille : 43", shoes)
     assert not matches_query("Polo homme Taille : 43", shoes)
+
+
+def test_controllers_and_games_named_after_the_platform():
+    """Passage réel : « Sony PlayStation 5 DualSense » (manette, 75 €) notifiée au prix d'une PS5."""
+    from dealsniper.utils.products import game_or_accessory, part_or_accessory
+
+    accessories = ["Sony PlayStation 5 DualSense White Dragon Custom", "PS5 controller DualSense 30th anniversary",
+                   "Minecraft Nintendo Switch", "Nintendo Switch Sports", "Original Nintendo Switch Netzteil USB-C",
+                   "Nintendo Switch Joy-Con"]
+    consoles = ["PS5 digital + manette", "Nintendo Switch + 2 jeux + manette Pro", "PS4 Pro avec 2 manettes",
+                "Nintendo Switch OLED et manette pro", "Console PS4 slim 500 Go"]
+    assert all(game_or_accessory(t) for t in accessories)
+    assert not any(game_or_accessory(t) for t in consoles)
+    assert part_or_accessory("Placa Mae Latitude E6430")

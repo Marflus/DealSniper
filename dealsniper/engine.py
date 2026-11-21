@@ -157,13 +157,65 @@ class Engine:
                                              self.stopping.is_set)
             await self.db.add_cost(result.cost_usd)
             self.progress.add_cost(site.label, result.cost_usd)
+        refused, dropped = None, []
+        if self._details_after_scoring(site) and result.analyzed and not self.stopping.is_set():
+            refused, dropped = await self._read_best_details(site, result, prints)
+        async with self._ai_lock:
             sent = await asyncio.to_thread(notifier.notify, result.analyzed, self.config)
         sent_uids = {ad.uid for ad in sent}
         await self.db.remember_many([(ad, "analyzed", ad.uid in sent_uids, None, prints.get(ad.uid))
-                                     for ad in result.analyzed])
+                                     for ad in result.analyzed] + dropped)
         await self._count_failures(result.failed, prints)
         stats.update(analysées=len(result.analyzed), notifiées=len(sent))
+        if refused:
+            raise refused  # site mis en pause, mais les annonces notées sont gardées
         return stats
+
+    @staticmethod
+    def _details_after_scoring(site: Site) -> bool:
+        """Sites à `max_details` (Vinted…) : la fiche n'est lue que pour les MIEUX NOTÉES, après la notation.
+        Lire les fiches avant (sur les signaux et le prix) tombait souvent sur des annonces sans intérêt."""
+        wants = site.cfg.get("fetch_details", getattr(site, "details_default", True))
+        return bool(wants) and site.cfg.get("max_details", getattr(site, "max_details_default", None)) is not None
+
+    async def _read_best_details(self, site: Site, result, prints: dict[str, str | None]):
+        """Lit la fiche (texte du vendeur : pannes, défauts) des annonces les mieux notées, puis les renote.
+        Renvoie (refus d'accès éventuel, annonces écartées par leur description)."""
+        limit = int(site.cfg.get("max_details", getattr(site, "max_details_default", 15)))
+        floor = int(self.config["notifier"].get("watch_score") or 5) - 1  # au moins proches d'une alerte
+        best = sorted((a for a in result.analyzed if (a.score or 0) >= floor), key=lambda a: -(a.score or 0))[:limit]
+        reread, dropped, refused = [], [], None
+        for i, ad in enumerate(best, 1):
+            if self.stopping.is_set():
+                break
+            self.progress.update(site.label, f"lecture des fiches des mieux notées {i}/{len(best)}")
+            pause = site.cfg.get("detail_delay") or self.network["detail_delay"]
+            await self.sleep(random.uniform(*pause))
+            before = ad.description
+            try:
+                await site.fetch_detail(self.http, ad)
+            except AccessDenied as exc:
+                refused = exc
+                break
+            except Exception as exc:  # fiche illisible : la note de la liste reste
+                log.debug("%s : fiche non lue (%s)", site.name, exc)
+                continue
+            if ad.description == before:
+                continue
+            reason = self._check(ad)  # la description peut révéler une panne grave, « vendu »…
+            if reason:
+                result.analyzed.remove(ad)
+                dropped.append((ad, "rejected", False, reason, prints.get(ad.uid)))
+            else:
+                reread.append(ad)
+        if reread:
+            self.progress.update(site.label, f"nouvelle note de {len(reread)} annonce(s) avec leur description")
+            async with self._ai_lock:
+                again = await asyncio.to_thread(analyzer.analyze, reread, self.config, await self.budget_left())
+                await self.db.add_cost(again.cost_usd)
+                self.progress.add_cost(site.label, again.cost_usd)
+            # analyzer.analyze remplit ad.analysis sur place ; une renotation échouée garde la première note
+        return refused, dropped
 
     async def zone_problem(self, ad: Ad) -> str | None:
         """Zone éliminatoire (`filters.zone` : {near, km}) : annonce trop loin du centre choisi.
@@ -256,7 +308,8 @@ class Engine:
             for ad in kept:
                 if self.stopping.is_set() or (cap and len(candidates) >= cap):
                     break  # le reste reviendra au prochain passage
-                wants_detail = site.cfg.get("fetch_details", getattr(site, "details_default", True))
+                wants_detail = (site.cfg.get("fetch_details", getattr(site, "details_default", True))
+                                and not self._details_after_scoring(site))  # sinon : après la notation
                 if wants_detail and (max_details is None or details < int(max_details)):
                     details += 1
                     self.progress.update(site.label, f"{len(listed)} annonces · lecture des fiches ({details})")

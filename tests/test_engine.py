@@ -800,3 +800,30 @@ def test_vinted_and_leboncoin_detail_defaults():
     assert ld_description(["pas du json"]) == ""
     assert merge_description("État : Bon état", "Écran HS") == "État : Bon état | Écran HS"
     assert merge_description("État : Bon état", "") == "État : Bon état"
+
+
+def test_details_are_read_for_the_best_scored_then_rescored(monkeypatch, config):
+    """Vinted : fiche lue APRÈS la notation, pour les mieux notées ; une panne grave dans le texte les écarte."""
+    calls = []
+
+    def analyze(ads, cfg, budget, should_stop=None):
+        calls.append([a.title for a in ads])
+        return fake_analyze(ads, cfg, budget, should_stop)
+
+    monkeypatch.setattr(engine.analyzer, "analyze", analyze)
+
+    async def go():
+        db = Database(data_dir() / "after.db")
+        site = FakeSite(config)
+        site.cfg["max_details"] = 5
+        async with client() as http:
+            stats = await engine.Engine(config, db, http).process(site)
+        rejected = db.search(status="rejected")
+        db.close()
+        return site, stats, rejected
+
+    site, stats, rejected = asyncio.run(go())
+    assert len(calls) == 1  # aucune description nouvelle à relire (T480) ; Latitude écartée par sa fiche
+    assert set(site.details) == {"ebay:100000000001", "ebay:100000000003"}
+    assert any("oxyde" in (r["reason"] or "") for r in rejected)
+    assert stats["analysées"] == 1

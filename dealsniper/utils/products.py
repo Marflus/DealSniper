@@ -26,6 +26,11 @@ _LEAD_WORDS = {"nintendo", "sony", "microsoft", "valve", "new", "nouvelle", "la"
                "pack", "console", "vends", "vend", "superbe", "tres", "bon", "etat", "neuve", "neuf",
                "bonjour", "salut", "je", "j'ai", "ma", "mon", "mes", "ta", "a", "vendre", "donne", "cede", "ancienne"}
 _WORD_RE = re.compile(r"[a-z0-9][a-z0-9'-]*")
+# Accessoire nommé n'importe où dans le titre (« Sony PlayStation 5 DualSense », « Nintendo Switch Joy-Con »),
+# sauf après « + » / « avec » : « PS5 + manette » vend la console avec sa manette.
+ACCESSORY_ANYWHERE = ("dualsense", "dualshock", "joy-con", "joy-cons", "joycon", "joycons", "manette", "manettes",
+                      "controller", "amiibo", "netzteil", "chargeur", "station d'accueil", "casque")
+_BUNDLE_RE = re.compile(r"\+|\bavec\b|\bet\b|\bw/|\bincl")
 
 
 def game_or_accessory(title: str) -> str | None:
@@ -34,6 +39,12 @@ def game_or_accessory(title: str) -> str | None:
     starts = [m.start() for p in PLATFORMS if (pattern := _keyword_pattern(p)) and (m := pattern.search(text))]
     if not starts:
         return None  # pas une plateforme de jeu : rien à dire
+    bundle = _BUNDLE_RE.search(text)
+    head = text[:bundle.start()] if bundle else text  # ce qui est vendu, avant « + manette », « avec 2 jeux »
+    if first_keyword(head, list(ACCESSORY_ANYWHERE)) and not first_keyword(head, ["console"]):
+        return "jeu ou accessoire"
+    if re.search(r"switch (sports|online)\b", text):  # jeu « Nintendo Switch Sports », abonnement Online
+        return "jeu ou accessoire"
     if min(starts) == 0:
         return None  # le titre commence par la plateforme : c'est la console (« Game Boy Color », « PS5 »)
     words = _WORD_RE.findall(text)
@@ -42,7 +53,8 @@ def game_or_accessory(title: str) -> str | None:
     if first_keyword(text, ["console"]):
         return None
     before = [w for w in _WORD_RE.findall(text[:min(starts)]) if w not in _LEAD_WORDS]
-    return "jeu ou accessoire" if len(before) >= 2 else None  # « Zelda … Switch », « FIFA 24 PS4 »
+    # « Zelda … Switch », « FIFA 24 PS4 », « Minecraft Nintendo Switch » : un nom de produit avant la plateforme
+    return "jeu ou accessoire" if before else None
 
 
 # Pas l'appareil lui-même : accessoire vendu seul, lot, boîte…
@@ -56,7 +68,8 @@ ACCESSORY_FIRST = {"chargeur", "batterie", "clavier", "coque", "housse", "etui",
                    "chassis", "dissipateur", "ventilo", "plasturgie", "docking",
                    # boîtes, housses, hubs… y compris dans les annonces étrangères de Vinted (« Custodia », « Caja »)
                    "boite", "caja", "scatola", "verpakking", "custodia", "funda", "case", "cover", "sleeve",
-                   "pochette", "hub", "film", "protection", "cargador", "bateria", "topcase", "skin"}
+                   "pochette", "hub", "film", "protection", "cargador", "bateria", "topcase", "skin",
+                   "placa", "netzteil", "akku", "ladegerat", "tastatur", "teclado", "scheda", "tarjeta", "kabel"}
 # Signal pour l'IA : seulement les cas nets (« lot de » peut être un lot d'appareils).
 _PART_PHRASES = ("seul", "seule", "pieces detachees", "piece detachee")
 
