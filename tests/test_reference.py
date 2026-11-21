@@ -4,11 +4,11 @@ from dealsniper.reference import reference_price
 
 
 def test_reference_ranges_by_model():
-    assert reference_price("Steam Deck OLED 512 Go") == (380, 440)
-    assert reference_price("Steam Deck Oled 1TB") == (450, 520)
-    assert reference_price("Steam Deck LCD 512GB") == (250, 300)
-    assert reference_price("MacBook Air M1 2020 8/256") == (380, 450)
-    assert reference_price("Lenovo ThinkPad T480s i5") == (190, 240)
+    assert reference_price("Steam Deck OLED 512 Go") == (430, 520)
+    assert reference_price("Steam Deck Oled 1TB") == (520, 620)
+    assert reference_price("Steam Deck LCD 512GB") == (320, 380)
+    assert reference_price("MacBook Air M1 2020 8/256") == (400, 470)
+    assert reference_price("Lenovo ThinkPad T480s i5") == (240, 300)
     # jeux, manettes, pièces : jamais le prix de l'appareil
     assert reference_price("Manette PS5 DualSense") is None
     assert reference_price("Clavier Lenovo ThinkPad T480") is None
@@ -28,14 +28,14 @@ def raw(resale):
 
 
 def test_same_model_gets_the_same_range_whatever_the_batch():
-    """Steam Deck OLED 512 Go à 240 € : estimé 300 € dans un lot, 420 € dans un autre ; ramené dans 380-440 €."""
+    """Steam Deck OLED 512 Go à 240 € : estimé 300 € dans un lot, 420 € dans un autre ; ramené dans 430-520 €."""
     ad = Ad(title="Steam Deck OLED 512 Go", url="https://www.vinted.fr/items/1-x", source="vinted", price=240)
     low = analyzer.make_realistic(raw(300), ad)
-    high = analyzer.make_realistic(raw(420), ad)
-    assert low["valeur_revente_estimee"] == 342 and low["source_revente"] == "repère"  # 380 × 0,9
-    assert low["score_rentabilite"] >= 6  # marge 342 − 240 − 34 = +68 € : plus noté comme une mauvaise affaire
-    assert high["valeur_revente_estimee"] == 378 and high["source_revente"] == "ia"  # dans la fourchette
-    assert "repère 380-440 €" in analyzer.format_ad(1, ad, 400)
+    high = analyzer.make_realistic(raw(480), ad)
+    assert low["valeur_revente_estimee"] == 387 and low["source_revente"] == "repère"  # 430 × 0,9
+    assert low["score_rentabilite"] >= 6  # marge 387 − 240 − 39 = +108 € : plus noté comme une mauvaise affaire
+    assert high["valeur_revente_estimee"] == 432 and high["source_revente"] == "ia"  # dans la fourchette
+    assert "repère 430-520 €" in analyzer.format_ad(1, ad, 400)
 
 
 def test_market_quote_wins_over_the_reference():
@@ -52,10 +52,10 @@ def test_reference_never_lifts_an_unrecognised_accessory():
     clean = analyzer.make_realistic(raw(25), ad)
     assert clean["valeur_revente_estimee"] == 22.5 and clean["source_revente"] == "ia"
     over = analyzer.make_realistic(raw(500), ad)
-    assert over["valeur_revente_estimee"] == 315  # vers le bas : toujours ramenée (350 × 0,9)
+    assert over["valeur_revente_estimee"] == 360  # vers le bas : toujours ramenée (400 × 0,9)
 
 
 def test_recent_generations_and_parts_are_not_matched():
     assert reference_price("Lenovo ThinkPad T14 Gen 5 - In Garanzia") is None
-    assert reference_price("Lenovo ThinkPad T14 Gen 1 i5") == (260, 340)
+    assert reference_price("Lenovo ThinkPad T14 Gen 1 i5") == (320, 400)
     assert reference_price("Moteur complet dyson v10 (BC10)") is None

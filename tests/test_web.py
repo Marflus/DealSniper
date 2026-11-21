@@ -80,8 +80,8 @@ def test_old_analyses_get_the_realism_guard(client):
     ad = next(a for a in c.get("/api/ads").get_json()["ads"] if a["title"] == "ThinkPad T480 sans SSD")
     a = ad["analysis"]
     assert a["realiste"] and "facilite_vente" not in a  # ancienne analyse : pas de note inventée
-    assert a["valeur_revente_estimee"] == 180  # 200 € rabotés de 10 %
-    assert a["marge_nette_estimee"] == 180 - 90 - 20 - 18  # revente - prix - pièce - 10 % de frais
+    assert a["valeur_revente_estimee"] == 198  # 200 € remontés au repère du T480 (220 €), rabotés de 10 %
+    assert a["marge_nette_estimee"] == 68.2  # 198 − 90 − 20 − 19,80 : revente - prix - pièce - 10 % de frais
 
 
 def test_reset_config_from_example(client):
@@ -106,7 +106,7 @@ def test_marks_and_purchases_api(client):
     assert created["ok"]
     data = c.get("/api/purchases").get_json()
     p = data["purchases"][0]
-    assert p["buy_price"] == 90 and p["estimated_resale"] == 180 and p["model"] == "thinkpad t480"
+    assert p["buy_price"] == 90 and p["estimated_resale"] == 198 and p["model"] == "thinkpad t480"
     assert c.put(f"/api/purchases/{p['id']}", json={"sold_price": "200", "repair_cost": "25"}).get_json()["ok"]
     data = c.get("/api/purchases").get_json()
     assert data["purchases"][0]["sold_at"] and data["summary"]["profit"] == 85
