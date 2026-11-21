@@ -51,7 +51,7 @@ sites:
   vinted:
     enabled: true
     interval: [900, 1500]      # recherches communes : passages plus espacés pour rester discret
-    limit: 25                  # annonces par recherche (sans cette ligne : 60) ; max_pages : 3 par défaut
+    limit: 96                  # une page Vinted pleine = 96 annonces (1 seule page chargée) ; max_pages : 3 par défaut
     searches: []
 
   leboncoin:

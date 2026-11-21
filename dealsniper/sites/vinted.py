@@ -52,6 +52,9 @@ def _clean_vinted_title(raw: str) -> str:
     return clean_html(text)[:200]
 
 
+PER_PAGE = 96  # annonces par page de résultats Vinted (vérifié le 21/11/2026 ; on supposait 36)
+
+
 class VintedSite(Site):
     name = "vinted"
     BASE_URL = "https://www.vinted.fr"
@@ -65,7 +68,7 @@ class VintedSite(Site):
         return bool(self.cfg.get("searches"))
 
     async def list_recent(self, http: PoliteClient) -> list[Ad]:
-        limit = int(self.cfg.get("limit", 60))
+        limit = int(self.cfg.get("limit", PER_PAGE))
         default_pages = max(1, int(self.cfg.get("max_pages", 3)))
         ads: list[Ad] = []
         seen_urls: set[str] = set()
@@ -83,7 +86,8 @@ class VintedSite(Site):
             for search in self.cfg["searches"]:
                 query = search["query"]
                 want = int(search.get("limit", limit))
-                max_pages = min(int(search.get("max_pages", default_pages)), max(1, (want + 35) // 36))
+                # Pages strictement nécessaires : 96 annonces = 1 seule page (pas de requête en plus)
+                max_pages = min(int(search.get("max_pages", default_pages)), max(1, -(-want // PER_PAGE)))
                 log.info("Vinted : recherche « %s » (cible %d, max %d page(s))...", query, want, max_pages)
 
                 count = 0
@@ -104,7 +108,8 @@ class VintedSite(Site):
 
                     await page.wait_for_timeout(2500)
                     # Défilement doux pour déclencher le chargement paresseux des cartes et vignettes
-                    for _ in range(2):
+                    # (même page : seules les vignettes du bas se chargent, aucune page de résultats en plus)
+                    for _ in range(6):
                         await page.evaluate("window.scrollBy(0, 1400)")
                         await page.wait_for_timeout(700)
 
