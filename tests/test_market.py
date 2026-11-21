@@ -199,9 +199,9 @@ def test_controllers_and_games_named_after_the_platform():
 
     accessories = ["Sony PlayStation 5 DualSense White Dragon Custom", "PS5 controller DualSense 30th anniversary",
                    "Minecraft Nintendo Switch", "Nintendo Switch Sports", "Original Nintendo Switch Netzteil USB-C",
-                   "Nintendo Switch Joy-Con"]
+                   "Nintendo Switch Joy-Con", "Nintendo Switch /OLED/2 Zubehör"]
     consoles = ["PS5 digital + manette", "Nintendo Switch + 2 jeux + manette Pro", "PS4 Pro avec 2 manettes",
-                "Nintendo Switch OLED et manette pro", "Console PS4 slim 500 Go"]
+                "Nintendo Switch OLED et manette pro", "Console PS4 slim 500 Go", "Nintendo Switch mit Zubehör"]
     assert all(game_or_accessory(t) for t in accessories)
     assert not any(game_or_accessory(t) for t in consoles)
     assert part_or_accessory("Placa Mae Latitude E6430")

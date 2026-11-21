@@ -33,6 +33,7 @@ def test_same_model_gets_the_same_range_whatever_the_batch():
     low = analyzer.make_realistic(raw(300), ad)
     high = analyzer.make_realistic(raw(420), ad)
     assert low["valeur_revente_estimee"] == 342 and low["source_revente"] == "repère"  # 380 × 0,9
+    assert low["score_rentabilite"] >= 6  # marge 342 − 240 − 34 = +68 € : plus noté comme une mauvaise affaire
     assert high["valeur_revente_estimee"] == 378 and high["source_revente"] == "ia"  # dans la fourchette
     assert "repère 380-440 €" in analyzer.format_ad(1, ad, 400)
 

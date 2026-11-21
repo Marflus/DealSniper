@@ -203,8 +203,11 @@ def make_realistic(analysis: dict[str, Any], ad: Ad, haircut: float = 0.9,
         margin = resale - ad.total_price - analysis["cout_piece_estime"] - 0.10 * resale
     margin = round(margin, 2)
     ai_score = analysis["score_rentabilite"]
+    score = cap_score(ai_score, margin)
+    if source == "repère" and base > ai_resale:  # l'IA sous-estimait le modèle : sa note suivait cette erreur
+        score = max(score, 7 if margin >= 80 else 6 if margin >= 40 else score)
     return {**analysis, "valeur_revente_estimee": resale, "marge_nette_estimee": margin,
-            "score_rentabilite": cap_score(ai_score, margin), "score_ia": ai_score,
+            "score_rentabilite": score, "score_ia": ai_score,
             "valeur_revente_ia": ai_resale, "source_revente": source,
             "realiste": True}  # marque : garde-fou déjà appliqué
 

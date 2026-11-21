@@ -29,8 +29,9 @@ _WORD_RE = re.compile(r"[a-z0-9][a-z0-9'-]*")
 # Accessoire nommé n'importe où dans le titre (« Sony PlayStation 5 DualSense », « Nintendo Switch Joy-Con »),
 # sauf après « + » / « avec » : « PS5 + manette » vend la console avec sa manette.
 ACCESSORY_ANYWHERE = ("dualsense", "dualshock", "joy-con", "joy-cons", "joycon", "joycons", "manette", "manettes",
-                      "controller", "amiibo", "netzteil", "chargeur", "station d'accueil", "casque")
-_BUNDLE_RE = re.compile(r"\+|\bavec\b|\bet\b|\bw/|\bincl")
+                      "controller", "amiibo", "netzteil", "chargeur", "station d'accueil", "casque",
+                      "accessoire", "accessoires", "zubehor")
+_BUNDLE_RE = re.compile(r"\+|\bavec\b|\bet\b|\bw/|\bincl|\bmit\b")
 
 
 def game_or_accessory(title: str) -> str | None:
