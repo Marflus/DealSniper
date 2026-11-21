@@ -91,3 +91,12 @@ def test_desirable_brands_avoid_generic_words():
                      "Framework carton": None, "Microsoft Surface Pro 7": "microsoft surface",
                      "Google Pixel 7 Pro": "google pixel", "Dell Latitude 7490": "dell latitude",
                      "Enceinte Bang & Olufsen A1": "bang & olufsen"}
+
+
+def test_vinted_counts_as_shippable(config):
+    config["filters"].update(delivery="ship", drop_uncategorized=False)
+    vinted = Ad(title="Chaussures blanches 43", url="https://www.vinted.fr/items/1", source="vinted", price=30)
+    lbc = Ad(title="Chaussures blanches 43", url="https://www.leboncoin.fr/ad/x/1", source="leboncoin", price=30)
+    assert vinted.shippable and check(vinted, config) is None  # Vinted : envoi toujours possible
+    assert check(lbc, config) == "pas de livraison"
+    assert vinted.to_dict()["shippable"] is True

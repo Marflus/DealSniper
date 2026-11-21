@@ -261,3 +261,25 @@ def test_api_errors_are_deferred_failed_or_retried(monkeypatch, config):
     # Refus du modèle : échec compté.
     an, _ = analyzer_with([("refusal", {})])
     assert len(an.analyze(ads(1)).failed) == 1
+
+
+def test_telegram_sends_full_links_in_a_second_message(monkeypatch, config):
+    from dealsniper import notifier
+
+    sent = []
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "1")
+    monkeypatch.setattr(notifier, "_post", lambda url, payload, channel: sent.append(payload["text"]) or True)
+
+    def ad(i, score):
+        return Ad(title=f"Steam Deck {i} & co", url=f"https://www.vinted.fr/items/{i}-steam-deck", source="vinted",
+                  price=200, analysis={**item(1, score), "marge_nette_estimee": 80})
+
+    cfg = {**config, "notifier": {**config["notifier"], "min_score": 8, "instant_min_score": 9, "watch_score": 5}}
+    notify([ad(1, 9), ad(2, 8), ad(3, 6)], cfg)
+    links = [m for m in sent if "https://www.vinted.fr/items/1-steam-deck" in m and "<a " not in m]
+    assert links == ["Steam Deck 1 &amp; co\nhttps://www.vinted.fr/items/1-steam-deck"]  # pépite : lien complet à part
+    assert any(m.startswith("<b>Liens</b>") or "items/2-steam-deck" in m and "<a " not in m for m in sent)
+    assert not any("👀" in m for m in sent)
+    digest_links = [m for m in sent if "items/3-steam-deck" in m and "<a " not in m]
+    assert digest_links  # récap « à vérifier » : liens complets aussi

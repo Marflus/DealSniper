@@ -7,6 +7,8 @@ from typing import Any
 
 from .utils.urls import ad_uid
 
+SHIPPING_SITES = {"vinted"}  # envoi toujours proposé, même sans frais de port indiqués
+
 
 @dataclass
 class Ad:
@@ -27,6 +29,12 @@ class Ad:
     analysis: dict[str, Any] | None = None             # renseigné par analyzer.py
     watched: bool = False                              # correspond à une veille (watch.py) : notifiée d'office
     ends_at: str | None = None                         # fin d'enchère (ISO) pour le rappel
+
+    @property
+    def shippable(self) -> bool:
+        """Envoi possible : frais de port connus, ou site où l'envoi est la règle (Vinted ne donne pas le prix
+        du port dans la liste, mais toutes ses annonces peuvent être envoyées)."""
+        return self.shipping is not None or self.source in SHIPPING_SITES
 
     @property
     def total_price(self) -> float | None:
@@ -71,5 +79,5 @@ class Ad:
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
-        data.update(uid=self.uid, total_price=self.total_price)
+        data.update(uid=self.uid, total_price=self.total_price, shippable=self.shippable)
         return data

@@ -169,11 +169,24 @@ class Notifier:
             print(format_console(ad))
             return True
         ok = False
-        if "telegram" in self.channels:
-            ok |= self._telegram(format_telegram(ad))
+        if "telegram" in self.channels and self._telegram(format_telegram(ad)):
+            ok = True
+            _pause(0.5)
+            self._telegram_links([ad])  # lien complet à part : facile à transférer
         if "discord" in self.channels:
             ok |= self._discord(embeds=[format_discord(ad)])
         return ok
+
+    def _telegram_links(self, ads: list[Ad]) -> None:
+        """Second message Telegram : titre + lien COMPLET de chaque annonce, prêt à transférer à quelqu'un
+        (Telegram en affiche l'aperçu ; dans le premier message, le lien est caché derrière le titre)."""
+        lines = [html.escape(f"{ad.title}\n{ad.url}") for ad in ads]
+        if len(lines) == 1:
+            self._telegram(lines[0])
+            return
+        for message in _chunks("<b>Liens</b>", lines):
+            self._telegram(message)
+            _pause(0.5)
 
     def send_lines(self, header: str, html_lines: list[str], text_lines: list[str]) -> bool:
         """Récapitulatif : un en-tête et des lignes (HTML pour Telegram, Markdown pour Discord / console),
@@ -192,8 +205,12 @@ class Notifier:
         return ok
 
     def send_digest(self, header: str, ads: list[Ad]) -> bool:
-        """Un ou quelques messages regroupant plusieurs annonces (au lieu d'un message par annonce)."""
-        return self.send_lines(header, [_digest_line(a, True) for a in ads], [_digest_line(a, False) for a in ads])
+        """Un ou quelques messages regroupant plusieurs annonces (au lieu d'un message par annonce),
+        puis, sur Telegram, les liens complets dans un message à part."""
+        ok = self.send_lines(header, [_digest_line(a, True) for a in ads], [_digest_line(a, False) for a in ads])
+        if ok and "telegram" in self.channels:
+            self._telegram_links(ads)
+        return ok
 
     def send_text(self, text: str) -> bool:
         if not self.channels:
@@ -254,7 +271,7 @@ def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
     notifier = Notifier()
 
     if watch:
-        header = f"👀 À vérifier ({len(watch)} annonce(s) notée(s) {watch_score}-{min_score - 1}/10)"
+        header = f"À vérifier ({len(watch)} annonce(s) notée(s) {watch_score}-{min_score - 1}/10)"
         notifier.send_digest(header, watch)
     if grouped:
         notifier.send_digest(f"💡 Bonnes affaires ({len(grouped)} annonce(s) ≥ {min_score}/10)", grouped)

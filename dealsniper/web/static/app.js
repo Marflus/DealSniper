@@ -399,6 +399,8 @@ const cleanPlace = (place) => String(place || "").split(/\s+/).filter((w, i, all
 // Mode de remise : eBay fournit les frais de port (envoi possible) ; sinon on ne sait pas (souvent sur place).
 function delivery(ad) {
   if (ad.shipping != null) return { mode: "ship", icon: "🚚", label: ad.shipping > 0 ? `Envoi ${euros(ad.shipping)}` : "Envoi possible" };
+  // Vinted : envoi toujours possible, mais le prix du port n'est pas donné dans la liste.
+  if (ad.shippable || ad.source === "vinted") return { mode: "ship", icon: "🚚", label: "Envoi possible (port en plus)" };
   return { mode: "pickup", icon: "🤝", label: "Remise en main propre" };
 }
 
@@ -1002,13 +1004,42 @@ function renderSearchResults() {
   const ads = filteredAds(searchResults)
     .filter((a) => !excluded.some((w) => normalizeFr(`${a.title} ${a.description || ""}`).includes(w)));
   $("#search-filters").hidden = !searchResults.length;
-  $("#search-count").textContent = `${ads.length} résultat(s) affiché(s) sur ${searchResults.length}`
-    + (ads.length > 60 ? " · 60 premiers" : "");
+  // Filtres de l'onglet Annonces encore actifs : on dit lesquels cachent des résultats, avec de quoi les retirer.
+  const hidden = searchResults.length - ads.length;
+  const active = activeFilterLabels().concat(excluded.length ? [`mots exclus : ${excluded.join(", ")}`] : []);
+  $("#search-count").innerHTML = `${ads.length} résultat(s) affiché(s) sur ${searchResults.length}`
+    + (ads.length > 60 ? " · 60 premiers" : "")
+    + (hidden > 0 && active.length ? ` · <b>${hidden} masqué(s) par vos filtres</b> : ${esc(active.join(" · "))}
+      <button class="link" data-clear-search-filters>Tout afficher</button>` : "");
   $("#search-results").innerHTML = ads.length ? ads.slice(0, 60).map(adCard).join("")
-    : searchResults.length ? '<div class="empty">Aucun résultat avec ces filtres.</div>' : "";
+    : searchResults.length ? '<div class="empty">Aucun résultat avec ces filtres. <button class="link" data-clear-search-filters>Tout afficher</button></div>' : "";
   loadMissingImagesIn("#search-results");
 }
 $("#qs-exclude").addEventListener("input", () => { if (searchResults.length) renderSearchResults(); });
+
+// Libellés des filtres actifs (pour expliquer pourquoi des annonces sont cachées).
+function activeFilterLabels() {
+  const labels = [];
+  FILTER_IDS.filter((id) => !["f-sort", "f-days", "f-near"].includes(id)).forEach((id) => {
+    const el = $("#" + id);
+    if (!el.value) return;
+    const v = el.value;
+    const text = {
+      "f-text": `« ${v} »`, "f-score": `note ≥ ${v}`, "f-ease": `réparation ≥ ${v}`, "f-sale": `demande ≥ ${v}`,
+      "f-price": `prix ≤ ${v} €`, "f-margin": `marge ≥ ${v} €`,
+      "f-distance": `≤ ${v} km${$("#f-near").value.trim() ? ` de ${$("#f-near").value.trim()}` : ""}`,
+    }[id];
+    labels.push(text || el.options[el.selectedIndex].text.trim());  // listes : le libellé choisi
+  });
+  if (selectedSites.size) labels.push(`sites : ${[...selectedSites].map(siteName).join(", ")}`);
+  if (status === "fav" || status === "hidden") labels.push(status === "fav" ? "favoris seulement" : "masquées seulement");
+  return labels;
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("[data-clear-search-filters]")) return;
+  $("#qs-exclude").value = "";
+  $("#reset-filters").click();  // remet aussi les champs reliés de la recherche ; réaffiche les résultats
+});
 $("#search-results").addEventListener("click", onAdAction);
 
 $("#test-notif").addEventListener("click", async () => {
