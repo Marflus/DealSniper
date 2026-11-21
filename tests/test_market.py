@@ -112,3 +112,55 @@ def test_game_or_accessory_is_not_the_console(config):
     assert Market(db=None, config=config).key(zelda) is None  # pas de cote de console
     check(zelda, config)
     assert any("jeu ou accessoire" in s for s in zelda.signals)  # transmis à l'IA
+
+
+def test_spare_part_is_flagged_for_the_ai(config):
+    """« Ventilateur ThinkPad T480 » (6 €) était estimé au prix d'un ThinkPad réparé (135 €)."""
+    from dealsniper.filters import check
+    from dealsniper.models import Ad
+    from dealsniper.utils.products import part_or_accessory
+
+    parts = ["Ventilateur / Dissipateur Lenovo ThinkPad T480", "Carte Mère Thinkpad T480",
+             "Clavier Lenovo ThinkPad T470 T480 Azerty", "Chargeur seul Dyson", "Palmrest Lenovo ThinkPad L14"]
+    devices = ["Lenovo ThinkPad T480 i5 8Go", "Dyson V10 batterie HS", "Lot de 3 ThinkPad X280",
+               "Écran Samsung 27 pouces"]
+    assert all(part_or_accessory(t) for t in parts)
+    assert not any(part_or_accessory(t) for t in devices)
+
+    ad = Ad(title=parts[0], url="https://www.vinted.fr/items/1-x", source="vinted", price=6)
+    config["filters"]["drop_uncategorized"] = False
+    config["filters"]["min_price"] = 0
+    check(ad, config)
+    assert any("pièce ou accessoire" in s for s in ad.signals)
+
+
+def test_one_off_search_drops_off_topic_results(config):
+    """Recherche ponctuelle : Vinted renvoie aussi des articles voisins (t-shirts pour « thinkpad t480 »)."""
+    from dealsniper.filters import check
+    from dealsniper.models import Ad
+    from dealsniper.utils.products import query_words
+
+    config["filters"].update(drop_uncategorized=False, min_price=0, ignore_category_budget=True,
+                             query_words=query_words("thinkpad t480"))
+    shirt = Ad(title="YFG Pave T-Shirt Rapper", url="https://www.vinted.fr/items/2-x", source="vinted", price=9)
+    laptop = Ad(title="Lenovo T480s i5", url="https://www.vinted.fr/items/3-x", source="vinted", price=150)
+    assert check(shirt, config) == "hors sujet (aucun mot de la recherche)"
+    assert check(laptop, config) is None
+
+    config["filters"]["query_words"] = query_words("chaussures blanches taille 43")
+    shoes = Ad(title="Des baskets", url="https://www.vinted.fr/items/4-x", source="vinted", price=15,
+               description="Taille : 43")
+    polo = Ad(title="Polo homme", url="https://www.vinted.fr/items/5-x", source="vinted", price=5,
+              description="Taille : XL")
+    assert check(shoes, config) is None  # la taille de la carte Vinted suffit
+    assert check(polo, config) == "hors sujet (aucun mot de la recherche)"  # « Taille » seul ne compte pas
+
+
+def test_vinted_card_details_are_kept():
+    from dealsniper.sites.vinted import _clean_vinted_title, _vinted_details
+
+    raw = ("Lenovo ThinkPad T480 | i7, 16GB, Marque: Lenovo, Modèle: ThinkPad T480, État: Très bon état, "
+           "Taille: 14, 279.00 €, 293.65 €")
+    assert _clean_vinted_title(raw) == "Lenovo ThinkPad T480 | i7, 16GB"
+    assert _vinted_details(raw) == "Marque : Lenovo | Modèle : ThinkPad T480 | État : Très bon état | Taille : 14"
+    assert _vinted_details("Des baskets") == ""

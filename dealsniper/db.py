@@ -367,15 +367,20 @@ class Database:
     def mark_reminded(self, uid: str) -> None:
         self.patch_ad(uid, {"reminded": True})
 
-    def stats(self, days: int = 30) -> dict:
-        """Bilan pour le tableau de bord : totaux, catégories, activité par jour (annonces notées)."""
+    def stats(self, days: int = 30, prepare=None) -> dict:
+        """Bilan pour le tableau de bord : totaux, catégories, activité par jour (annonces notées).
+        `prepare(annonces)` : mêmes corrections qu'à l'affichage de la liste (prudence des anciennes notes),
+        pour que le bilan et les fiches donnent les mêmes marges."""
         since = _stamp(-timedelta(days=days))
         rows = self._sql("SELECT data, score, seen_at FROM seen WHERE status = 'analyzed' AND seen_at >= ?", (since,))
+        items = [{**json.loads(data or "{}"), "score": score, "seen_at": seen_at} for data, score, seen_at in rows]
+        if prepare:
+            prepare(items)
         by_cat: dict[str, dict] = {}
         by_day: dict[str, int] = {}
         margins, scores = [], []
-        for data, score, seen_at in rows:
-            ad = json.loads(data or "{}")
+        for ad in items:
+            score, seen_at = ad.get("score"), ad["seen_at"]
             cat = ad.get("category") or "Autre"
             margin = (ad.get("analysis") or {}).get("marge_nette_estimee")
             entry = by_cat.setdefault(cat, {"count": 0, "margins": [], "scores": []})

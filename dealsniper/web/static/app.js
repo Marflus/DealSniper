@@ -525,7 +525,7 @@ function showDetails(uid) {
             ${row("Repérée", seen && !isNaN(seen) ? seen.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "")}`)}
           ${card("👤 Vendeur", sellerRows(ad.seller, row))}
         </div>
-        <div id="d-nego-box">${ad._nego ? negotiationBox(ad.uid, ad._nego.message, ad._nego.prix_achat_max) : ""}</div>
+        <div id="d-nego-box">${ad._nego ? negotiationBox(ad.uid, ad._nego.message, ad._nego.prix_achat_max, ad.total_price ?? ad.price) : ""}</div>
         ${desc ? `<details class="d-desc"><summary>Description du vendeur</summary><p>${esc(desc.slice(0, 1500))}${desc.length > 1500 ? "…" : ""}</p></details>` : ""}
       </div>
     </div>
@@ -602,14 +602,17 @@ function deepBlock(ad) {
       </div>
       <div class="deep-charts">${salesChart(d) || '<div class="chart-empty">Pas de vente datée trouvée pour le graphique</div>'}<div id="d-history"></div></div>
     </div>
-    ${d.message_negociation && !ad._nego ? negotiationBox(ad.uid, d.message_negociation, d.prix_achat_max) : ""}
+    ${d.message_negociation && !ad._nego ? negotiationBox(ad.uid, d.message_negociation, d.prix_achat_max, ad.total_price ?? ad.price) : ""}
     <div class="deep-actions">${questions}${repairLinks(ad)}</div>
   </section>`;
 }
 
 // Message de négociation modifiable, prêt à copier (bouton « Négocier » ou analyse approfondie).
-function negotiationBox(uid, message, maxBuy) {
-  const target = maxBuy != null && maxBuy > 0 ? ` <span class="muted small">(prix conseillé ≤ ${euros(maxBuy)})</span>` : "";
+function negotiationBox(uid, message, maxBuy, asked) {
+  // Prix demandé déjà sous le maximum : rien à négocier, ne pas suggérer un prix plus haut que l'annonce.
+  const already = maxBuy != null && maxBuy > 0 && asked != null && asked <= maxBuy;
+  const target = already ? ` <span class="muted small">(prix demandé déjà sous l'achat max de ${euros(maxBuy)})</span>`
+    : maxBuy != null && maxBuy > 0 ? ` <span class="muted small">(prix conseillé ≤ ${euros(maxBuy)})</span>` : "";
   return `<div class="nego-box">
     <div class="nego-head"><b>✉️ Message de négociation${target}</b>
       <button type="button" class="ghost" data-copy-nego="${esc(uid)}">📋 Copier</button></div>

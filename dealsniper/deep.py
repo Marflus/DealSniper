@@ -24,6 +24,8 @@ sur le marché français de l'occasion. Utilise la recherche web : annonces en c
 sur leboncoin, eBay.fr (objets vendus), Vinted, Backmarket. Raisonne sur un appareil EN ÉTAT DE MARCHE une fois
 réparé, jamais sur le prix neuf. Si l'annonce vend un JEU ou un ACCESSOIRE qui cite une console
 (« Zelda … Nintendo Switch », « Manette PS5 »), cherche le prix de ce jeu / accessoire, pas celui de la console.
+De même pour une pièce détachée vendue seule (« Ventilateur ThinkPad T480 ») : prix de cette pièce,
+pas celui de l'appareil.
 
 Donne une fourchette prudente (bas / typique / haut), une confiance (« faible » / « moyenne » / « élevée »)
 selon le nombre de prix réels trouvés, et 2 à 4 sources courtes au format « site : fourchette » (ex.
@@ -138,9 +140,17 @@ def _clamp(value: Any) -> float | None:
         return None
 
 
+def clip(text: str, limit: int) -> str:
+    """Texte raccourci sur un mot entier, avec « … » (jamais coupé au milieu d'un mot : « la cons »)."""
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].rstrip(" ,;:-–") + "…"
+
+
 def build_negotiation_message(ad: Ad, max_buy: float | None = None) -> str:
     """Message de négociation poli, prêt à copier-coller, basé sur le prix conseillé."""
-    title = ad.title[:80].strip()
+    title = clip(ad.title, 80)
     panne = str((ad.analysis or {}).get("panne_probable") or "").strip()
     has_issue = bool(panne and panne.lower() != "aucune")
     asked = ad.price
@@ -312,7 +322,7 @@ def seller_questions(ad: Ad, config: dict[str, Any], deep: dict[str, Any] | None
     except ValueError as exc:
         raise AnalysisFailed("Réponse illisible, réessayez.", cost) from exc
     items = raw.get("questions") if isinstance(raw, dict) else None
-    questions = [str(q).strip()[:160] for q in (items or []) if str(q).strip()][:5]
+    questions = [clip(str(q), 240) for q in (items or []) if str(q).strip()][:5]
     if not questions:
         raise AnalysisFailed("Aucune question proposée, réessayez.", cost)
     return {"questions": questions, "cost_usd": round(cost, 5)}

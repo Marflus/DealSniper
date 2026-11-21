@@ -72,3 +72,11 @@ def test_fast_keyword_search_matches_the_simple_definition():
         keywords = rng.sample(words, rng.randint(1, 6))
         assert normalize(text) == slow_normalize(text)
         assert first_keyword(normalize(text), keywords) == slow_first(slow_normalize(text), keywords), (text, keywords)
+
+
+def test_leboncoin_location_without_duplicate_zipcode():
+    from dealsniper.sites.leboncoin import location_label
+
+    assert location_label({"city_label": "Nemours 77140", "zipcode": "77140"}) == "Nemours 77140"
+    assert location_label({"city": "Lyon", "zipcode": "69003"}) == "Lyon 69003"
+    assert location_label({}) == ""

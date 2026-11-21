@@ -29,6 +29,22 @@ _VINTED_META_RE = re.compile(
 _VINTED_PRICE_TAIL_RE = re.compile(r",\s*\d[\d\s\u00a0\u202f.,]*€.*$")
 
 
+_VINTED_FIELD_RE = re.compile(r",\s*(marque|modèle|modele|état|etat|taille)\s*:\s*([^,]+)", re.IGNORECASE)
+_FIELD_LABELS = {"marque": "Marque", "modèle": "Modèle", "modele": "Modèle", "état": "État", "etat": "État",
+                 "taille": "Taille"}
+
+
+def _vinted_details(raw: str) -> str:
+    """État, marque, modèle et taille que Vinted met déjà dans la carte de la liste (« …, État: Très bon état,
+    Taille: 43, 49.95 € ») : gardés comme description pour le filtre et l'IA, sans ouvrir l'annonce."""
+    match = _VINTED_META_RE.search(raw or "")
+    if not match:
+        return ""
+    parts = [f"{_FIELD_LABELS[k.lower()]} : {clean_html(v).strip()}"
+             for k, v in _VINTED_FIELD_RE.findall(match.group(0)) if clean_html(v).strip()]
+    return " | ".join(dict.fromkeys(parts))[:300]
+
+
 def _clean_vinted_title(raw: str) -> str:
     """Retire les métadonnées Vinted en fin d'attribut `title` sans couper les virgules du vrai titre."""
     text = _VINTED_META_RE.sub("", raw or "")
@@ -128,6 +144,7 @@ class VintedSite(Site):
                                 url=item_url,
                                 source=self.name,
                                 price=price,
+                                description=_vinted_details(raw_title),
                                 location="France",
                                 image=await link_image(link),
                             )

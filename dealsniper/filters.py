@@ -13,7 +13,7 @@ from typing import Any
 from .models import Ad
 from .utils.location import foreign_country, is_overseas
 from .utils.prices import has_foreign_currency
-from .utils.products import game_or_accessory
+from .utils.products import game_or_accessory, matches_query, part_or_accessory
 from .utils.text import first_keyword, normalize
 
 BRAND_SIGNAL = "marque recherchée :"
@@ -66,6 +66,9 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
     reason = sold_problem(ad, filters)
     if reason:
         return reason
+    words = filters.get("query_words")  # recherche ponctuelle : les sites renvoient aussi des articles voisins
+    if words and not matches_query(f"{ad.title} {ad.description}", words):
+        return "hors sujet (aucun mot de la recherche)"
     cat = categorize(ad, config["categories"])
     if cat is None:
         if filters.get("drop_uncategorized", True):
@@ -118,6 +121,9 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
     kind = game_or_accessory(ad.title)
     if kind:  # dit à l'IA de ne pas estimer le prix de la console citée dans le titre
         ad.signals.append(f"{kind} (pas la console elle-même)")
+    elif part := part_or_accessory(ad.title):  # « Ventilateur ThinkPad T480 » : pas le prix du PC
+        kind = part
+        ad.signals.append(f"{part} (pas l'appareil complet)")
     brand = first_keyword(title_n, filters.get("desirable_brands", []))
     if brand and not kind:  # marque recherchée (qualité, cote stable) : se revend plus vite et plus cher
         ad.signals.append(f"{BRAND_SIGNAL} {brand}")

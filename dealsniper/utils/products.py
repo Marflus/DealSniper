@@ -42,3 +42,50 @@ def game_or_accessory(title: str) -> str | None:
         return None
     before = [w for w in _WORD_RE.findall(text[:min(starts)]) if w not in _LEAD_WORDS]
     return "jeu ou accessoire" if len(before) >= 2 else None  # « Zelda … Switch », « FIFA 24 PS4 »
+
+
+# Pas l'appareil lui-même : accessoire vendu seul, lot, boîte…
+NOT_THE_DEVICE = ("seul", "seule", "lot de", "boite vide", "accessoire", "accessoires", "pieces detachees")
+# Titre qui commence par une pièce ou un accessoire : « Chargeur ThinkPad T480 », « Batterie Dyson V10 ».
+ACCESSORY_FIRST = {"chargeur", "batterie", "clavier", "coque", "housse", "etui", "dalle", "nappe", "carte",
+                   "alimentation", "cable", "adaptateur", "station", "dock", "telecommande", "pied", "support",
+                   "brosse", "filtre", "tete", "ventilateur", "charniere", "disque", "ssd", "ram", "memoire",
+                   "sacoche", "sac", "piece", "pieces", "accessoire", "kit", "bloc", "palmrest", "capot",
+                   "chassis", "dissipateur", "ventilo", "plasturgie", "docking"}
+# Signal pour l'IA : seulement les cas nets (« lot de » peut être un lot d'appareils).
+_PART_PHRASES = ("seul", "seule", "pieces detachees", "piece detachee")
+
+
+def part_or_accessory(title: str) -> str | None:
+    """« pièce ou accessoire » quand le titre vend une pièce détachée ou un accessoire seul
+    (« Ventilateur ThinkPad T480 », « Clavier … T480 », « Chargeur seul »), et non l'appareil : sans ce
+    signal, l'IA estimait un ventilateur à 6 € au prix d'un ThinkPad réparé (135 €)."""
+    text = normalize(title)
+    words = _WORD_RE.findall(text)[:2]
+    if ACCESSORY_FIRST.intersection(words) or first_keyword(text, list(_PART_PHRASES)):
+        return "pièce ou accessoire"
+    return None
+
+
+# « taille » : Vinted ajoute « Taille : » à presque tout, ce mot seul ne dit rien de la recherche.
+_QUERY_STOPWORDS = {"de", "du", "des", "la", "le", "les", "et", "avec", "sans", "pour", "en", "a", "au", "aux",
+                    "un", "une", "d", "l", "ou", "sur", "taille", "pointure", "t"}
+
+
+def query_words(query: str) -> list[str]:
+    """Mots significatifs d'une recherche (« chaussures blanches taille 43 » → chaussure, blanche, taille, 43)."""
+    words = [w.strip("'-") for w in _WORD_RE.findall(normalize(query))]
+    return [_stem(w) for w in words if w and w not in _QUERY_STOPWORDS]
+
+
+def _stem(word: str) -> str:
+    """Pluriel retiré, pour comparer « blanches » et « blanche », « chaussures » et « chaussure »."""
+    return word[:-1] if len(word) > 3 and word.endswith(("s", "x")) else word
+
+
+def matches_query(text: str, words: list[str]) -> bool:
+    """Vrai si le texte contient au moins un mot de la recherche (début de mot : « t480 » trouve « t480s »)."""
+    if not words:
+        return True
+    tokens = [w.strip("'-") for w in _WORD_RE.findall(normalize(text))]
+    return any(t.startswith(w) for w in words for t in tokens if t)

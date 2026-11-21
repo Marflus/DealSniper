@@ -30,6 +30,7 @@ from ..config import DESIRABLE_BRANDS, config_file, data_dir, env, load_config
 from ..db import Database
 from ..geo import Geo
 from ..market import category_brands, model_key
+from ..utils.products import query_words
 from ..utils.text import normalize
 from .security import protect, ui_token
 
@@ -406,7 +407,7 @@ def create_app(demo: bool = False) -> Flask:
     @app.get("/api/stats")
     def stats():
         with database() as db:
-            return jsonify(db.stats(request.args.get("days", 30, type=int)))
+            return jsonify(db.stats(request.args.get("days", 30, type=int), prepare=_realistic))
 
     @app.get("/api/preferences")
     def preferences():
@@ -890,6 +891,7 @@ def create_app(demo: bool = False) -> Flask:
                 if sites and name not in sites:
                     site["enabled"] = False            # sites décochés : pas interrogés
             filters = config["filters"]
+            filters["query_words"] = query_words(query)  # résultats sans aucun mot de la recherche : écartés
             filters["drop_uncategorized"] = False      # ne pas écarter un terme hors catégories
             filters["ignore_category_budget"] = True   # seul VOTRE prix max compte (pas les budgets des catégories)
             filters["default_max_budget"] = None

@@ -22,7 +22,7 @@ from typing import Any
 
 from .filters import desirable_brand
 from .models import Ad
-from .utils.products import game_or_accessory
+from .utils.products import ACCESSORY_FIRST, NOT_THE_DEVICE, game_or_accessory
 from .utils.text import first_keyword, normalize
 
 log = logging.getLogger(__name__)
@@ -45,13 +45,6 @@ BROKEN = ("hs", "h.s", "panne", "en panne", "pour pieces", "pieces detachees", "
           "ne s'allume", "ne demarre", "ne fonctionne", "ne marche", "casse", "cassee", "defectueux",
           "defectueuse", "bloque", "bloquee", "sans ssd", "sans disque", "sans ecran", "sans carte mere",
           "ecran fissure", "dalle cassee", "oxyde", "probleme", "bug", "pour bricoleur")
-# Pas l'appareil lui-même : accessoire vendu seul, lot, boîte…
-NOT_THE_DEVICE = ("seul", "seule", "lot de", "boite vide", "accessoire", "accessoires", "pieces detachees")
-# Titre qui commence par une pièce ou un accessoire : « Chargeur ThinkPad T480 », « Batterie Dyson V10 ».
-ACCESSORY_FIRST = {"chargeur", "batterie", "clavier", "coque", "housse", "etui", "dalle", "nappe", "carte",
-                   "alimentation", "cable", "adaptateur", "station", "dock", "telecommande", "pied", "support",
-                   "brosse", "filtre", "tete", "ventilateur", "charniere", "disque", "ssd", "ram", "memoire",
-                   "sacoche", "sac", "piece", "pieces", "accessoire", "kit", "bloc"}
 
 
 def category_brands(config: dict[str, Any]) -> list[str]:

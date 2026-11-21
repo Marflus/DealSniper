@@ -60,3 +60,12 @@ def test_backup_and_restore(client):
     bad = c.post("/api/restore", data={"file": (io.BytesIO(b"pas un zip"), "x.zip")},
                  content_type="multipart/form-data")
     assert bad.status_code == 400
+
+
+def test_negotiation_title_is_cut_on_a_word():
+    from dealsniper.deep import clip
+
+    title = "Nintendo Switch OLED étui transport, coque tablette et Joy-Con, écran de verre et abonnement 7 jours"
+    cut = clip(title, 80)
+    assert cut.endswith("…") and len(cut) <= 81 and "verre e…" not in cut
+    assert clip("court", 80) == "court"

@@ -58,6 +58,13 @@ def _item_price(item: dict[str, Any]) -> float | None:
         return None
 
 
+def location_label(loc: dict[str, Any]) -> str:
+    """« Nemours 77140 » : le code postal n'est ajouté que s'il manque (city_label le contient déjà souvent)."""
+    city = str(loc.get("city_label") or loc.get("city") or "").strip()
+    zipcode = str(loc.get("zipcode") or "").strip()
+    return f"{city} {zipcode}".strip() if zipcode and zipcode not in city else city
+
+
 def _item_description(item: dict[str, Any]) -> str:
     """Combine état déclaré (attributs LBC) et corps de l'annonce pour le filtre et l'IA."""
     attrs = {}
@@ -159,7 +166,7 @@ class LeboncoinSite(Site):
                         seen_urls.add(item_url)
 
                         loc = item.get("location") or {}
-                        place = " ".join(p for p in (loc.get("city_label") or loc.get("city"), loc.get("zipcode")) if p)
+                        place = location_label(loc)
                         owner = item.get("owner") or {}
                         seller = {
                             "name": owner.get("name"),

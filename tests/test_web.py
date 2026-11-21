@@ -301,3 +301,20 @@ def test_demo_mode_never_reaches_the_outside(client):
         assert resp.status_code == 409 and "démo" in resp.get_json()["error"], path
     assert demo.get("/api/status").get_json()["demo"] is True
     assert demo.post("/api/ads/ebay:100000000001/mark", json={"favorite": True}).status_code == 200  # local : ok
+
+
+def test_stats_use_the_same_margins_as_the_list(client, monkeypatch):
+    """Le Bilan applique les mêmes corrections que la liste (meilleure marge +859 € au lieu de +698 €)."""
+    from dealsniper.db import Database
+
+    seen = []
+    original = Database.stats
+
+    def spy(self, days=30, prepare=None):
+        seen.append(prepare)
+        return original(self, days, prepare)
+
+    monkeypatch.setattr(Database, "stats", spy)
+    c, _ = client
+    assert c.get("/api/stats").status_code == 200
+    assert seen and seen[0] is not None
