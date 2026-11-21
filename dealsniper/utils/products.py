@@ -62,7 +62,8 @@ def part_or_accessory(title: str) -> str | None:
     signal, l'IA estimait un ventilateur à 6 € au prix d'un ThinkPad réparé (135 €)."""
     text = normalize(title)
     words = _WORD_RE.findall(text)[:2]
-    if ACCESSORY_FIRST.intersection(words) or first_keyword(text, list(_PART_PHRASES)):
+    alone = first_keyword(text, list(_PART_PHRASES)) and not first_keyword(text, ["console"])  # « console seule »
+    if ACCESSORY_FIRST.intersection(words) or alone:
         return "pièce ou accessoire"
     return None
 

@@ -123,7 +123,7 @@ def test_spare_part_is_flagged_for_the_ai(config):
     parts = ["Ventilateur / Dissipateur Lenovo ThinkPad T480", "Carte Mère Thinkpad T480",
              "Clavier Lenovo ThinkPad T470 T480 Azerty", "Chargeur seul Dyson", "Palmrest Lenovo ThinkPad L14"]
     devices = ["Lenovo ThinkPad T480 i5 8Go", "Dyson V10 batterie HS", "Lot de 3 ThinkPad X280",
-               "Écran Samsung 27 pouces"]
+               "Écran Samsung 27 pouces", "console Nintendo NES seule sans câbles"]
     assert all(part_or_accessory(t) for t in parts)
     assert not any(part_or_accessory(t) for t in devices)
 
