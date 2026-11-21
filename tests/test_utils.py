@@ -80,3 +80,16 @@ def test_leboncoin_location_without_duplicate_zipcode():
     assert location_label({"city_label": "Nemours 77140", "zipcode": "77140"}) == "Nemours 77140"
     assert location_label({"city": "Lyon", "zipcode": "69003"}) == "Lyon 69003"
     assert location_label({}) == ""
+
+
+def test_leboncoin_shipping_and_brand_from_the_list():
+    from dealsniper.sites.leboncoin import _item_description, item_shipping
+
+    shippable = {"attributes": [{"key": "shippable", "value": "true"}],
+                 "shipping_fees": [{"shipping_type": "mondial_relay", "price": 649}, {"price": 1739}]}
+    assert item_shipping(shippable) == 6.49
+    assert item_shipping({"attributes": [{"key": "shippable", "value": "true"}]}) == 0.0
+    assert item_shipping({"attributes": [{"key": "shippable", "value": "false"}]}) is None
+    item = {"body": "", "attributes": [{"key": "condition", "value_label": "Bon état"},
+                                       {"key": "home_appliance_brand", "value_label": "Dyson"}]}
+    assert _item_description(item) == "État : Bon état | Marque : Dyson"

@@ -65,12 +65,25 @@ def location_label(loc: dict[str, Any]) -> str:
     return f"{city} {zipcode}".strip() if zipcode and zipcode not in city else city
 
 
+def item_shipping(item: dict[str, Any]) -> float | None:
+    """Frais d'envoi les plus bas proposés (€), 0 si l'envoi est possible sans tarif affiché, None si remise
+    en main propre seulement. Sans cela, toutes les annonces leboncoin passaient pour « main propre »."""
+    attrs = {a.get("key"): a.get("value") for a in item.get("attributes") or [] if isinstance(a, dict)}
+    fees = [f.get("price") for f in item.get("shipping_fees") or [] if isinstance(f, dict)]
+    prices = [float(p) / 100 for p in fees if isinstance(p, int | float) and p >= 0]
+    if prices:
+        return round(min(prices), 2)
+    return 0.0 if str(attrs.get("shippable")).lower() == "true" else None
+
+
 def _item_description(item: dict[str, Any]) -> str:
     """Combine état déclaré (attributs LBC) et corps de l'annonce pour le filtre et l'IA."""
     attrs = {}
     for attr in item.get("attributes") or []:
         if isinstance(attr, dict) and attr.get("key") and attr.get("value_label"):
-            attrs[attr["key"]] = str(attr["value_label"])
+            key = str(attr["key"])
+            # « home_appliance_brand », « computer_brand »… : la marque, quel que soit le rayon
+            attrs["brand" if key.endswith("_brand") and "brand" not in attrs else key] = str(attr["value_label"])
     prefix_parts = []
     for key, label in (("condition", "État"), ("item_condition", "État"), ("brand", "Marque")):
         if attrs.get(key) and not any(p.startswith(f"{label} :") for p in prefix_parts):
@@ -179,6 +192,7 @@ class LeboncoinSite(Site):
                                 url=item_url,
                                 source=self.name,
                                 price=_item_price(item),
+                                shipping=item_shipping(item),
                                 description=_item_description(item),
                                 location=place or "France",
                                 image=ad_image(item),

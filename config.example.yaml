@@ -213,7 +213,7 @@ categories:
     include_keywords: ["sans disque", "sans ssd", "sans ram", "sans memoire", "sans os", "sans alimentation", "sans chargeur"]
 
   - name: "PC portables grand public"
-    keywords: ["pc portable", "ordinateur portable", "laptop", "ideapad", "vivobook", "zenbook", "aspire", "pavilion", "inspiron", "omen", "rog", "tuf gaming", "legion", "predator", "nitro", "chromebook"]
+    keywords: ["pc portable", "ordinateur portable", "laptop", "ideapad", "vivobook", "zenbook", "acer aspire", "pavilion", "inspiron", "omen", "rog", "tuf gaming", "legion", "acer predator", "predator helios", "acer nitro", "nitro 5", "chromebook"]  # pas « predator » ni « nitro » seuls (chaussures Adidas, Puma) ni « aspire » (« aspire bien »)
     max_budget: 150
     exclude_keywords: ["coque seule", "clavier seul", "chargeur seul"]
     include_keywords: ["sans disque", "sans ssd", "sans os", "sans windows", "sans chargeur", "batterie hs", "ecran a changer", "charniere", "ne charge plus", "lent", "a reinstaller"]
