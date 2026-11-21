@@ -58,3 +58,37 @@ def test_empty_or_refused_analysis_is_not_saved_but_charged(client, monkeypatch)
     assert c.get("/api/progress").get_json()["cost_today"] == round(before + 0.05, 4)
     ad = next(a for a in c.get("/api/ads").get_json()["ads"] if a["uid"] == "ebay:100000000001")
     assert "market_deep" not in ad  # rien d'enregistré
+
+
+def test_photo_is_sent_and_its_report_kept(config, monkeypatch):
+    """La photo de l'annonce part avec la demande (bloc image) ; le constat de l'IA est gardé et nettoyé."""
+    import base64
+
+    from dealsniper.deep import photo_block
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    jpeg = b"\xff\xd8\xff\xe0" + b"0" * 100
+    assert photo_block("https://img/1.jpg", fetch=lambda url: jpeg)["source"]["media_type"] == "image/jpeg"
+    assert photo_block("https://img/1.jpg", fetch=lambda url: b"<html>pas une image</html>") is None
+    assert photo_block("https://img/1.jpg", fetch=lambda url: b"\xff\xd8\xff" + b"0" * 5_000_000) is None
+    assert photo_block(None) is None
+
+    sent = []
+    answer = ('{"revente_basse": 150, "revente_typique": 180, "revente_haute": 200, "confiance": "moyenne",'
+              ' "photo": {"etat": "MAUVAIS", "constat": "Écran fissuré en haut à gauche.",'
+              ' "alertes": ["fissure visible", "", "coin enfoncé"]}}')
+
+    def create(**params):
+        sent.append(params["messages"][0]["content"])
+        return _resp(answer, "end_turn", 0)
+
+    ad = Ad(title="iPhone 12", url="https://x/1", source="vinted", price=120, image="https://img/1.jpg")
+    result = analyze_market(ad, config, NS(messages=NS(create=create)), fetch=lambda url: jpeg)
+    assert sent[0][0]["type"] == "image" and base64.b64decode(sent[0][0]["source"]["data"]) == jpeg
+    assert result["photo"] == {"etat": "mauvais", "constat": "Écran fissuré en haut à gauche.",
+                               "alertes": ["fissure visible", "coin enfoncé"]}
+
+    sent.clear()  # sans photo : texte seul, et pas de constat même si le modèle en invente un
+    result = analyze_market(Ad(title="iPhone 12", url="https://x/2", source="vinted", price=120), config,
+                            NS(messages=NS(create=create)))
+    assert isinstance(sent[0], str) and result["photo"] is None

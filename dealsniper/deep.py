@@ -8,6 +8,7 @@ les annonces qui vous intéressent vraiment.
 
 from __future__ import annotations
 
+import base64
 import logging
 from typing import Any
 
@@ -35,11 +36,19 @@ Et « message_negociation » : un message court (2-3 phrases), poli, naturel et 
 vendeur (leboncoin/Vinted/Facebook), proposant un prix d'environ 90 % de ta revente typique, moins le coût de
 la réparation éventuelle, moins 30 € (ce qui laisse une marge nette à l'acheteur).
 
+Si une PHOTO de l'annonce est jointe, regarde-la attentivement : état visible (rayures, chocs, écran fissuré,
+oxydation, usure, pièces manquantes), panne visible, cohérence avec le titre (bon modèle ? photo de catalogue
+ou trouvée sur internet plutôt que l'objet réel ?). Tiens-en compte dans la fourchette et les pièges, et donne
+« photo » : {"etat": "bon|moyen|mauvais|inconnu", "constat": "1 à 2 phrases sur ce que montre la photo",
+"alertes": ["défaut ou doute visible", "..."]}. Photo floue, trop petite ou sans l'objet : "etat": "inconnu".
+N'invente rien que la photo ne montre pas.
+
 Termine TOUJOURS par un unique bloc JSON, sans rien après :
 {"revente_basse": n, "revente_typique": n, "revente_haute": n, "confiance": "faible|moyenne|élevée",
  "sources": ["...", "..."], "resume": "une phrase", "pieges": "pièges éventuels en 8 mots max",
  "ventes": [{"date": "AAAA-MM", "prix": n, "source": "ebay|leboncoin|vinted|backmarket"}],
- "message_negociation": "..."}"""
+ "message_negociation": "...",
+ "photo": {"etat": "bon|moyen|mauvais|inconnu", "constat": "...", "alertes": ["..."]}}"""
 
 WEB_SEARCH_USD = 0.01  # recherche web : 10 $ pour 1 000 recherches, facturée en plus des tokens
 WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5,
@@ -67,6 +76,59 @@ def _describe(ad: Ad) -> str:
     if ad.description:
         parts.append(f"Description : {ad.description[:400]}")
     return "\n".join(parts)
+
+
+PHOTO_MAX_BYTES = 4_500_000  # l'API accepte 5 Mo par image
+_IMAGE_TYPES = ((b"\xff\xd8\xff", "image/jpeg"), (b"\x89PNG", "image/png"), (b"GIF8", "image/gif"))
+
+
+def _image_type(data: bytes) -> str | None:
+    """Type réel d'une image d'après ses premiers octets (l'en-tête HTTP ment parfois)."""
+    for magic, kind in _IMAGE_TYPES:
+        if data.startswith(magic):
+            return kind
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def photo_block(url: str | None, fetch: Any = None) -> dict[str, Any] | None:
+    """Photo de l'annonce prête à envoyer à l'IA (bloc image), ou None si absente / illisible / trop lourde.
+    Téléchargée ici (une requête) plutôt que par l'API : certains sites refusent les robots d'Anthropic."""
+    if not url or not str(url).startswith(("http://", "https://")):
+        return None
+    try:
+        if fetch is None:
+            import httpx
+
+            resp = httpx.get(url, timeout=10, follow_redirects=True,
+                             headers={"User-Agent": "DealSniper/3.0 (analyse de la photo, usage personnel)"})
+            if resp.status_code != 200:
+                return None
+            data = resp.content
+        else:
+            data = fetch(url)
+    except Exception as exc:  # réseau, délai… : l'analyse se fait sans la photo
+        log.info("Photo non récupérée (%s) : analyse sans photo", exc)
+        return None
+    kind = _image_type(data or b"")
+    if not kind or len(data) > PHOTO_MAX_BYTES:
+        return None
+    return {"type": "image", "source": {"type": "base64", "media_type": kind,
+                                       "data": base64.standard_b64encode(data).decode("ascii")}}
+
+
+PHOTO_STATES = ("bon", "moyen", "mauvais", "inconnu")
+
+
+def _photo(raw: Any) -> dict[str, Any] | None:
+    """Constat de l'IA sur la photo, nettoyé (None si elle n'en a pas donné)."""
+    if not isinstance(raw, dict):
+        return None
+    state = str(raw.get("etat", "")).strip().lower()
+    alerts = [str(a).strip()[:140] for a in (raw.get("alertes") or []) if str(a).strip()][:4]
+    return {"etat": state if state in PHOTO_STATES else "inconnu",
+            "constat": str(raw.get("constat") or "").strip()[:320], "alertes": alerts}
 
 
 def _clamp(value: Any) -> float | None:
@@ -122,6 +184,7 @@ def sanitize(raw: dict[str, Any], ad: Ad) -> dict[str, Any]:
         "resume": str(raw.get("resume", ""))[:300], "pieges": str(raw.get("pieges", ""))[:120],
         "prix_achat_max": limit,
         "message_negociation": message or build_negotiation_message(ad, limit),  # repli sans IA
+        "photo": _photo(raw.get("photo")),
     }
 
 
@@ -167,7 +230,7 @@ def _usage_cost(usage: Any, price_in: float, price_out: float, search_usd: float
     return tokens + searches * search_usd
 
 
-def analyze_market(ad: Ad, config: dict[str, Any], client: Any = None) -> dict[str, Any]:
+def analyze_market(ad: Ad, config: dict[str, Any], client: Any = None, fetch: Any = None) -> dict[str, Any]:
     """Interroge un gros modèle + recherche web ; renvoie la fourchette, les sources et le coût."""
     if not env("ANTHROPIC_API_KEY"):
         raise RuntimeError("Clé Anthropic manquante (ANTHROPIC_API_KEY dans .env).")
@@ -182,7 +245,10 @@ def analyze_market(ad: Ad, config: dict[str, Any], client: Any = None) -> dict[s
         client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"), max_retries=2,
                                      timeout=float(cfg.get("timeout_seconds", 90)))
 
-    messages: list[dict[str, Any]] = [{"role": "user", "content": _describe(ad)}]
+    photo = photo_block(ad.image, fetch)
+    content: Any = [photo, {"type": "text", "text": _describe(ad) + "\nPhoto de l'annonce jointe."}] if photo \
+        else _describe(ad) + "\nAucune photo disponible."
+    messages: list[dict[str, Any]] = [{"role": "user", "content": content}]
     cost = 0.0
     text = ""
     for _ in range(5):  # la recherche web peut demander plusieurs tours (pause_turn)
@@ -206,6 +272,8 @@ def analyze_market(ad: Ad, config: dict[str, Any], client: Any = None) -> dict[s
     result = sanitize(raw if isinstance(raw, dict) else {}, ad)
     if result["revente_typique"] is None:  # rien d'exploitable : on ne l'enregistre pas comme une analyse
         raise AnalysisFailed("Aucun prix de revente trouvé pour ce modèle, réessayez.", cost)
+    if not photo:
+        result["photo"] = None  # aucune photo envoyée : pas de constat (même si le modèle en a inventé un)
     result["cost_usd"] = round(cost, 4)
     result["model"] = model
     return result

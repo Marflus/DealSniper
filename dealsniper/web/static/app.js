@@ -573,7 +573,7 @@ function deepBlock(ad) {
   if (!d) {
     return `<section class="d-deep">
       <div class="deep-cta">
-        <div><b>🔬 Analyse approfondie</b><p class="muted small">Prix réels vérifiés sur le web, graphique des ventes et verdict final.</p></div>
+        <div><b>🔬 Analyse approfondie</b><p class="muted small">Prix réels vérifiés sur le web, photo examinée, graphique des ventes et verdict final.</p></div>
         <button class="deep-btn" data-deep="${esc(ad.uid)}"><span>Analyser</span><small>${deepCostHint()} · 20 s</small></button>
       </div></section>`;
   }
@@ -597,6 +597,7 @@ function deepBlock(ad) {
         </div>
         ${d.resume ? `<p class="deep-summary">${esc(d.resume)}</p>` : ""}
         ${d.pieges ? `<p class="deep-warn">⚠️ ${esc(d.pieges)}</p>` : ""}
+        ${photoBlock(d)}
         ${(d.sources || []).length ? `<div class="deep-sources">${d.sources.map((x) => `<span>${esc(x)}</span>`).join("")}</div>` : ""}
       </div>
       <div class="deep-charts">${salesChart(d) || '<div class="chart-empty">Pas de vente datée trouvée pour le graphique</div>'}<div id="d-history"></div></div>
@@ -634,6 +635,18 @@ async function copyNegotiation(btn) {
   const text = btn.closest(".nego-box")?.querySelector("[data-nego-text]")?.value.trim();
   if (!text) return;
   toast(await copyText(text) ? "📋 Message copié !" : "❌ Copie impossible : sélectionnez le texte à la main");
+}
+
+// Constat de l'IA sur la photo de l'annonce (état visible, défauts, cohérence avec le titre).
+const PHOTO_STATE = { bon: ["good", "bon état visible"], moyen: ["mid", "état moyen"], mauvais: ["low", "mauvais état"],
+  inconnu: ["mid", "photo peu informative"] };
+function photoBlock(d) {
+  if (!("photo" in d)) return "";  // analyse faite avant l'ajout de la photo
+  if (!d.photo) return '<p class="muted small">📷 Pas de photo analysée (annonce sans photo exploitable).</p>';
+  const [cls, label] = PHOTO_STATE[d.photo.etat] || PHOTO_STATE.inconnu;
+  return `<div class="deep-photo"><div><b>📷 Ce que montre la photo</b> <span class="conf ${cls}">${label}</span></div>
+    ${d.photo.constat ? `<p>${esc(d.photo.constat)}</p>` : ""}
+    ${(d.photo.alertes || []).length ? `<ul>${d.photo.alertes.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</div>`;
 }
 
 async function askQuestions(uid) {
