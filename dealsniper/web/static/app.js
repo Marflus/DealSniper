@@ -1555,9 +1555,14 @@ function renderCheck(r, isRunning) {
   const gone = r.gone || [], unknown = r.unknown || [];
   const pct = r.total ? Math.round((100 * r.done) / r.total) : 0;
   if (isRunning) {
+    // Restant par site : un site encore long (rythme poli de ~10 s par annonce) explique un compteur lent.
+    const pending = Object.entries(r.pending || {}).filter(([, n]) => n > 0)
+      .map(([site, n]) => `${esc(siteName(site))} : ${n} restante${n > 1 ? "s" : ""}`).join(" · ");
+    const eta = r.eta_s > 0 ? ` · fin dans ~${r.eta_s >= 90 ? `${Math.round(r.eta_s / 60)} min` : `${r.eta_s} s`}` : "";
     box.innerHTML = `<div class="check-head">🔄 Vérification en cours… <b>${r.done}/${r.total}</b>
-        <span class="muted small">· ${gone.length} disparue(s) pour l'instant · rythme poli, quelques secondes par annonce</span></div>
-      <div class="check-bar"><span style="width:${pct}%"></span></div>`;
+        <span class="muted small">· ${gone.length} disparue(s) pour l'instant${eta}</span></div>
+      <div class="check-bar"><span style="width:${pct}%"></span></div>
+      ${pending ? `<p class="muted small" style="margin:6px 0 0">${pending} — une requête toutes les ~10 s par site, pour ne pas se faire bloquer</p>` : ""}`;
     return;
   }
   const line = (x) => `<li>${siteLogo(x.source, 14)} <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>

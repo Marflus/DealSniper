@@ -138,3 +138,36 @@ def test_ebay_checked_through_the_api(config, monkeypatch):
                     for n in ("111111111111", "222222222222", "333333333333")]
 
     assert asyncio.run(go()) == [GONE, GONE, ACTIVE]
+
+
+def test_site_that_limits_is_not_waited_for(config):
+    """429 / 403 : on n'attend pas (pas de longue pause) et on n'insiste pas : le reste du site passe
+    en « non vérifiable », les autres sites continuent ; le restant et la durée estimée sont suivis."""
+    from dealsniper.availability import check_ads
+
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.host)
+        if request.url.host == "www.vinted.fr":
+            return httpx.Response(429, headers={"Retry-After": "900"})
+        return httpx.Response(200, text="ok")
+
+    ads = [{"uid": f"v{i}", "title": f"V{i}", "source": "vinted", "url": f"https://www.vinted.fr/items/{i}"}
+           for i in range(5)]
+    ads += [{"uid": f"e{i}", "title": f"E{i}", "source": "ebay", "url": f"https://www.ebay.fr/itm/12345678901{i}"}
+            for i in range(2)]
+    snapshots = []
+
+    async def go():
+        async with PoliteClient("test", 0, max_retries=0, transport=httpx.MockTransport(handler),
+                                sleep=_no_sleep) as http:
+            return await check_ads(ads, config, http=http,
+                                   on_progress=lambda r: snapshots.append((dict(r["pending"]), r["eta_s"])))
+
+    report = asyncio.run(go())
+    assert calls.count("www.vinted.fr") == 1  # une seule tentative sur le site qui limite
+    assert report["done"] == 7 and report["active"] == 2
+    vinted = [u for u in report["unknown"] if u["source"] == "vinted"]
+    assert len(vinted) == 5 and all("limite" in u["note"] for u in vinted)
+    assert snapshots and snapshots[-1][0] == {"vinted": 0, "ebay": 0} and snapshots[-1][1] == 0
