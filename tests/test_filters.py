@@ -100,3 +100,15 @@ def test_vinted_counts_as_shippable(config):
     assert vinted.shippable and check(vinted, config) is None  # Vinted : envoi toujours possible
     assert check(lbc, config) == "pas de livraison"
     assert vinted.to_dict()["shippable"] is True
+
+
+def test_facebook_kept_when_delivery_is_required_but_unknown(config):
+    """« Livrable obligatoire » : Facebook ne dit pas si l'envoi est possible → gardée, « livraison à vérifier »."""
+    from dealsniper.filters import check
+    from dealsniper.models import Ad
+
+    config["filters"].update(delivery="ship", drop_uncategorized=False, min_price=0, ignore_category_budget=True)
+    fb = Ad(title="MacBook Air M1", url="https://www.facebook.com/marketplace/item/1", source="facebook", price=300)
+    lbc = Ad(title="MacBook Air M1", url="https://www.leboncoin.fr/ad/x/2", source="leboncoin", price=300)
+    assert check(fb, config) is None and "livraison à vérifier" in fb.signals
+    assert check(lbc, config) == "pas de livraison"  # leboncoin le dit dans sa liste : main propre seulement

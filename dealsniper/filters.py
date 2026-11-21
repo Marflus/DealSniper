@@ -10,13 +10,14 @@ import logging
 import re
 from typing import Any
 
-from .models import Ad
+from .models import UNKNOWN_SHIPPING_SITES, Ad
 from .utils.location import foreign_country, is_overseas
 from .utils.prices import has_foreign_currency
 from .utils.products import game_or_accessory, matches_query, part_or_accessory
 from .utils.text import first_keyword, normalize
 
 BRAND_SIGNAL = "marque recherchée :"
+SHIP_UNKNOWN = "livraison à vérifier"  # Facebook avec « livrable obligatoire » : envoi non précisé
 
 log = logging.getLogger(__name__)
 
@@ -92,8 +93,11 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
         return f"mot-clé exclu : {kw}"
 
     # Critères éliminatoires choisis avant une recherche (livraison, type de vendeur, prix max absolu).
+    ship_unknown = False
     if filters.get("delivery") == "ship" and not ad.shippable:
-        return "pas de livraison"
+        if ad.source not in UNKNOWN_SHIPPING_SITES:
+            return "pas de livraison"
+        ship_unknown = True  # Facebook : on ne sait pas, on garde et on prévient
     wanted, kind = filters.get("seller_type"), (ad.seller or {}).get("type")
     if wanted in ("pro", "particulier") and kind and kind != wanted:  # type inconnu : gardée
         return "vendeur professionnel" if kind == "pro" else "vendeur particulier"
@@ -118,6 +122,8 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
     ad.signals = [k for k in dict.fromkeys(candidates) if first_keyword(full_n, [k])]
     if cat.get("require_include") and not ad.signals:
         return "aucun signal de panne simple ni de bonne affaire"
+    if ship_unknown:
+        ad.signals.append(SHIP_UNKNOWN)
     kind = game_or_accessory(ad.title)
     if kind:  # dit à l'IA de ne pas estimer le prix de la console citée dans le titre
         ad.signals.append(f"{kind} (pas la console elle-même)")

@@ -8,6 +8,7 @@ from typing import Any
 from .utils.urls import ad_uid
 
 SHIPPING_SITES = {"vinted"}  # envoi toujours proposé, même sans frais de port indiqués
+UNKNOWN_SHIPPING_SITES = {"facebook"}  # la liste ne dit pas si l'envoi est possible : « à vérifier »
 
 
 @dataclass

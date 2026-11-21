@@ -414,6 +414,7 @@ function riskFlags(ad) {
   if (ad.market && ad.market.median && ad.total_price != null && ad.total_price < ad.market.median * 0.4)
     flags.push("Prix très bas vs la cote — vérifier que ce n'est pas une arnaque");
   if (ad.price_mode === "enchere") flags.push("Enchère : le prix final peut grimper");
+  if ((ad.signals || []).includes("livraison à vérifier")) flags.push("Livraison non précisée sur Facebook : demandez au vendeur s'il envoie");
   if (a.facilite_reparation != null && a.facilite_reparation <= 3) flags.push("Réparation difficile (soudure / panne incertaine)");
   return flags;
 }
