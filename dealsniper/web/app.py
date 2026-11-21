@@ -256,7 +256,7 @@ def write_settings(new: dict[str, Any]) -> None:
 def _realistic(items: list[dict]) -> None:
     """Annonces notées avant le garde-fou de prudence : même rabot et même calcul de marge, à l'affichage."""
     from ..analyzer import make_realistic, sanitize_analysis
-    from ..deep import refresh
+    from ..deep import apply_to_card, refresh
     from ..models import Ad
 
     try:
@@ -279,6 +279,11 @@ def _realistic(items: list[dict]) -> None:
             clean.pop("facilite_vente")
         item["analysis"] = clean
         item["score"] = clean["score_rentabilite"]
+    for item in items:  # analyse approfondie faite : la carte reprend sa revente, sa marge et son verdict
+        if item.get("market_deep") and item.get("analysis"):
+            item["analysis"] = apply_to_card(item["analysis"], item["market_deep"], item.get("total_price"),
+                                             item.get("price_mode") == "enchere")
+            item["score"] = item["analysis"]["score_rentabilite"]
 
 
 IMAGE_RETRY_DAYS = 7
@@ -451,10 +456,14 @@ def create_app(demo: bool = False) -> Flask:
             return jsonify(ok=False, error=str(exc)), 502
         except Exception as exc:  # clé manquante, API indisponible, recherche web refusée…
             return jsonify(ok=False, error=str(exc)[:200]), 502
+        card = [{**ad, "market_deep": result}]
+        _realistic(card)  # note et revente de la carte alignées sur le verdict (liste, Bilan, tri)
         with database() as db:
             db.patch_ad(uid, {"market_deep": result})
+            if card[0].get("analysis"):
+                db.update_analysis(uid, card[0]["analysis"])
             asyncio.run(db.add_cost(result.get("cost_usd", 0)))
-        return jsonify(ok=True, market_deep=result)
+        return jsonify(ok=True, market_deep=result, analysis=card[0].get("analysis"))
 
     @app.post("/api/ads/<uid>/questions")
     def ad_questions(uid: str):

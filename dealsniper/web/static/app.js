@@ -433,7 +433,7 @@ function adCard(ad) {
       <div class="stats">
         <div><span>Achat</span><b>${buy}</b></div>
         <div title="${a.source_revente === "cote" ? "D'après la cote réelle du modèle (prix des annonces en état de marche)" : "Estimation de l'IA, rabotée par prudence"}">
-          <span>Revente${a.source_revente === "cote" ? ' <i class="src">cote</i>' : ""}</span><b>${a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "—"}</b></div>
+          <span>Revente${a.source_revente === "cote" ? ' <i class="src">cote</i>' : a.source_revente === "analyse approfondie" ? ' <i class="src">vérifiée</i>' : ""}</span><b>${a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "—"}</b></div>
         <div class="${marginClass}"><span>Marge</span><b>${margin}</b></div>
       </div>
       ${ad.analysis ? scoreRow(ad) : ""}
@@ -495,7 +495,7 @@ function showDetails(uid) {
           : '<div class="d-photo empty">📦</div>'}
         <div class="d-tiles">
           ${tile("Achat", euros(ad.total_price ?? ad.price), "", ad.shipping ? `dont ${euros(ad.shipping)} de port` : ad.price_mode === "enchere" ? "enchère en cours" : "")}
-          ${tile("Revente", a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "—", "", a.source_revente === "cote" ? "d'après la cote" : "prudence −10 %")}
+          ${tile("Revente", a.valeur_revente_estimee != null ? euros(a.valeur_revente_estimee) : "—", "", a.source_revente === "cote" ? "d'après la cote" : a.source_revente === "analyse approfondie" ? "analyse approfondie" : "prudence −10 %")}
           ${tile("Marge nette", margin == null ? "—" : `${margin >= 0 ? "+" : ""}${euros(margin)}`, margin == null ? "" : margin >= 0 ? "pos" : "neg")}
           ${tile("Notes", `${a.facilite_reparation ?? "—"} · ${a.facilite_vente ?? "—"}`, "", "réparation · vente /10")}
         </div>
@@ -738,6 +738,10 @@ async function deepMarket(uid) {
   try {
     const data = await api(`/api/ads/${encodeURIComponent(uid)}/market-analysis`, { method: "POST" });
     ad.market_deep = data.market_deep;
+    if (data.analysis) {  // la carte reprend la revente, la marge et la note du verdict
+      ad.analysis = data.analysis;
+      ad.score = data.analysis.score_rentabilite;
+    }
     ad._nego = null;  // le message de l'analyse remplace celui préparé avant
     showDetails(uid);
     renderAds(true);

@@ -217,6 +217,36 @@ def max_buy(typical: float | None, piece: float = 0.0) -> float | None:
     return round(typical * 0.9 - piece - target_profit(typical)) if typical else None
 
 
+def apply_to_card(analysis: dict[str, Any] | None, deep: dict[str, Any] | None, price: float | None,
+                  auction: bool = False) -> dict[str, Any] | None:
+    """La carte reprend l'analyse approfondie (prix réels vérifiés, photo examinée) : revente typique,
+    marge recalculée (revente − prix − pièce − 10 % de frais) et note alignée sur le verdict (à acheter :
+    7 au moins, sauf confiance faible ; à négocier : 6 au plus ; à laisser passer : 3 au plus).
+    La note rapide est gardée à côté."""
+    typical = (deep or {}).get("revente_typique") or (deep or {}).get("revente_basse")
+    if not analysis or not typical:
+        return analysis
+    if analysis.get("source_revente") == "analyse approfondie":
+        analysis = {**analysis, "score_rentabilite": analysis.get("score_rapide", analysis["score_rentabilite"])}
+    piece = float(analysis.get("cout_piece_estime") or 0)
+    limit = max_buy(typical, piece)
+    quick = int(analysis.get("score_rentabilite") or 0)
+    if limit is None or limit <= 0:
+        score = min(quick, 3)
+    elif auction or price is None or price <= limit:
+        # Confiance faible (peu de prix réels, annonce douteuse) : l'analyse peut baisser la note, pas la monter
+        score = quick if deep.get("confiance") == "faible" else max(quick, 7)
+    elif price <= limit * 1.25:
+        score = min(max(quick, 5), 6)
+    else:
+        score = min(quick, 3)
+    margin = analysis.get("marge_nette_estimee")
+    if price is not None and not auction:
+        margin = round(typical * 0.9 - price - piece, 2)
+    return {**analysis, "valeur_revente_estimee": typical, "marge_nette_estimee": margin,
+            "score_rentabilite": score, "score_rapide": quick, "source_revente": "analyse approfondie"}
+
+
 def refresh(deep: dict[str, Any], piece: float = 0.0) -> dict[str, Any]:
     """Recalcule le prix d'achat max d'une analyse déjà enregistrée (formule à jour)."""
     if not deep:

@@ -94,3 +94,23 @@ def test_photo_is_sent_and_its_report_kept(config, monkeypatch):
     result = analyze_market(Ad(title="iPhone 12", url="https://x/2", source="vinted", price=120), config,
                             NS(messages=NS(create=create)))
     assert isinstance(sent[0], str) and result["photo"] is None
+
+
+def test_card_follows_the_deep_verdict():
+    """Switch OLED à 20 € notée 9/10 (+110 €) : l'analyse approfondie voit des accessoires (≈ 15 €) → la carte suit."""
+    from dealsniper.deep import apply_to_card
+
+    quick = {"score_rentabilite": 9, "valeur_revente_estimee": 144, "marge_nette_estimee": 110, "cout_piece_estime": 0}
+    card = apply_to_card(quick, {"revente_basse": 10, "revente_typique": 15}, 20)
+    assert card["score_rentabilite"] <= 3 and card["valeur_revente_estimee"] == 15
+    assert card["marge_nette_estimee"] == -6.5 and card["score_rapide"] == 9
+    assert card["source_revente"] == "analyse approfondie"
+    assert apply_to_card(card, {"revente_typique": 15}, 20) == card  # appliqué deux fois : même résultat
+
+    bargain = apply_to_card({**quick, "score_rentabilite": 4}, {"revente_typique": 300}, 100)
+    assert bargain["score_rentabilite"] >= 7  # 300 × 0,9 − 90 = 180 € max, demandé 100 € : à acheter
+    doubtful = apply_to_card({**quick, "score_rentabilite": 2}, {"revente_typique": 650, "confiance": "faible"}, 124)
+    assert doubtful["score_rentabilite"] == 2  # MacBook à 124 € peut-être une arnaque : pas de hausse
+    nego = apply_to_card({**quick, "score_rentabilite": 9}, {"revente_typique": 300}, 200)
+    assert 5 <= nego["score_rentabilite"] <= 6  # 200 € pour 180 € max : à négocier
+    assert apply_to_card(quick, None, 20) is quick
