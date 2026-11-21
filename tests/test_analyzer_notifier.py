@@ -115,7 +115,7 @@ def test_notify_min_margin_and_ease(monkeypatch, config):
 
 
 def test_make_realistic_recomputes_margin_and_caps_score():
-    ad = Ad(title="MacBook Pro 2017 à réparer", url="https://e.x/1", source="t", price=70)
+    ad = Ad(title="MacBook Pro 2019 à réparer", url="https://e.x/1", source="t", price=70)
     optimistic = {**analyzer.sanitize_analysis(item(1, score=8)), "valeur_revente_estimee": 600,
                   "cout_piece_estime": 60, "marge_nette_estimee": 378}
     clean = analyzer.make_realistic(optimistic, ad, haircut=0.9)

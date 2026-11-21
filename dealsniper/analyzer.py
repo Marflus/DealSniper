@@ -11,6 +11,7 @@ from typing import Any
 
 from .config import env
 from .models import Ad
+from .reference import reference_price
 from .utils.text import truncate
 
 log = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ Règles :
 - Montants en euros, prix_total = prix + port. Enchère : le prix est l'enchère actuelle, raisonne sur un prix final probable.
 - valeur_revente_estimee : sois PRUDENT. C'est le prix auquel ce modèle exact se VEND réellement entre particuliers en France (leboncoin, eBay vendus) en quelques semaines, une fois réparé : le bas de la fourchette, jamais le prix neuf ni le prix affiché le plus haut. Décote selon l'objet : l'électronique perd vite sa valeur (un ordinateur de plus de 5 ans dépasse rarement 250-350 €) ; sport, outillage et électroménager se jugent sur la marque, l'état, l'usure et la saison (skis, vélos : modèle et année comptent). Modèle, année ou configuration inconnus : prends l'entrée de gamme et score ≤ 5.
 - « cote X € » (si fournie) = prix médian réel de ce modèle en état de marche, observé sur les annonces : ta valeur_revente_estimee ne doit pas la dépasser.
+- « repère X-Y € » (si fourni) = prix courant d'occasion de ce modèle en état de marche : ta valeur_revente_estimee reste dans cette fourchette (le bas si l'état, la version ou la configuration sont incertains, le haut seulement pour une version haut de gamme ou un très bon état avec accessoires).
 - cout_piece_estime : prix réel de la pièce neuve ou d'occasion + petit matériel ; jamais 0 pour une réparation.
 - marge_nette_estimee = valeur_revente_estimee - prix_total - cout_piece_estime - 10 % de frais.
 - Revente directe : panne_probable = "aucune", cout_piece_estime = 0.
@@ -101,7 +103,7 @@ def _money(value: float | None) -> str:
     return f"{value:.0f}" if float(value).is_integer() else f"{value:.2f}"
 
 
-def format_ad(idx: int, ad: Ad, max_chars: int) -> str:
+def format_ad(idx: int, ad: Ad, max_chars: int, config: dict[str, Any] | None = None) -> str:
     """Une annonce = une ligne compacte : chaque caractère économisé est un token en moins."""
     price = f"{_money(ad.price)} €"
     if ad.shipping:
@@ -115,14 +117,16 @@ def format_ad(idx: int, ad: Ad, max_chars: int) -> str:
         parts.append(f"vendeur: {ad.seller_summary}")
     if ad.market:
         parts.append(f"cote {ad.market['median']:.0f} € en état de marche ({ad.market['count']} annonces)")
+    elif ref := reference_price(ad.title, config):
+        parts.append(f"repère {ref[0]}-{ref[1]} € en état de marche")
     description = truncate(ad.description.replace(ad.title, "").strip(), max_chars)
     if description:
         parts.append(description)
     return " | ".join(parts)
 
 
-def build_user_prompt(ads: list[Ad], max_chars: int) -> str:
-    return "Annonces :\n" + "\n".join(format_ad(i, ad, max_chars) for i, ad in enumerate(ads, 1))
+def build_user_prompt(ads: list[Ad], max_chars: int, config: dict[str, Any] | None = None) -> str:
+    return "Annonces :\n" + "\n".join(format_ad(i, ad, max_chars, config) for i, ad in enumerate(ads, 1))
 
 
 def _parse_json(text: str) -> dict[str, Any]:
@@ -166,16 +170,31 @@ def sanitize_analysis(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def make_realistic(analysis: dict[str, Any], ad: Ad, haircut: float = 0.9) -> dict[str, Any]:
+def make_realistic(analysis: dict[str, Any], ad: Ad, haircut: float = 0.9,
+                   config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Garde-fou contre l'optimisme du modèle, appliqué en Python (pas de calcul confié à l'IA).
 
     - la revente part de la cote du marché si elle est connue et plus basse que l'estimation de l'IA ;
+      sans cote, un repère de prix (reference.py) ramène l'estimation dans sa fourchette (dans les deux sens :
+      le même Steam Deck était estimé 300 € puis 420 € selon le lot) ;
     - elle est rabotée de `haircut` (0,9 = -10 %, marge de négociation des acheteurs) ;
     - la marge est recalculée : revente - prix payé (port compris) - pièce - 10 % de frais ;
     - une marge recalculée faible plafonne la note (< 20 € : 4/10 max ; < 40 € : 6/10 max).
     """
     ai_resale = analysis["valeur_revente_estimee"]
-    base = min(ai_resale, ad.market["median"]) if ad.market and ad.market.get("median") else ai_resale
+    source = "ia"
+    if ad.market and ad.market.get("median"):
+        base = min(ai_resale, ad.market["median"])
+        source = "cote" if base < ai_resale else "ia"
+    elif ref := reference_price(ad.title, config):
+        # Vers le bas : toujours. Vers le haut : seulement si l'IA parlait déjà de l'appareil entier (≥ 60 % du
+        # bas de la fourchette) ; une estimation très basse signale une pièce ou un accessoire non reconnu
+        # (« Tige Dyson V15 » à 30 € ne doit jamais valoir le prix d'un V15).
+        floor = ref[0] if ai_resale >= 0.6 * ref[0] else ai_resale
+        base = min(max(ai_resale, floor), ref[1])
+        source = "repère" if base != ai_resale else "ia"
+    else:
+        base = ai_resale
     resale = round(base * haircut, 2)
     if ad.price_mode == "enchere" or ad.total_price is None:
         # Prix final inconnu : on garde le raisonnement du modèle, moins l'écart de revente.
@@ -186,7 +205,7 @@ def make_realistic(analysis: dict[str, Any], ad: Ad, haircut: float = 0.9) -> di
     ai_score = analysis["score_rentabilite"]
     return {**analysis, "valeur_revente_estimee": resale, "marge_nette_estimee": margin,
             "score_rentabilite": cap_score(ai_score, margin), "score_ia": ai_score,
-            "valeur_revente_ia": ai_resale, "source_revente": "cote" if base < ai_resale else "ia",
+            "valeur_revente_ia": ai_resale, "source_revente": source,
             "realiste": True}  # marque : garde-fou déjà appliqué
 
 
@@ -227,6 +246,7 @@ class Analyzer:
 
         self._anthropic = anthropic
         cfg = config["analyzer"]
+        self.config = config  # repères de prix éventuels (analyzer.reference_prices)
         self.model: str = cfg["model"]
         self.batch_size = max(1, int(cfg["batch_size"]))
         self.max_chars = int(cfg["max_description_chars"])
@@ -251,7 +271,7 @@ class Analyzer:
             "model": self.model,
             "max_tokens": self.max_tokens,
             "system": SYSTEM_PROMPT,
-            "messages": [{"role": "user", "content": build_user_prompt(ads, self.max_chars)}],
+            "messages": [{"role": "user", "content": build_user_prompt(ads, self.max_chars, self.config)}],
         }
         output_config: dict[str, Any] = {}
         if self.use_schema:
@@ -328,7 +348,8 @@ class Analyzer:
                 continue
         for idx, ad in enumerate(ads, 1):
             if idx in by_id:
-                ad.analysis = make_realistic(sanitize_analysis(by_id[idx]), ad, self.resale_haircut)
+                ad.analysis = make_realistic(sanitize_analysis(by_id[idx]), ad, self.resale_haircut,
+                                             self.config)
                 result.analyzed.append(ad)
             else:
                 log.warning("Pas de réponse pour « %s », reportée.", ad.title[:50])

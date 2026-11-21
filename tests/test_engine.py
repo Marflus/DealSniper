@@ -653,7 +653,7 @@ def test_price_drop_updates_margin_and_score(monkeypatch, config):
 
     class OneAd(FakeSite):
         async def list_recent(self, http):
-            return [Ad(title="ThinkPad T480 sans SSD", url="https://www.ebay.fr/itm/300000000001", source="ebay",
+            return [Ad(title="ThinkPad T580 sans SSD", url="https://www.ebay.fr/itm/300000000001", source="ebay",
                        price=price["value"])]
 
     def analyze(ads, cfg, budget, should_stop=None):

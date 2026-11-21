@@ -263,6 +263,12 @@ analyzer:
   model: "claude-haiku-5-5"
   batch_size: 20              # annonces par appel API (le prompt système est payé une fois par lot)
   max_description_chars: 800  # texte du vendeur envoyé à l'IA (les pannes sont souvent en fin de texte)
+  # Prix de référence d'occasion en état de marche (complètent ou corrigent la table de dealsniper/reference.py) :
+  # sans cote du marché, l'estimation de l'IA est ramenée dans la fourchette. Tous les mots de « match »
+  # doivent être dans le titre ; ces lignes passent avant la table intégrée.
+  # reference_prices:
+  #   - {match: "steam deck oled", low: 380, high: 440}
+  #   - {match: "thinkpad t480", low: 170, high: 220, sauf: ["t480s"]}
   resale_haircut: 0.9         # prudence : revente estimée × 0,9, puis marge recalculée (1 = désactivé)
   auto_calibrate: true        # dès 3 achats revendus (onglet Achats), le rabot suit vos ventes réelles
   deep_model: "claude-sonnet-5-5"  # bouton « Analyse approfondie » : modèle + recherche web (à la demande, ~qq centimes)

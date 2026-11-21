@@ -260,9 +260,10 @@ def _realistic(items: list[dict]) -> None:
     from ..models import Ad
 
     try:
-        haircut = float(current_config()["analyzer"].get("resale_haircut", 0.9))
+        config = current_config()
+        haircut = float(config["analyzer"].get("resale_haircut", 0.9))
     except Exception:
-        haircut = 0.9
+        config, haircut = None, 0.9
     for item in items:
         if item.get("market_deep"):  # analyses approfondies : prix d'achat max à la formule actuelle
             piece = float((item.get("analysis") or {}).get("cout_piece_estime") or 0)
@@ -272,7 +273,7 @@ def _realistic(items: list[dict]) -> None:
             continue
         clean = make_realistic({**sanitize_analysis(analysis), **{k: v for k, v in analysis.items()
                                                                  if k in ("facilite_reparation", "facilite_vente")}},
-                               Ad.from_dict(item), haircut)
+                               Ad.from_dict(item), haircut, config)
         if "facilite_reparation" not in analysis:  # notes absentes des anciennes analyses : on ne les invente pas
             clean.pop("facilite_reparation")
         if "facilite_vente" not in analysis:

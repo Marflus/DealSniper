@@ -69,7 +69,9 @@ ACCESSORY_FIRST = {"chargeur", "batterie", "clavier", "coque", "housse", "etui",
                    # boîtes, housses, hubs… y compris dans les annonces étrangères de Vinted (« Custodia », « Caja »)
                    "boite", "caja", "scatola", "verpakking", "custodia", "funda", "case", "cover", "sleeve",
                    "pochette", "hub", "film", "protection", "cargador", "bateria", "topcase", "skin",
-                   "placa", "netzteil", "akku", "ladegerat", "tastatur", "teclado", "scheda", "tarjeta", "kabel"}
+                   "placa", "netzteil", "akku", "ladegerat", "tastatur", "teclado", "scheda", "tarjeta", "kabel",
+                   "tige", "tube", "bac", "fixation", "bezel", "contour", "onderdeel", "prefiltre", "prefiltres",
+                   "filtres", "keyboard", "azerty", "qwerty", "moteur"}
 # Signal pour l'IA : seulement les cas nets (« lot de » peut être un lot d'appareils).
 _PART_PHRASES = ("seul", "seule", "pieces detachees", "piece detachee")
 
