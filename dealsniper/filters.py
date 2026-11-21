@@ -68,7 +68,7 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
         return reason
     words = filters.get("query_words")  # recherche ponctuelle : les sites renvoient aussi des articles voisins
     if words and not matches_query(f"{ad.title} {ad.description}", words):
-        return "hors sujet (aucun mot de la recherche)"
+        return "hors sujet (trop peu de mots de la recherche)"
     cat = categorize(ad, config["categories"])
     if cat is None:
         if filters.get("drop_uncategorized", True):

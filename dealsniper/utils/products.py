@@ -90,8 +90,17 @@ def _stem(word: str) -> str:
 
 
 def matches_query(text: str, words: list[str]) -> bool:
-    """Vrai si le texte contient au moins un mot de la recherche (début de mot : « t480 » trouve « t480s »)."""
+    """Vrai si le texte contient assez de mots de la recherche : un seul pour une recherche d'un ou deux mots,
+    la moitié au moins à partir de trois (« macbook air m1 » : « iPad Air » ne suffit plus).
+    Début de mot dans les deux sens (« t480 » trouve « t480s », « blanche » trouve « blanc ») ; mots collés
+    aussi (« Mac Book » compte pour « macbook »)."""
     if not words:
         return True
-    tokens = [w.strip("'-") for w in _WORD_RE.findall(normalize(text))]
-    return any(t.startswith(w) for w in words for t in tokens if t)
+    tokens = [t for t in (w.strip("'-") for w in _WORD_RE.findall(normalize(text))) if t]
+    tokens += [a + b for a, b in zip(tokens, tokens[1:], strict=False)]  # « mac book » → « macbook »
+
+    def found(word: str) -> bool:
+        return any(t.startswith(word) or (len(t) >= 4 and word.startswith(t)) for t in tokens)
+
+    needed = 1 if len(words) < 3 else -(-len(words) // 2)
+    return sum(found(w) for w in words) >= needed

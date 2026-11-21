@@ -145,16 +145,16 @@ def test_one_off_search_drops_off_topic_results(config):
                              query_words=query_words("thinkpad t480"))
     shirt = Ad(title="YFG Pave T-Shirt Rapper", url="https://www.vinted.fr/items/2-x", source="vinted", price=9)
     laptop = Ad(title="Lenovo T480s i5", url="https://www.vinted.fr/items/3-x", source="vinted", price=150)
-    assert check(shirt, config) == "hors sujet (aucun mot de la recherche)"
+    assert check(shirt, config) == "hors sujet (trop peu de mots de la recherche)"
     assert check(laptop, config) is None
 
     config["filters"]["query_words"] = query_words("chaussures blanches taille 43")
-    shoes = Ad(title="Des baskets", url="https://www.vinted.fr/items/4-x", source="vinted", price=15,
+    shoes = Ad(title="Baskets blanches", url="https://www.vinted.fr/items/4-x", source="vinted", price=15,
                description="Taille : 43")
     polo = Ad(title="Polo homme", url="https://www.vinted.fr/items/5-x", source="vinted", price=5,
               description="Taille : XL")
-    assert check(shoes, config) is None  # la taille de la carte Vinted suffit
-    assert check(polo, config) == "hors sujet (aucun mot de la recherche)"  # « Taille » seul ne compte pas
+    assert check(shoes, config) is None  # la taille de la carte Vinted compte comme un mot
+    assert check(polo, config) == "hors sujet (trop peu de mots de la recherche)"  # « Taille » seul ne compte pas
 
 
 def test_vinted_card_details_are_kept():
@@ -180,3 +180,14 @@ def test_accessories_do_not_pollute_the_quote():
     prices = [5, 8, 8.9, 12, 15, 15, 139, 150, 200, 290, 300, 340, 350, 350]
     assert central_median(prices) > 250  # les prix sans rapport ne tirent plus la cote vers le bas
     assert central_median([200, 210, 220, 230, 240]) == 220
+
+
+def test_longer_searches_need_half_of_their_words():
+    from dealsniper.utils.products import matches_query, query_words
+
+    words = query_words("macbook air m1")
+    assert matches_query("MacBook Air M1 2020", words) and matches_query("Ordinateur Mac Book Air 2020", words)
+    assert not matches_query("iPad Air 5 64 gb", words)
+    shoes = query_words("chaussures blanches taille 43")
+    assert matches_query("Nike Air Force 1 blanc Taille : 43", shoes)
+    assert not matches_query("Polo homme Taille : 43", shoes)
