@@ -48,17 +48,18 @@ les décisions en attente et les limites à respecter. Pour le détail technique
 - ~40 jeux / accessoires notés avant le correctif du 21/11 gardent une revente de console (ex. Zelda 35 € → 131 €).
 - Vinted « dyson v10 » trié par date : surtout des accessoires ; un filtre de catégorie Vinted aiderait.
 
-## Décisions en attente de réponse de Marius (ne pas coder avant sa réponse)
-1. Marge visée du verdict : +30 € fixe, ou proportionnelle (ex. 30 % de la revente, au moins 10 €) ?
-2. Descriptions Vinted : ouvrir la page des annonces RETENUES pour lire la description (une requête par
-   annonce qui passe le filtre ; `VintedSite.fetch_detail` ne fait rien aujourd'hui) ?
-3. Repères mode / chaussures dans la notation rapide (et éventuelle catégorie « Mode et chaussures ») ?
-4. Volume sans risque : en réalité `config.yaml` a déjà Vinted `limit: 60`, leboncoin 70, Facebook 50.
-   Une page Vinted contient ~96 annonces (pas 36) : `limit: 96` = toujours 1 seule page, à condition de
-   corriger le calcul du nombre de pages dans `vinted.py` (il suppose 36 par page). Leboncoin : 35 par page.
-5. Notifications : interrupteur général dans Réglages, et/ou « pas de notification pendant une recherche
-   ponctuelle » (aujourd'hui elles partent comme pour un passage normal) ?
-6. Leboncoin : l'espacer fortement (un passage toutes les 1 à 2 h) ou le désactiver ?
+## Décisions prises (21/11/2026)
+- Marge visée proportionnelle : 30 % de la revente, au moins 10 € (`deep.target_profit`). FAIT.
+- Volume : « le maximum de pages sans se faire bannir » → pages déjà chargées exploitées en entier
+  (Vinted 96 par page, `limit: 96`), sans charger de page en plus. Leboncoin laissé à 70 (2 pages) : bloqué.
+- Notifications : interrupteur dans Réglages + rien pendant une recherche ponctuelle. FAIT.
+- ~76 jeux / accessoires / pièces surestimés renotés (0,005 $). FAIT.
+
+## Questions réexpliquées à Marius, réponse en attente
+2. Lire la description complète des annonces retenues (une visite de plus par annonce retenue).
+3. Notation plus juste pour vêtements / chaussures (repères de prix mode).
+6. Leboncoin bloqué à chaque passage : l'espacer (toutes les 1-2 h) ou l'arrêter.
+7. Après une analyse approfondie, la carte reprend-elle sa note et sa revente ?
 
 ## Ce que Marius a demandé à la session locale
 Ouvrir http://127.0.0.1:5000, tout tester avec ses vraies données, lancer des recherches réelles et comparer
