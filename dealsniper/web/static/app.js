@@ -1025,7 +1025,7 @@ function activeFilterLabels() {
     if (!el.value) return;
     const v = el.value;
     const text = {
-      "f-text": `« ${v} »`, "f-score": `note ≥ ${v}`, "f-ease": `réparation ≥ ${v}`, "f-sale": `demande ≥ ${v}`,
+      "f-text": `« ${v} »`, "f-score": `note ≥ ${v}`, "f-ease": `réparabilité ≥ ${v}`, "f-sale": `demande ≥ ${v}`,
       "f-price": `prix ≤ ${v} €`, "f-margin": `marge ≥ ${v} €`,
       "f-distance": `≤ ${v} km${$("#f-near").value.trim() ? ` de ${$("#f-near").value.trim()}` : ""}`,
     }[id];
