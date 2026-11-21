@@ -39,12 +39,23 @@ les décisions en attente et les limites à respecter. Pour le détail technique
   impossible pour un objet revendu 25 € (achat max négatif → « Ne pas acheter »).
 - Leboncoin : accès refusé à chaque passage.
 
+## Constats de la session locale (21/11/2026, soir)
+- Corrigé : pièces détachées estimées au prix de l'appareil, résultats hors sujet notés par l'IA en recherche
+  ponctuelle, État / Marque / Taille Vinted jetés, livraison leboncoin ignorée, négociation et Bilan incohérents,
+  mots-clés « predator » / « nitro » / « aspire » (exemple seulement : à corriger aussi dans Catégories).
+- Leboncoin : `body` est vide dans la liste (vérifié dans un navigateur) : pas de description sans ouvrir
+  l'annonce. Les ~600 annonces leboncoin en base n'ont même pas l'état : à vérifier au prochain passage.
+- ~40 jeux / accessoires notés avant le correctif du 21/11 gardent une revente de console (ex. Zelda 35 € → 131 €).
+- Vinted « dyson v10 » trié par date : surtout des accessoires ; un filtre de catégorie Vinted aiderait.
+
 ## Décisions en attente de réponse de Marius (ne pas coder avant sa réponse)
 1. Marge visée du verdict : +30 € fixe, ou proportionnelle (ex. 30 % de la revente, au moins 10 €) ?
 2. Descriptions Vinted : ouvrir la page des annonces RETENUES pour lire la description (une requête par
    annonce qui passe le filtre ; `VintedSite.fetch_detail` ne fait rien aujourd'hui) ?
 3. Repères mode / chaussures dans la notation rapide (et éventuelle catégorie « Mode et chaussures ») ?
-4. Volume sans risque : Vinted `limit` 25 → 36 et leboncoin 25 → 35 (même nombre de pages chargées) ?
+4. Volume sans risque : en réalité `config.yaml` a déjà Vinted `limit: 60`, leboncoin 70, Facebook 50.
+   Une page Vinted contient ~96 annonces (pas 36) : `limit: 96` = toujours 1 seule page, à condition de
+   corriger le calcul du nombre de pages dans `vinted.py` (il suppose 36 par page). Leboncoin : 35 par page.
 5. Notifications : interrupteur général dans Réglages, et/ou « pas de notification pendant une recherche
    ponctuelle » (aujourd'hui elles partent comme pour un passage normal) ?
 6. Leboncoin : l'espacer fortement (un passage toutes les 1 à 2 h) ou le désactiver ?
