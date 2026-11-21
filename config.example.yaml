@@ -273,6 +273,7 @@ analyzer:
 #  Notifications
 # -----------------------------------------------------------------------------
 notifier:
+  enabled: true               # false = plus aucun message (coupé aussi pendant une recherche ponctuelle)
   min_score: 8                # bonne affaire : un message Telegram par annonce
   watch_score: 6              # « à vérifier » (5-6/10) : regroupées dans un seul message par passage (null = désactivé)
   instant_min_score: 8        # message immédiat seulement au-dessus de cette note ; le reste part dans un récap groupé

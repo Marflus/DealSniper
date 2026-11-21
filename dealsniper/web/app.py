@@ -227,6 +227,8 @@ def write_settings(new: dict[str, Any]) -> None:
                      "min_margin", "min_ease", "min_sale")
     _set_numbers(doc, "notifier", notifier, notifier_keys,
                  nullable=("watch_score", "instant_min_margin", "min_margin", "min_ease", "min_sale"))
+    if "enabled" in notifier:
+        target["enabled"] = bool(notifier["enabled"])
     if "deal_types" in notifier:
         target["deal_types"] = _seq(target.get("deal_types"), _words(notifier["deal_types"]), flow=True)
 
@@ -884,6 +886,7 @@ def create_app(demo: bool = False) -> Flask:
 
         def prepare(config: dict[str, Any]) -> None:
             config["searches"] = [search]              # une seule recherche, commune à tous les sites
+            config["notifier"]["enabled"] = False      # résultats à l'écran : pas de messages Telegram en plus
             config["recheck_rejected"] = True          # réévalue ce qui avait été écarté avec d'autres critères
             for name, site in config["sites"].items():
                 site["searches"] = []                  # on ignore les recherches habituelles

@@ -212,7 +212,7 @@ class Engine:
                 await asyncio.to_thread(self.db.update_analysis, drop["uid"], analysis)
                 drop.update(score=analysis["score_rentabilite"], margin=analysis.get("marge_nette_estimee"))
         notable = [d for d in drops if d["status"] == "analyzed" and (d["score"] or 0) >= 1]
-        if notable:
+        if notable and notifier.enabled(self.config):
             await asyncio.to_thread(notifier.notify_price_drops, notable)
 
     async def _select(self, site: Site, listed: list[Ad], new_ads: list[Ad],
@@ -310,8 +310,9 @@ class Engine:
             await self.db.pause(site.name, hours, str(exc))
             log.warning("%s refuse l'accès (%s) : pause de %.0f h", site.name, exc, hours)
             self.progress.done(site.label, f"accès refusé, en pause {hours:.0f} h")
-            await asyncio.to_thread(notifier.Notifier().send_text,
-                                    f"⚠️ Deal Sniper : {site.name} refuse l'accès ({exc}). Pause de {hours:.0f} h.")
+            if notifier.enabled(self.config):
+                await asyncio.to_thread(notifier.Notifier().send_text,
+                                        f"⚠️ Deal Sniper : {site.name} refuse l'accès ({exc}). Pause de {hours:.0f} h.")
         except Exception as exc:
             hint = missing_browser_hint(exc)
             if hint:  # cas fréquent à l'installation : message clair plutôt qu'une pile d'appels
@@ -327,7 +328,7 @@ class Engine:
         while not self.stopping.is_set():
             try:
                 ending = await asyncio.to_thread(self.db.ending_soon, int(minutes) + 5)
-                for ad in ending:
+                for ad in ending if notifier.enabled(self.config) else []:
                     await asyncio.to_thread(notifier.Notifier().send_text, notifier.auction_reminder(ad))
                     await asyncio.to_thread(self.db.mark_reminded, ad.uid)
                     log.info("Rappel d'enchère : %s", ad.title[:50])

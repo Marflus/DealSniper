@@ -229,10 +229,18 @@ def _rank(ads: list[Ad]) -> list[Ad]:
     return sorted(ads, key=lambda a: (-a.score, -((a.analysis or {}).get("marge_nette_estimee") or 0)))
 
 
+def enabled(config: dict[str, Any]) -> bool:
+    """Interrupteur général des notifications (Réglages → Notifications), coupé aussi pendant une recherche
+    ponctuelle : les résultats sont à l'écran, inutile de les recevoir en plus sur Telegram."""
+    return bool(config.get("notifier", {}).get("enabled", True))
+
+
 def notify(ads: list[Ad], config: dict[str, Any]) -> list[Ad]:
     """Bonnes affaires (≥ min_score) : un message chacune. Annonces « à vérifier »
     (≥ watch_score) : un seul récapitulatif. Renvoie les bonnes affaires envoyées."""
     cfg = config["notifier"]
+    if not enabled(config):
+        return []  # notifications coupées (Réglages) ou recherche ponctuelle
     min_score = int(cfg["min_score"])
     watch_score = cfg.get("watch_score")
     deal_types = set(cfg.get("deal_types") or ("reparation", "revente_directe"))

@@ -318,3 +318,19 @@ def test_stats_use_the_same_margins_as_the_list(client, monkeypatch):
     c, _ = client
     assert c.get("/api/stats").status_code == 200
     assert seen and seen[0] is not None
+
+
+def test_notifications_switch_and_silent_one_off_search(client, monkeypatch, config):
+    from dealsniper import notifier
+    from dealsniper.config import load_config
+
+    c, path = client
+    settings = c.get("/api/settings").get_json()
+    settings["notifier"]["enabled"] = False
+    assert c.put("/api/settings", json=settings).get_json() == {"ok": True}
+    assert load_config(path)["notifier"]["enabled"] is False
+
+    config["notifier"]["enabled"] = False
+    monkeypatch.setattr(notifier.Notifier, "send_ad", lambda *a: (_ for _ in ()).throw(AssertionError("envoi")))
+    assert notifier.notify([], config) == []
+    assert notifier.enabled({"notifier": {}})  # absent = activé (anciennes configurations)
