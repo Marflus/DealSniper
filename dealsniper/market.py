@@ -44,7 +44,7 @@ STOPWORDS = {"de", "du", "des", "la", "le", "les", "et", "avec", "sans", "pour",
 BROKEN = ("hs", "h.s", "panne", "en panne", "pour pieces", "pieces detachees", "a reparer", "reparer",
           "ne s'allume", "ne demarre", "ne fonctionne", "ne marche", "casse", "cassee", "defectueux",
           "defectueuse", "bloque", "bloquee", "sans ssd", "sans disque", "sans ecran", "sans carte mere",
-          "ecran fissure", "dalle cassee", "oxyde", "probleme", "bug", "pour bricoleur")
+          "ecran fissure", "dalle cassee", "oxyde", "probleme", "bug", "pour bricoleur", "ecran noir")
 
 
 def category_brands(config: dict[str, Any]) -> list[str]:
@@ -128,7 +128,14 @@ def central_median(prices: list[float]) -> float | None:
         return None
     values = sorted(prices)
     cut = len(values) // 5
-    return round(statistics.median(values[cut:len(values) - cut] or values), 0)
+    median = statistics.median(values[cut:len(values) - cut] or values)
+    # Prix sans rapport avec l'appareil (housses, boîtes à 5-15 € pour une cote de 300 €) : écartés, puis
+    # médiane recalculée. Sans cela, 6 accessoires donnaient au MacBook Air M1 une cote de 139 €.
+    kept = [p for p in values if p >= median / 3]
+    if len(kept) != len(values) and len(kept) >= MIN_SAMPLES:
+        cut = len(kept) // 5
+        median = statistics.median(kept[cut:len(kept) - cut] or kept)
+    return round(median, 0)
 
 
 @dataclass

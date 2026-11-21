@@ -36,7 +36,7 @@ def test_working_and_device_detection():
 
 def test_central_median_ignores_outliers():
     assert central_median([150, 160, 170]) is None  # pas assez d'annonces
-    assert central_median([10, 150, 160, 170, 180, 190, 2000]) == 170
+    assert central_median([10, 150, 160, 170, 180, 190, 2000]) == 175  # 10 € écarté (moins du tiers)
 
 
 def make_ad(i, title, price):
@@ -100,7 +100,8 @@ def test_game_or_accessory_is_not_the_console(config):
              "Super Mario Odyssey Switch", "Jeu Switch Pokemon Violet", "Coque Switch OLED", "Pokémon Jaune Game Boy"]
     consoles = ["Nintendo Switch OLED + 3 jeux", "PS5 digital + manette", "Console PS4 slim 500 Go",
                 "Lot Nintendo Switch + Mario Kart", "Sony PlayStation 5 slim", "Steam Deck OLED 512",
-                "Switch Lite turquoise", "Game Boy Color jaune", "Xbox Series X 1To"]
+                "Switch Lite turquoise", "Game Boy Color jaune", "Xbox Series X 1To",
+                "Bonjour je vend ma ps4 marche très bien"]
     others = ["Carte graphique RTX 3080", "Casque Sony WH-1000XM4", "Mario Kart 8 Deluxe"]
     assert all(game_or_accessory(t) for t in games)
     assert not any(game_or_accessory(t) for t in consoles + others)
@@ -164,3 +165,18 @@ def test_vinted_card_details_are_kept():
     assert _clean_vinted_title(raw) == "Lenovo ThinkPad T480 | i7, 16GB"
     assert _vinted_details(raw) == "Marque : Lenovo | Modèle : ThinkPad T480 | État : Très bon état | Taille : 14"
     assert _vinted_details("Des baskets") == ""
+
+
+def test_accessories_do_not_pollute_the_quote():
+    """MacBook Air M1 : 6 housses, boîtes et hubs à 5-15 € donnaient une cote de 139 € (vraies M1 écartées)."""
+    from dealsniper.market import central_median, is_the_device, is_working
+
+    junk = ["Boite Macbook Air 13\" M1", "Hub USB-C multipuerto Compatible MacBook Air M1",
+            "Finite Case for MacBook Air 13.3", "BlueSwan Custodia Macbook Air 13",
+            "Top Case et carte mère MacBook Air"]
+    assert not any(is_the_device(t) for t in junk)
+    assert is_the_device("MacBook Air M1 2020") and is_the_device("Top état MacBook Air M1")
+    assert not is_working("MacBook Air M1 écran noir quand on l'incline")
+    prices = [5, 8, 8.9, 12, 15, 15, 139, 150, 200, 290, 300, 340, 350, 350]
+    assert central_median(prices) > 250  # les prix sans rapport ne tirent plus la cote vers le bas
+    assert central_median([200, 210, 220, 230, 240]) == 220

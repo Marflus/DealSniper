@@ -23,7 +23,8 @@ GAME_FIRST = {"jeu", "jeux", "game", "games", "manette", "manettes", "cartouche"
               "etui", "station", "dock", "cable", "carte", "support", "batterie", "sacoche", "skin", "protection"}
 # Mots qui peuvent précéder la plateforme dans le titre d'une console (« Lot Nintendo Switch »…).
 _LEAD_WORDS = {"nintendo", "sony", "microsoft", "valve", "new", "nouvelle", "la", "le", "une", "un", "lot",
-               "pack", "console", "vends", "vend", "superbe", "tres", "bon", "etat", "neuve", "neuf"}
+               "pack", "console", "vends", "vend", "superbe", "tres", "bon", "etat", "neuve", "neuf",
+               "bonjour", "salut", "je", "j'ai", "ma", "mon", "mes", "ta", "a", "vendre", "donne", "cede", "ancienne"}
 _WORD_RE = re.compile(r"[a-z0-9][a-z0-9'-]*")
 
 
@@ -45,13 +46,17 @@ def game_or_accessory(title: str) -> str | None:
 
 
 # Pas l'appareil lui-même : accessoire vendu seul, lot, boîte…
-NOT_THE_DEVICE = ("seul", "seule", "lot de", "boite vide", "accessoire", "accessoires", "pieces detachees")
+NOT_THE_DEVICE = ("seul", "seule", "lot de", "boite vide", "accessoire", "accessoires", "pieces detachees",
+                  "compatible", "compatibles")  # « Hub USB-C … Compatible MacBook Air M1 »
 # Titre qui commence par une pièce ou un accessoire : « Chargeur ThinkPad T480 », « Batterie Dyson V10 ».
 ACCESSORY_FIRST = {"chargeur", "batterie", "clavier", "coque", "housse", "etui", "dalle", "nappe", "carte",
                    "alimentation", "cable", "adaptateur", "station", "dock", "telecommande", "pied", "support",
                    "brosse", "filtre", "tete", "ventilateur", "charniere", "disque", "ssd", "ram", "memoire",
                    "sacoche", "sac", "piece", "pieces", "accessoire", "kit", "bloc", "palmrest", "capot",
-                   "chassis", "dissipateur", "ventilo", "plasturgie", "docking"}
+                   "chassis", "dissipateur", "ventilo", "plasturgie", "docking",
+                   # boîtes, housses, hubs… y compris dans les annonces étrangères de Vinted (« Custodia », « Caja »)
+                   "boite", "caja", "scatola", "verpakking", "custodia", "funda", "case", "cover", "sleeve",
+                   "pochette", "hub", "film", "protection", "cargador", "bateria", "topcase", "skin"}
 # Signal pour l'IA : seulement les cas nets (« lot de » peut être un lot d'appareils).
 _PART_PHRASES = ("seul", "seule", "pieces detachees", "piece detachee")
 
