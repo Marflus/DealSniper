@@ -308,9 +308,22 @@ def _health(row: dict) -> dict:
     return {"last_ok": row.get("last_ok"), "last_count": row.get("last_count"), "last_error": row.get("last_error")}
 
 
-def create_app() -> Flask:
+# Actions refusées en mode démo : elles contacteraient les vrais sites, Telegram / Discord ou l'IA payante.
+DEMO_BLOCKED = ("/api/run", "/api/search-now", "/api/check", "/api/test-notif", "/market-analysis", "/questions",
+                "/api/secrets")
+
+
+def create_app(demo: bool = False) -> Flask:
     app = Flask(__name__, static_folder=None)
     protect(app, ui_token(data_dir()))  # anti-CSRF, anti-rebinding DNS, jeton pour le réseau local
+
+    if demo:
+        @app.before_request
+        def _demo_only():
+            if request.method == "POST" and request.path.endswith(DEMO_BLOCKED):
+                return jsonify(ok=False, error="Mode démo : fausses données, aucun passage ni appel extérieur. "
+                                               "Lancez start_ui.bat pour le vrai Deal Sniper."), 409
+            return None
     state = {"running": False, "error": None}
     check: dict[str, Any] = {"running": False, "report": None, "stop": False}  # « Encore en ligne ? »
     lock = threading.Lock()
@@ -694,7 +707,8 @@ def create_app() -> Flask:
         from ..notifier import Notifier
         from ..sites import load_sites, skipped
 
-        report: dict[str, Any] = {"anthropic": bool(env("ANTHROPIC_API_KEY")), "channels": Notifier().channels,
+        report: dict[str, Any] = {"demo": demo, "anthropic": bool(env("ANTHROPIC_API_KEY")),
+                                  "channels": Notifier().channels,
                                   "sites": [], "error": None, "ai_enabled": True}
         try:
             config = current_config()

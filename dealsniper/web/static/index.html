@@ -22,7 +22,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><img src="/static/logo.svg" alt="" width="30" height="30"><span>Deal<b>Sniper</b></span></div>
+    <div class="brand"><img src="/static/logo.svg" alt="" width="30" height="30"><span>Deal<b>Sniper</b></span><em id="demo-badge" class="demo-badge" hidden title="Fausses données : aucun passage, aucun appel extérieur">DÉMO</em></div>
     <nav class="tabs">
       <button class="tab active" data-tab="ads">Annonces</button>
       <button class="tab" data-tab="search">Recherche</button>
@@ -230,7 +230,7 @@
               <div class="label">Seuils supplémentaires <span class="muted">(facultatif)</span></div>
               <div class="inline-fields">
                 <label>Marge minimale<span class="affix"><input id="n-margin" type="number" placeholder="aucune"><i>€</i></span></label>
-                <label>Facilité de réparation<span class="affix"><input id="n-ease" type="number" min="1" max="10" placeholder="toutes"><i>/10</i></span></label>
+                <label>Réparabilité<span class="affix"><input id="n-ease" type="number" min="1" max="10" placeholder="toutes"><i>/10</i></span></label>
                 <label>Facilité de vente<span class="affix"><input id="n-sale" type="number" min="1" max="10" placeholder="toutes"><i>/10</i></span></label>
               </div>
               <div class="panel-foot"><button id="test-notif" class="ghost">🔔 Envoyer une fausse annonce pour tester</button></div>

@@ -7,6 +7,8 @@ Aucun appel réseau : des annonces et des achats fictifs sont écrits dans une b
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from .db import Database
 from .models import Ad
 
@@ -52,11 +54,13 @@ DEMO_ADS = [
 
 DEMO_PURCHASES = [
     {"title": "Lenovo ThinkPad T470 — sans SSD", "source": "leboncoin", "model": "thinkpad t470",
-     "buy_price": 70, "repair_cost": 25, "estimated_resale": 190, "sold_price": 185, "sold_at": "2026-11-12"},
+     "buy_price": 70, "repair_cost": 25, "estimated_resale": 190, "sold_price": 185, "hours_spent": 3,
+     "bought_days_ago": 30, "sold_days_ago": 18},
     {"title": "Dyson V8 — batterie HS", "source": "vinted", "model": "dyson v8",
-     "buy_price": 45, "repair_cost": 35, "estimated_resale": 150, "sold_price": 160, "sold_at": "2026-11-16"},
+     "buy_price": 45, "repair_cost": 35, "estimated_resale": 150, "sold_price": 160, "hours_spent": 1.5,
+     "bought_days_ago": 14, "sold_days_ago": 5},
     {"title": "MacBook Pro 2015 — clavier à changer", "source": "ebay", "model": "macbook pro 2015",
-     "buy_price": 180, "repair_cost": 60},  # encore en stock
+     "buy_price": 180, "repair_cost": 60, "bought_days_ago": 3},  # encore en stock
 ]
 
 
@@ -77,6 +81,11 @@ def seed(db: Database) -> None:
         asyncio.run(db.remember(ad, status, reason=reason))
         if i in (0, 2):  # un favori, pour montrer la vue « Favoris »
             db.mark(ad.uid, favorite=True)
-    for purchase in DEMO_PURCHASES:
+    today = date.today()
+    for demo in DEMO_PURCHASES:  # dates relatives à aujourd'hui : achat toujours avant la revente
+        purchase = {k: v for k, v in demo.items() if not k.endswith("_days_ago")}
+        purchase["bought_at"] = (today - timedelta(days=demo["bought_days_ago"])).isoformat()
+        if "sold_days_ago" in demo:
+            purchase["sold_at"] = (today - timedelta(days=demo["sold_days_ago"])).isoformat()
         pid = db.add_purchase(purchase)
         db.record_sale(pid, purchase.get("model"), purchase.get("sold_price"))

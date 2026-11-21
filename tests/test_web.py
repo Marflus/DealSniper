@@ -288,3 +288,16 @@ def test_favorites_view_ignores_the_period(client):
     assert not [a for a in c.get("/api/ads?days=7").get_json()["ads"] if a["favorite"]]
     favs = c.get("/api/ads?days=3650&only=favorite").get_json()["ads"]
     assert [a["uid"] for a in favs] == ["ebay:100000000001"]
+
+
+def test_demo_mode_never_reaches_the_outside(client):
+    """Mode démo : pas de passage, de recherche, de vérification, de notification ni d'IA (fausses données)."""
+    from dealsniper.web.app import create_app
+
+    demo = create_app(demo=True).test_client()
+    for path in ("/api/run", "/api/search-now", "/api/check", "/api/test-notif", "/api/secrets",
+                 "/api/ads/ebay:100000000001/market-analysis", "/api/ads/ebay:100000000001/questions"):
+        resp = demo.post(path, json={"query": "x", "uids": ["ebay:100000000001"]})
+        assert resp.status_code == 409 and "démo" in resp.get_json()["error"], path
+    assert demo.get("/api/status").get_json()["demo"] is True
+    assert demo.post("/api/ads/ebay:100000000001/mark", json={"favorite": True}).status_code == 200  # local : ok

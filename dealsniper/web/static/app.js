@@ -1760,6 +1760,7 @@ $("#st-days").addEventListener("change", loadStats);
 async function loadStatus() {
   const s = await api("/api/status").catch(() => null);
   if (!s) return;
+  $("#demo-badge").hidden = !s.demo;
   renderSearchSites(s.sites || []);
   const items = [
     s.ai_enabled === false
