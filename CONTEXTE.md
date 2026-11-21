@@ -55,11 +55,18 @@ les décisions en attente et les limites à respecter. Pour le détail technique
 - Notifications : interrupteur dans Réglages + rien pendant une recherche ponctuelle. FAIT.
 - ~76 jeux / accessoires / pièces surestimés renotés (0,005 $). FAIT.
 
-## Questions réexpliquées à Marius, réponse en attente
-2. Lire la description complète des annonces retenues (une visite de plus par annonce retenue).
-3. Notation plus juste pour vêtements / chaussures (repères de prix mode).
-6. Leboncoin bloqué à chaque passage : l'espacer (toutes les 1-2 h) ou l'arrêter.
-7. Après une analyse approfondie, la carte reprend-elle sa note et sa revente ?
+- Descriptions : Vinted lit le texte du vendeur des 15 MIEUX NOTÉES par passage, puis les renote (FAIT).
+  Leboncoin : prêt mais désactivé (`fetch_details: false`) ; Marius verra plus tard pour leboncoin.
+- Mode / chaussures : non, Marius cherche surtout de l'électronique.
+- Après une analyse approfondie, la carte reprend revente, marge et note du verdict (FAIT).
+
+## Pistes non traitées (constatées en test réel)
+- Notation rapide instable sans cote : même Steam Deck OLED 512 Go estimé 300 € ou 420 € selon le lot
+  (une vraie affaire à 240 € notée 2/10). Idée : repères de prix électronique, ou analyse approfondie auto
+  des meilleures annonces.
+- Facebook : livraison inconnue → toutes écartées avec « Livrable obligatoire ».
+- Leboncoin : 10 recherches × 2 pages toutes les 15-25 min ; proposition faite (1 page, toutes les 1-1,5 h).
+- eBay : inscription développeur refusée (e-mail contenant « bot » probablement en cause).
 
 ## Ce que Marius a demandé à la session locale
 Ouvrir http://127.0.0.1:5000, tout tester avec ses vraies données, lancer des recherches réelles et comparer
