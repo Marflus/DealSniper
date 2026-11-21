@@ -248,12 +248,20 @@ class Engine:
         kept.sort(key=lambda ad: (not ad.watched, *filters.priority(ad)))
         cap = int(self.config["analyzer"].get("max_ads_per_run") or 0)
         candidates, rejected = [], []
+        # Fiches ouvertes par passage (une page de plus chacune) : les plus prometteuses d'abord, les
+        # suivantes sont notées avec les seules infos de la liste.
+        max_details = site.cfg.get("max_details", getattr(site, "max_details_default", None))
+        details = 0
         try:
             for ad in kept:
                 if self.stopping.is_set() or (cap and len(candidates) >= cap):
                     break  # le reste reviendra au prochain passage
-                if site.cfg.get("fetch_details", True):  # sinon : moins de requêtes / fenêtres
-                    await self.sleep(random.uniform(*self.network["detail_delay"]))
+                wants_detail = site.cfg.get("fetch_details", getattr(site, "details_default", True))
+                if wants_detail and (max_details is None or details < int(max_details)):
+                    details += 1
+                    self.progress.update(site.label, f"{len(listed)} annonces · lecture des fiches ({details})")
+                    pause = site.cfg.get("detail_delay") or self.network["detail_delay"]  # propre au site si fixé
+                    await self.sleep(random.uniform(*pause))
                     try:
                         ad = await site.fetch_detail(self.http, ad)
                     except AccessDenied:

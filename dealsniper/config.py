@@ -61,7 +61,7 @@ DEFAULTS: dict[str, Any] = {
     "categories": [],
     "watchlist": [],  # veille : modèles précis repérés en priorité (watch.py)
     "analyzer": {"enabled": True, "model": "claude-haiku-5-5", "effort": None, "batch_size": 20,
-                 "max_description_chars": 400,
+                 "max_description_chars": 800,
                  "max_tokens": 4096, "max_daily_cost_usd": 1.00, "resale_haircut": 0.9, "auto_calibrate": True,
                  "deep_model": "claude-sonnet-5-5", "max_ads_per_run": None, "market_min_margin": 15,
                  "max_retries": 4, "timeout_seconds": 90, "structured_output": True, "pricing": {}},

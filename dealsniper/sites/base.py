@@ -23,10 +23,21 @@ async def link_image(link) -> str | None:
     return None
 
 
+def merge_description(listed: str, body: str, limit: int = 2000) -> str:
+    """Description de la fiche (texte du vendeur : pannes, défauts…) ajoutée après les infos de la liste
+    (« État : Bon état | Marque : Lenovo »)."""
+    body = (body or "").strip()
+    if not body:
+        return listed
+    return " | ".join(p for p in (listed.strip(), body) if p)[:limit]
+
+
 class Site:
     name = "site"                 # clé du site dans config.yaml > sites
     label = ""                    # nom affiché (par défaut : name avec une majuscule)
     uses_condition = False        # True si le site sait filtrer l'état (« pour pièces », « occasion »)
+    details_default = True        # `fetch_details` absent de config.yaml : lire les fiches ?
+    max_details_default: int | None = None  # `max_details` absent : fiches lues au plus par passage
 
     def __init__(self, cfg: dict[str, Any], config: dict[str, Any]):
         self.cfg = cfg            # le bloc config.yaml > sites > <name>

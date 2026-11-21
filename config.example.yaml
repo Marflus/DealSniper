@@ -52,6 +52,9 @@ sites:
     enabled: true
     interval: [900, 1500]      # recherches communes : passages plus espacés pour rester discret
     limit: 96                  # une page Vinted pleine = 96 annonces (1 seule page chargée) ; max_pages : 3 par défaut
+    fetch_details: true        # lit le texte du vendeur (pannes, défauts) des annonces retenues
+    max_details: 15            # au plus 15 fiches ouvertes par passage, les plus prometteuses d'abord
+    detail_delay: [3, 6]       # pause (s) avant chaque fiche
     searches: []
 
   leboncoin:
@@ -59,6 +62,9 @@ sites:
     headless: false
     interval: [900, 1500]
     limit: 25                  # annonces par recherche (sans cette ligne : 70) ; max_pages : 3 par défaut
+    fetch_details: false       # true = lit le texte du vendeur (absent de la liste) : 1 page de plus par fiche
+    max_details: 5             # si activé : 5 fiches au plus par passage (leboncoin bloque vite)
+    detail_delay: [8, 15]
     searches:
       # Catégories LBC : 15=Informatique, 16=Image&Son, 43=Consoles, 21=Bricolage
       - {query: "tv pas d'image", category: '16', max_price: 120}  # rétroéclairage : réparation simple, retrait sur place
@@ -256,7 +262,7 @@ analyzer:
   # Effort « low » et réflexion désactivée automatiquement : la notation n'en a pas besoin.
   model: "claude-haiku-5-5"
   batch_size: 20              # annonces par appel API (le prompt système est payé une fois par lot)
-  max_description_chars: 400  # description tronquée avant envoi à l'IA
+  max_description_chars: 800  # texte du vendeur envoyé à l'IA (les pannes sont souvent en fin de texte)
   resale_haircut: 0.9         # prudence : revente estimée × 0,9, puis marge recalculée (1 = désactivé)
   auto_calibrate: true        # dès 3 achats revendus (onglet Achats), le rabot suit vos ventes réelles
   deep_model: "claude-sonnet-5-5"  # bouton « Analyse approfondie » : modèle + recherche web (à la demande, ~qq centimes)

@@ -768,3 +768,35 @@ def test_watch_mode_stops_cleanly(monkeypatch, config):
     assert not thread.is_alive()
     with run_lock(data_dir()):
         pass
+
+
+def test_detail_pages_are_capped_per_run(monkeypatch, config):
+    """`max_details` : au plus N fiches ouvertes par passage (une page de plus chacune), les autres annonces
+    sont notées avec les infos de la liste."""
+    monkeypatch.setattr(engine.analyzer, "analyze", fake_analyze)
+
+    async def go():
+        db = Database(data_dir() / "cap.db")
+        site = FakeSite(config)
+        site.cfg["max_details"] = 1
+        async with client() as http:
+            stats = await engine.Engine(config, db, http).process(site)
+        db.close()
+        return site, stats
+
+    site, stats = asyncio.run(go())
+    assert site.details == ["ebay:100000000001"]  # Latitude non ouverte : pas de « carte mère oxydée » vue
+    assert stats["retenues"] == 2
+
+
+def test_vinted_and_leboncoin_detail_defaults():
+    from dealsniper.sites.base import merge_description
+    from dealsniper.sites.leboncoin import LeboncoinSite
+    from dealsniper.sites.vinted import VintedSite, ld_description
+
+    assert LeboncoinSite.details_default is False and VintedSite.max_details_default == 15
+    blocks = ['{"@type":"Product","name":"X390","description":"Quelques lignes de pixels hs sur l\'écran"}']
+    assert ld_description(blocks) == "Quelques lignes de pixels hs sur l'écran"
+    assert ld_description(["pas du json"]) == ""
+    assert merge_description("État : Bon état", "Écran HS") == "État : Bon état | Écran HS"
+    assert merge_description("État : Bon état", "") == "État : Bon état"

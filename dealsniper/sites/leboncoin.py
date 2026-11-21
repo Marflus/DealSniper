@@ -16,7 +16,7 @@ from ..config import data_dir
 from ..http import AccessDenied, PoliteClient
 from ..models import Ad
 from ..utils.text import clean_html
-from .base import Site
+from .base import Site, merge_description
 
 log = logging.getLogger(__name__)
 
@@ -95,6 +95,8 @@ def _item_description(item: dict[str, Any]) -> str:
 
 class LeboncoinSite(Site):
     name = "leboncoin"
+    details_default = False       # une page de plus par fiche chez un site qui bloque vite : à activer soi-même
+    max_details_default = 5
 
     def __init__(self, cfg: dict[str, Any], config: dict[str, Any]):
         super().__init__(cfg, config)
@@ -215,4 +217,26 @@ class LeboncoinSite(Site):
         return ads
 
     async def fetch_detail(self, http: PoliteClient, ad: Ad) -> Ad:
+        """Texte du vendeur (la liste de résultats ne le contient plus : `body` y est vide), lu sur la page
+        de l'annonce. Désactivé par défaut (`fetch_details`) : chaque fiche est une page de plus chez un site
+        qui bloque vite ; garder `max_details` bas. Page de protection au lieu de l'annonce : pause du site."""
+        async with async_playwright() as p:
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=str(self.profile_dir),
+                channel="chrome",
+                headless=self.headless,
+                locale="fr-FR",
+                viewport={"width": 1280, "height": 900},
+            )
+            try:
+                page = await context.new_page()
+                await page.goto(ad.url, wait_until="domcontentloaded", timeout=30000)
+                try:
+                    raw = await page.locator("script#__NEXT_DATA__").text_content(timeout=8000)
+                except PlaywrightTimeout:
+                    raise AccessDenied("leboncoin : fiche bloquée par la protection anti-robots") from None
+            finally:
+                await context.close()
+        body = ((json.loads(raw or "{}").get("props") or {}).get("pageProps") or {}).get("ad") or {}
+        ad.description = merge_description(ad.description, clean_html(body.get("body") or ""))
         return ad

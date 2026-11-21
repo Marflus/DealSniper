@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import random
 import re
@@ -17,7 +18,7 @@ from ..http import PoliteClient
 from ..models import Ad
 from ..utils.prices import extract_price
 from ..utils.text import clean_html
-from .base import Site, link_image
+from .base import Site, link_image, merge_description
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ PER_PAGE = 96  # annonces par page de résultats Vinted (vérifié le 21/11/2026
 
 class VintedSite(Site):
     name = "vinted"
+    max_details_default = 15      # une page par fiche : les 15 plus prometteuses par passage
     BASE_URL = "https://www.vinted.fr"
 
     def __init__(self, cfg: dict[str, Any], config: dict[str, Any]):
@@ -170,4 +172,30 @@ class VintedSite(Site):
         return ads
 
     async def fetch_detail(self, http: PoliteClient, ad: Ad) -> Ad:
+        """Texte du vendeur (pannes, défauts…), lu sur la page de l'annonce : seulement pour les annonces qui
+        ont passé les filtres, dans la limite de `max_details` par passage (réglé dans config.yaml)."""
+        async with async_playwright() as p:
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=str(self.profile_dir), headless=self.headless, locale="fr-FR",
+            )
+            try:
+                page = await context.new_page()
+                await page.goto(ad.url, wait_until="domcontentloaded", timeout=25000)
+                blocks = await page.locator('script[type="application/ld+json"]').all_text_contents()
+            finally:
+                await context.close()
+        ad.description = merge_description(ad.description, ld_description(blocks))
         return ad
+
+
+def ld_description(blocks: list[str]) -> str:
+    """Description d'un bloc JSON-LD « Product » (format standard des pages produit), sinon ""."""
+    for raw in blocks:
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            continue
+        for item in data if isinstance(data, list) else [data]:
+            if isinstance(item, dict) and item.get("description"):
+                return clean_html(str(item["description"]))
+    return ""
