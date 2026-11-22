@@ -313,8 +313,9 @@ def _json_body() -> dict[str, Any]:
 
 
 def _health(row: dict) -> dict:
-    """Résumé de santé d'un site pour /api/status (dernière récolte, nombre, dernière erreur)."""
-    return {"last_ok": row.get("last_ok"), "last_count": row.get("last_count"), "last_error": row.get("last_error")}
+    """Résumé de santé d'un site pour /api/status (dernière récolte, nombre, dernière erreur, pause)."""
+    return {"last_ok": row.get("last_ok"), "last_count": row.get("last_count"),
+            "last_error": row.get("last_error"), "paused_until": row.get("paused_until")}
 
 
 # Actions refusées en mode démo : elles contacteraient les vrais sites, Telegram / Discord ou l'IA payante.
@@ -732,11 +733,19 @@ def create_app(demo: bool = False) -> Flask:
                 health = db.site_health()
             report["sites"] = [{"name": s.name, "label": s.label, "ok": True, **_health(health.get(s.name, {}))}
                                for s in loaded] + [
-                {"name": name, "label": SITE_LABELS.get(name, name.capitalize()), "ok": False, "reason": reason}
+                {"name": name, "label": SITE_LABELS.get(name, name.capitalize()), "ok": False, "reason": reason,
+                 **_health(health.get(name, {}))}
                 for name, reason in skipped]
         except Exception as exc:  # config.yaml illisible : affiché tel quel
             report["error"] = str(exc)
         return jsonify(report)
+
+    @app.post("/api/sites/<site_name>/unpause")
+    def unpause_site(site_name: str):
+        """Lève la pause d'un site pour permettre un nouvel essai sans attendre la fin du délai."""
+        with database() as db:
+            db.unpause(site_name)
+        return jsonify(ok=True)
 
     @app.post("/api/secrets")
     def save_secrets():
