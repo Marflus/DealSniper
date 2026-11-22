@@ -742,7 +742,13 @@ def create_app(demo: bool = False) -> Flask:
 
     @app.post("/api/sites/<site_name>/unpause")
     def unpause_site(site_name: str):
-        """Lève la pause d'un site pour permettre un nouvel essai sans attendre la fin du délai."""
+        """Lève la pause d'un site pour permettre un nouvel essai sans attendre la fin du délai.
+        À utiliser après avoir validé la vérification dans la fenêtre : retenter juste après un refus
+        prolonge souvent le blocage (l'interface demande confirmation)."""
+        from ..engine import SITE_LABELS
+
+        if site_name not in SITE_LABELS:
+            return jsonify(ok=False, error="Site inconnu"), 404
         with database() as db:
             db.unpause(site_name)
         return jsonify(ok=True)

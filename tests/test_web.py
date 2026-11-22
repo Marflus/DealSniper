@@ -359,3 +359,8 @@ def test_search_results_say_which_search_they_belong_to(client):
     c, _ = client
     data = c.get("/api/search-results").get_json()
     assert data["query"] is None and data["running"] is False  # aucune recherche lancée
+
+
+def test_unpause_unknown_site_is_refused(client):
+    c, _ = client
+    assert c.post("/api/sites/inconnu/unpause").status_code == 404

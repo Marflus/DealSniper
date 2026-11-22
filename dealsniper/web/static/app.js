@@ -1794,7 +1794,10 @@ async function loadStatus() {
   $("#status-list").querySelectorAll("[data-unpause-site]").forEach((btn) => {
     btn.addEventListener("click", async (e) => {
       e.preventDefault();
-      await api(`/api/sites/${btn.dataset.unpauseSite}/unpause`, { method: "POST" });
+      const ok = confirm("Lever la pause maintenant ?\n\nRetenter juste après un blocage le prolonge souvent. "
+        + "Faites-le seulement après avoir validé la vérification dans la fenêtre Chrome (headless: false).");
+      if (!ok) return;
+      await api(`/api/sites/${encodeURIComponent(btn.dataset.unpauseSite)}/unpause`, { method: "POST" });
       loadStatus();
     });
   });

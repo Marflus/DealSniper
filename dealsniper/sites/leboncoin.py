@@ -151,13 +151,13 @@ class LeboncoinSite(Site):
                     try:
                         raw_json = await page.locator("script#__NEXT_DATA__").text_content(timeout=wait_ms)
                     except PlaywrightTimeout:
-                        if page_num == 1 and not ads:
-                            await context.close()
-                            raise AccessDenied(
-                                "leboncoin : bloqué par DataDome (mets headless: false dans config.yaml pour valider le captcha)"
-                            )
-                        log.warning("leboncoin : blocage/timeout sur page %d de « %s », on garde le reste.", page_num, query)
-                        break
+                        # Page de protection au lieu des résultats : on arrête TOUT de suite, même après des
+                        # recherches réussies (continuer les suivantes aggrave le blocage). Les annonces déjà
+                        # lues reviendront au prochain passage ; le site est mis en pause.
+                        await context.close()
+                        hint = ("valide la vérification dans la fenêtre Chrome au prochain passage" if not self.headless
+                                else "mets headless: false dans config.yaml pour valider toi-même la vérification")
+                        raise AccessDenied(f"leboncoin : bloqué par DataDome sur « {query} » ({hint})") from None
 
                     data = json.loads(raw_json or "{}")
                     search_data = (
@@ -211,8 +211,9 @@ class LeboncoinSite(Site):
 
                 log.info("leboncoin : %d annonce(s) trouvée(s) pour « %s »", count, query)
                 self.report(query, count)
-                search_delay = self.cfg.get("search_delay") or [8.0, 15.0]
-                await asyncio.sleep(random.uniform(*search_delay))
+                if search is not self.cfg["searches"][-1]:  # pas d'attente inutile après la dernière recherche
+                    search_delay = self.cfg.get("search_delay") or [8.0, 15.0]
+                    await asyncio.sleep(random.uniform(*search_delay))
 
             await context.close()
         return ads
