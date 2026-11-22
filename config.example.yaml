@@ -59,9 +59,11 @@ sites:
 
   leboncoin:
     enabled: true
-    headless: false
-    interval: [900, 1500]
-    limit: 25                  # annonces par recherche (sans cette ligne : 70) ; max_pages : 3 par défaut
+    headless: false            # false = ouvre une fenêtre Chrome : permet de valider le captcha initial si demandé
+    interval: [3600, 5400]     # 1 h à 1 h 30 : passages espacés pour éviter les blocages DataDome
+    limit: 35                  # une page LBC pleine = 35 annonces ; max_pages : 1 par défaut
+    max_pages: 1
+    search_delay: [8, 15]      # pause (s) aléatoire entre deux recherches
     fetch_details: false       # true = lit le texte du vendeur (absent de la liste) : 1 page de plus par fiche
     max_details: 5             # si activé : 5 fiches au plus par passage (leboncoin bloque vite)
     detail_delay: [8, 15]

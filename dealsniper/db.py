@@ -432,6 +432,14 @@ class Database:
                          "last_error = excluded.last_error", (site, until.isoformat(timespec="seconds"), reason))
         return until
 
+    async def clear_pause(self, site: str) -> None:
+        """Lève la pause d'un site (par exemple après avoir validé un captcha ou espacé les requêtes)."""
+        await self._asql("UPDATE sites SET paused_until = NULL WHERE name = ?", (site,))
+
+    def unpause(self, site: str) -> None:
+        """Version synchrone de clear_pause pour l'API web."""
+        self._sql("UPDATE sites SET paused_until = NULL WHERE name = ?", (site,))
+
     async def record_site_ok(self, site: str, count: int) -> None:
         """Dernière récolte réussie d'un site (pour l'indicateur de santé)."""
         now = _stamp()

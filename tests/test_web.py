@@ -187,6 +187,24 @@ def test_site_health_records_and_clears_error(tmp_path):
     assert after["vinted"]["last_error"] is None and after["vinted"]["last_count"] == 25
 
 
+def test_site_unpause(client):
+    import asyncio
+
+    from dealsniper.config import data_dir
+    from dealsniper.db import Database
+
+    c, _ = client
+    with Database(data_dir() / "dealsniper.db") as db:
+        asyncio.run(db.pause("leboncoin", 6, "DataDome"))
+    status = c.get("/api/status").get_json()
+    lbc = next(s for s in status["sites"] if s["name"] == "leboncoin")
+    assert lbc["paused_until"] is not None
+    assert c.post("/api/sites/leboncoin/unpause").get_json() == {"ok": True}
+    status = c.get("/api/status").get_json()
+    lbc = next(s for s in status["sites"] if s["name"] == "leboncoin")
+    assert lbc["paused_until"] is None
+
+
 def test_max_ads_per_run_saved(client):
     c, path = client
     settings = c.get("/api/settings").get_json()
@@ -341,3 +359,8 @@ def test_search_results_say_which_search_they_belong_to(client):
     c, _ = client
     data = c.get("/api/search-results").get_json()
     assert data["query"] is None and data["running"] is False  # aucune recherche lancée
+
+
+def test_unpause_unknown_site_is_refused(client):
+    c, _ = client
+    assert c.post("/api/sites/inconnu/unpause").status_code == 404

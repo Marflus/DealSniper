@@ -57,6 +57,9 @@ les décisions en attente et les limites à respecter. Pour le détail technique
 
 - Descriptions : Vinted lit le texte du vendeur des 15 MIEUX NOTÉES par passage, puis les renote (FAIT).
   Leboncoin : prêt mais désactivé (`fetch_details: false`) ; Marius verra plus tard pour leboncoin.
+- Leboncoin anti-blocage DataDome : 1 page par recherche (`limit: 35`, `max_pages: 1`), passages espacés à 1 h - 1 h 30
+  (`interval: [3600, 5400]`), pause aléatoire de 8-15 s entre chaque recherche (`search_delay`), mode visible (`headless: false`)
+  pour valider le captcha initial dans Chrome (cookie conservé dans `lbc_profile`), et bouton pour lever la pause dans l'UI. FAIT.
 - Mode / chaussures : non, Marius cherche surtout de l'électronique.
 - Après une analyse approfondie, la carte reprend revente, marge et note du verdict (FAIT).
 
@@ -65,7 +68,6 @@ les décisions en attente et les limites à respecter. Pour le détail technique
   (une vraie affaire à 240 € notée 2/10). Idée : repères de prix électronique, ou analyse approfondie auto
   des meilleures annonces.
 - Facebook : livraison inconnue → toutes écartées avec « Livrable obligatoire ».
-- Leboncoin : 10 recherches × 2 pages toutes les 15-25 min ; proposition faite (1 page, toutes les 1-1,5 h).
 - eBay : inscription développeur refusée (e-mail contenant « bot » probablement en cause).
 
 ## Ce que Marius a demandé à la session locale

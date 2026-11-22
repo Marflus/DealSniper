@@ -107,8 +107,8 @@ class LeboncoinSite(Site):
         return bool(self.cfg.get("searches"))
 
     async def list_recent(self, http: PoliteClient) -> list[Ad]:
-        limit = int(self.cfg.get("limit", 70))
-        default_pages = max(1, int(self.cfg.get("max_pages", 3)))
+        limit = int(self.cfg.get("limit", 35))
+        default_pages = max(1, int(self.cfg.get("max_pages", 1)))
         ads: list[Ad] = []
         seen_urls: set[str] = set()
 
@@ -120,7 +120,7 @@ class LeboncoinSite(Site):
                 locale="fr-FR",
                 viewport={"width": 1280, "height": 900},
             )
-            page = await context.new_page()
+            page = context.pages[0] if context.pages else await context.new_page()
 
             for search in self.cfg["searches"]:
                 query = search["query"]
@@ -151,13 +151,13 @@ class LeboncoinSite(Site):
                     try:
                         raw_json = await page.locator("script#__NEXT_DATA__").text_content(timeout=wait_ms)
                     except PlaywrightTimeout:
-                        if page_num == 1 and not ads:
-                            await context.close()
-                            raise AccessDenied(
-                                "leboncoin : bloqué par DataDome (mets headless: false dans config.yaml pour valider le captcha)"
-                            )
-                        log.warning("leboncoin : blocage/timeout sur page %d de « %s », on garde le reste.", page_num, query)
-                        break
+                        # Page de protection au lieu des résultats : on arrête TOUT de suite, même après des
+                        # recherches réussies (continuer les suivantes aggrave le blocage). Les annonces déjà
+                        # lues reviendront au prochain passage ; le site est mis en pause.
+                        await context.close()
+                        hint = ("valide la vérification dans la fenêtre Chrome au prochain passage" if not self.headless
+                                else "mets headless: false dans config.yaml pour valider toi-même la vérification")
+                        raise AccessDenied(f"leboncoin : bloqué par DataDome sur « {query} » ({hint})") from None
 
                     data = json.loads(raw_json or "{}")
                     search_data = (
@@ -211,7 +211,9 @@ class LeboncoinSite(Site):
 
                 log.info("leboncoin : %d annonce(s) trouvée(s) pour « %s »", count, query)
                 self.report(query, count)
-                await asyncio.sleep(random.uniform(4.5, 8.0))
+                if search is not self.cfg["searches"][-1]:  # pas d'attente inutile après la dernière recherche
+                    search_delay = self.cfg.get("search_delay") or [8.0, 15.0]
+                    await asyncio.sleep(random.uniform(*search_delay))
 
             await context.close()
         return ads
@@ -229,7 +231,7 @@ class LeboncoinSite(Site):
                 viewport={"width": 1280, "height": 900},
             )
             try:
-                page = await context.new_page()
+                page = context.pages[0] if context.pages else await context.new_page()
                 await page.goto(ad.url, wait_until="domcontentloaded", timeout=30000)
                 try:
                     raw = await page.locator("script#__NEXT_DATA__").text_content(timeout=8000)

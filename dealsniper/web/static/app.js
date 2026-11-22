@@ -1784,11 +1784,23 @@ async function loadStatus() {
       if (!site.ok) return { ok: false, text: `${site.label} ignoré : ${site.reason}`, short: `${site.label} inactif`, why: site.reason };
       const last = site.last_ok ? `dernière récolte ${timeAgo(site.last_ok)}${site.last_count != null ? ` · ${site.last_count} annonces` : ""}` : "jamais récolté encore";
       const broken = site.last_error ? ` — ⚠️ dernière erreur : ${site.last_error}` : "";
-      return { ok: !site.last_error, text: `${site.label} : ${last}${broken}`, short: `${site.label} en erreur`, why: site.last_error };
+      const isPaused = site.paused_until && new Date(site.paused_until) > new Date();
+      const pausedText = isPaused ? ` [en pause jusqu'à ${new Date(site.paused_until).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}]` : "";
+      return { ok: !site.last_error && !isPaused, text: `${site.label} : ${last}${broken}${pausedText}`, short: isPaused ? `${site.label} en pause` : `${site.label} en erreur`, why: site.last_error, site: site.name, isPaused };
     }),
   ];
   if (s.error) items.push({ ok: false, text: `config.yaml illisible : ${s.error}` });
-  $("#status-list").innerHTML = items.map((i) => `<li class="${i.ok ? "ok" : "ko"}">${i.ok ? "✓" : "⚠"} ${esc(i.text)}</li>`).join("");
+  $("#status-list").innerHTML = items.map((i) => `<li class="${i.ok ? "ok" : "ko"}">${i.ok ? "✓" : "⚠"} ${esc(i.text)}${i.isPaused ? ` <button class="link small" data-unpause-site="${esc(i.site)}">Réessayer</button>` : ""}</li>`).join("");
+  $("#status-list").querySelectorAll("[data-unpause-site]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const ok = confirm("Lever la pause maintenant ?\n\nRetenter juste après un blocage le prolonge souvent. "
+        + "Faites-le seulement après avoir validé la vérification dans la fenêtre Chrome (headless: false).");
+      if (!ok) return;
+      await api(`/api/sites/${encodeURIComponent(btn.dataset.unpauseSite)}/unpause`, { method: "POST" });
+      loadStatus();
+    });
+  });
 
   // Bandeau sur l'onglet Annonces : seulement les problèmes, masquable.
   const problems = items.filter((i) => !i.ok);
