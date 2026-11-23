@@ -52,7 +52,7 @@ def cmd_ui(args, config) -> int:
         import webbrowser
 
         threading.Timer(1.5, webbrowser.open, (url,)).start()  # le temps que le serveur démarre
-    create_app(demo=args.demo).run(host=args.host, port=args.port, debug=False)
+    create_app(demo=args.demo, loops_enabled=not args.demo).run(host=args.host, port=args.port, debug=False)
     return 0
 
 

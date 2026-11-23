@@ -102,6 +102,7 @@ function showTab(tab) {
   if (tab === "purchases") loadPurchases();
   else if (tab === "stats") loadStats();
   else if (!["ads", "search"].includes(tab) && !settings) loadSettings();
+  if (tab === "saved" || loopPoll) refreshLoops();
   store.set("tab", tab);
 }
 document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
@@ -1404,6 +1405,7 @@ function watchRow(w) {
   </div>`;
 }
 // ---------- Recherches enregistrées ----------
+const LOOP_MIN = 30;  // minutes : pas plus souvent (rythme poli, risque de blocage)
 const SS_CONDITIONS = { any: "Tous états", used: "Occasion (fonctionnel)", parts: "Pour pièces / HS" };
 const ssOptions = (map, value) => Object.entries(map)
   .map(([v, label]) => `<option value="${v}" ${(value || "") === v ? "selected" : ""}>${label}</option>`).join("");
@@ -1429,6 +1431,13 @@ function savedCard(s) {
     </div>
     <div class="label">Exclure (mots)</div>
     <div class="tags red" data-s="exclude" data-placeholder="ex. boite vide"></div>
+    <div class="saved-loop">
+      <label class="switch"><input type="checkbox" data-s="loop" ${s.loop ? "checked" : ""}><span></span></label>
+      <b>En boucle</b>
+      <label>toutes les <span class="affix"><input data-s="every" type="number" min="${LOOP_MIN}" step="5"
+        value="${esc(s.every ?? 60)}"><i>min</i></span></label>
+      <span class="muted small" data-loop-status></span>
+    </div>
     <p class="muted small" data-s-hint></p>
   </article>`;
 }
@@ -1452,6 +1461,7 @@ function addSavedCard(s) {
 function renderSaved() {
   $("#saved-list").innerHTML = "";
   (settings.saved_searches || []).forEach(addSavedCard);
+  refreshLoops();
 }
 
 function readSaved(card) {
@@ -1461,8 +1471,50 @@ function readSaved(card) {
     min_price: v("min_price"), max_price: v("max_price"), condition: v("condition"), delivery: v("delivery"),
     seller: v("seller"), near: v("near"), km: v("km"), max_ads: v("max_ads"),
     exclude: getTags(card.querySelector('[data-s="exclude"]')),
+    loop: card.querySelector('[data-s="loop"]').checked, every: v("every"),
   };
 }
+
+// Recherches en boucle : « dernier scan il y a… · prochain dans… » sur chaque carte, tant que l'onglet est ouvert.
+let loopInfo = null, loopPoll = null;
+const fmtWait = (s) => s < 60 ? "moins d'une minute" : s < 3600 ? `${Math.round(s / 60)} min`
+  : `${Math.floor(s / 3600)} h ${String(Math.round((s % 3600) / 60)).padStart(2, "0")}`;
+
+function loopStatus(card) {
+  const el = card.querySelector("[data-loop-status]");
+  const on = card.querySelector('[data-s="loop"]').checked;
+  const every = Math.max(LOOP_MIN, Number(card.querySelector('[data-s="every"]').value) || 60);
+  const name = card.querySelector('[data-s="name"]').value.trim();
+  const info = loopInfo && loopInfo.searches[name];
+  card.classList.toggle("looping", on);
+  if (!on) { el.textContent = ""; return; }
+  if (!info || info.every !== every) {
+    el.textContent = "Enregistrez pour l'activer. Elle tournera tant que Deal Sniper reste ouvert.";
+    return;
+  }
+  if (!loopInfo.active) { el.textContent = "À l'arrêt en mode démo : lancez start_ui.bat."; return; }
+  if (loopInfo.running === name) { el.textContent = "Scan en cours…"; return; }
+  el.textContent = info.last_s === null ? "Premier scan dans moins d'une minute."
+    : `Dernier scan il y a ${fmtWait(info.last_s)} · prochain dans ${fmtWait(info.next_s)}.`;
+}
+async function refreshLoops() {
+  loopInfo = await api("/api/saved-loops").catch(() => loopInfo);
+  document.querySelectorAll("#saved-list [data-saved]").forEach(loopStatus);
+  const visible = !$("#tab-saved").hidden;
+  if (visible && !loopPoll) loopPoll = setInterval(refreshLoops, 30000);
+  if (!visible && loopPoll) { clearInterval(loopPoll); loopPoll = null; }
+}
+$("#saved-list").addEventListener("input", (e) => {
+  if (e.target.matches('[data-s="every"], [data-s="name"], [data-s="loop"]')) loopStatus(e.target.closest("[data-saved]"));
+});
+$("#saved-list").addEventListener("change", (e) => {
+  if (!e.target.matches('[data-s="every"]')) return;
+  if (Number(e.target.value) && Number(e.target.value) < LOOP_MIN) {
+    e.target.value = LOOP_MIN;
+    toast(`Toutes les ${LOOP_MIN} min au plus souvent, pour ne pas vous faire bloquer par les sites`);
+  }
+  loopStatus(e.target.closest("[data-saved]"));
+});
 
 $("#add-saved").addEventListener("click", () => {
   addSavedCard({ queries: [], exclude: [] }).querySelector('[data-s="name"]').focus();

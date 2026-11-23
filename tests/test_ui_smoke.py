@@ -136,3 +136,34 @@ def test_saved_searches_tab(server):
     assert errors == []
     assert posted and posted[-1]["queries"] == ["steam deck", "switch oled"]
     assert posted[-1]["name"] == "Consoles portables"
+
+
+def test_saved_search_loop_toggle(server):
+    """« En boucle » : intervalle limité à 30 min, enregistré, puis état du prochain scan affiché."""
+    sync_api = pytest.importorskip("playwright.sync_api")
+    errors = []
+    with sync_api.sync_playwright() as p:
+        browser = _browser(p)
+        page = browser.new_page()
+        page.on("pageerror", lambda exc: errors.append(str(exc)))
+        # Le serveur de test ne lance pas le planificateur : son état est simulé.
+        page.route("**/api/saved-loops", lambda route: route.fulfill(json={
+            "active": True, "running": None,
+            "searches": {"Mini-PC home lab": {"last_s": 720, "next_s": 1080, "every": 30}}}))
+        page.goto(server)
+        page.click(".tab[data-tab=saved]")
+        card = page.locator("#saved-list [data-saved]").first
+        card.wait_for()
+        card.locator('[data-s="loop"]').check(force=True)
+        card.locator('[data-s="every"]').fill("45")  # pas encore enregistré
+        sync_api.expect(card.locator("[data-loop-status]")).to_contain_text("Enregistrez")
+        every = card.locator('[data-s="every"]')
+        every.fill("5")
+        every.dispatch_event("change")
+        sync_api.expect(every).to_have_value("30")
+        page.keyboard.press("Control+s")
+        page.wait_for_function("document.querySelector('#save-status').innerText.includes('Tout est enregistré')")
+        sync_api.expect(card.locator("[data-loop-status]")).to_contain_text(
+            "Dernier scan il y a 12 min · prochain dans 18 min")
+        browser.close()
+    assert errors == []

@@ -713,4 +713,9 @@ button.danger, .primary.danger { background: var(--bad) !important; border-color
 .saved-criteria .affix input { width: 70px; }
 .saved-criteria [data-s="near"] { width: 110px; }
 .saved-card .label { margin: 4px 0 0; }
+.saved-loop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; color: var(--muted); }
+.saved-loop b { color: var(--fg); }
+.saved-loop .affix input { width: 64px; }
+.saved-loop [data-loop-status] { flex-basis: 100%; }
+.saved-card.looping { border-color: var(--accent, var(--line)); }
 @media (max-width: 560px) { .saved-head { flex-wrap: wrap; } .saved-head .saved-name { flex-basis: 100%; } }

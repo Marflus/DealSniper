@@ -81,4 +81,4 @@ Demander les décisions ci-dessus avant de coder ce qui en dépend.
   fournis : « Mini-PC home lab » et « Tour évolutive home lab ». `/api/search-now` accepte `queries` + `name` ;
   une annonce est gardée si elle correspond à L'UN des modèles (`filters.query_groups`).
 - Onglet Recherche : bouton « ☆ Enregistrer » (la recherche en cours devient une recherche enregistrée).
-
+- **Recherche en boucle** (23/11/2026) : interrupteur « En boucle toutes les N min » (≥ 30) sur chaque carte (`loop: true`, `every: 60` dans config.yaml). Planificateur dans l'interface (`create_app(loops_enabled=True)`, pas en démo) : toutes les 30 s, lance la recherche due la plus en retard si rien ne tourne (verrou libre). Notifications selon Réglages, pas de réévaluation des écartées, volume par site habituel. Horaires dans `data/saved_loops.json`, état via `GET /api/saved-loops`.

@@ -406,6 +406,81 @@ def test_saved_search_runs_every_model(client, monkeypatch):
     assert report["query"] == "Mini-PC home lab" and len(report["queries"]) == 2
 
 
+def test_saved_search_loop_roundtrip(client):
+    from dealsniper.config import load_config
+
+    c, path = client
+    settings = c.get("/api/settings").get_json()
+    settings["saved_searches"] = [{"name": "Mini-PC", "queries": ["m920q"], "loop": True, "every": "10"},
+                                  {"name": "Tours", "queries": ["precision 3630"], "loop": False, "every": "45"}]
+    assert c.put("/api/settings", json=settings).get_json()["ok"]
+    stored = load_config(path)["saved_searches"]
+    assert stored[0]["loop"] is True and stored[0]["every"] == 30  # 30 min au plus souvent
+    assert "loop" not in stored[1] and "every" not in stored[1]
+
+
+def _loop_app(tmp_path, monkeypatch, rows):
+    from dealsniper.web.app import create_app, write_settings
+
+    write_settings({"saved_searches": rows})
+    app = create_app()
+    seen = []
+    monkeypatch.setattr("dealsniper.engine.run_once", lambda config: seen.append(config))
+    return app, app.extensions["loop_tick"], seen
+
+
+def _wait(seen, n=1):
+    import time
+
+    start = time.time()
+    while len(seen) < n and time.time() - start < 10:
+        time.sleep(0.05)
+
+
+def test_loop_tick_runs_due_saved_search_with_notifications(client, tmp_path, monkeypatch):
+    import json
+
+    from dealsniper.config import data_dir
+
+    rows = [{"name": "Mini-PC", "queries": ["m920q", "m720q"], "max_price": 200, "loop": True, "every": 60},
+            {"name": "Manuelle", "queries": ["ps5"]}]  # pas en boucle : jamais lancée seule
+    app, tick, seen = _loop_app(tmp_path, monkeypatch, rows)
+    assert tick(now=10_000_000) == "Mini-PC"
+    _wait(seen)
+    config = seen[0]
+    assert [s["query"] for s in config["searches"]] == ["m920q", "m720q"]
+    assert config["notifier"].get("enabled", True) is not False   # les bonnes affaires partent sur Telegram
+    assert not config.get("recheck_rejected")                     # seulement les nouvelles annonces
+    assert config["filters"]["max_price"] == 200
+    _wait_idle(app)
+    assert tick(now=10_000_000 + 59 * 60) is None                 # pas encore dû
+    assert tick(now=10_000_000 + 60 * 60) == "Mini-PC"
+    assert json.loads((data_dir() / "saved_loops.json").read_text())["Mini-PC"] == 10_000_000 + 3600
+    status = app.test_client().get("/api/saved-loops").get_json()
+    assert set(status["searches"]) == {"Mini-PC"} and status["searches"]["Mini-PC"]["every"] == 60
+
+
+def _wait_idle(app):
+    import time
+
+    start = time.time()
+    while app.test_client().get("/api/progress").get_json()["running"] and time.time() - start < 10:
+        time.sleep(0.05)
+
+
+def test_loop_tick_waits_when_busy(client, tmp_path, monkeypatch):
+    from dealsniper.config import data_dir
+    from dealsniper.runlock import run_lock
+
+    rows = [{"name": "Mini-PC", "queries": ["m920q"], "loop": True, "every": 30}]
+    _, tick, seen = _loop_app(tmp_path, monkeypatch, rows)
+    with run_lock(data_dir(), "surveillance continue"):  # watch dans une autre fenêtre
+        assert tick(now=10_000_000) is None
+    assert tick(now=10_000_000) == "Mini-PC"
+    _wait(seen)
+    assert len(seen) == 1
+
+
 def test_result_kept_if_it_matches_any_saved_model(config):
     from dealsniper.filters import check
     from dealsniper.models import Ad

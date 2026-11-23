@@ -10,10 +10,12 @@ from __future__ import annotations
 import asyncio
 import copy
 import io
+import json
 import shutil
 import sqlite3
 import tempfile
 import threading
+import time
 import zipfile
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -157,6 +159,31 @@ def _set_numbers(doc: CommentedMap, section: str, values: dict[str, Any], keys: 
 
 
 MAX_SAVED_QUERIES = 25  # modèles par recherche enregistrée (chacun = une recherche par site)
+LOOP_MIN_MINUTES = 30      # recherche en boucle : jamais plus souvent (rythme poli, risque de blocage)
+LOOP_DEFAULT_MINUTES = 60
+LOOP_TICK_S = 30           # le planificateur regarde toutes les 30 s si une recherche est due
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    """Petit fichier JSON de data/ (absent ou abîmé : vide)."""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _write_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(value, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(path)
+
+
+def loop_every(row: dict[str, Any]) -> int:
+    """Intervalle d'une recherche en boucle, en minutes (au moins LOOP_MIN_MINUTES)."""
+    value = _number(row.get("every"))
+    return max(LOOP_MIN_MINUTES, int(value) if value is not None else LOOP_DEFAULT_MINUTES)
 SAVED_SEARCH_CHOICES = {"condition": ("any", "used", "parts"), "delivery": ("ship",), "seller": ("particulier", "pro")}
 
 
@@ -181,6 +208,9 @@ def _saved_searches(rows: Any) -> CommentedSeq:
             entry["near"] = DoubleQuotedScalarString(str(row["near"]).strip())
         if _words(row.get("exclude")):
             entry["exclude"] = _seq(None, _words(row.get("exclude")), flow=True)
+        if row.get("loop") in (True, "true", "1", 1):  # relancée automatiquement (onglet Enregistrées)
+            entry["loop"] = True
+            entry["every"] = loop_every(row)
         out.append(entry)
     return out
 
@@ -355,7 +385,8 @@ DEMO_BLOCKED = ("/api/run", "/api/search-now", "/api/check", "/api/test-notif", 
                 "/api/secrets")
 
 
-def create_app(demo: bool = False) -> Flask:
+def create_app(demo: bool = False, loops_enabled: bool = False) -> Flask:
+    """`loops_enabled` : relance les recherches enregistrées « en boucle » tant que l'interface tourne."""
     app = Flask(__name__, static_folder=None)
     protect(app, ui_token(data_dir()))  # anti-CSRF, anti-rebinding DNS, jeton pour le réseau local
 
@@ -366,7 +397,7 @@ def create_app(demo: bool = False) -> Flask:
                 return jsonify(ok=False, error="Mode démo : fausses données, aucun passage ni appel extérieur. "
                                                "Lancez start_ui.bat pour le vrai Deal Sniper."), 409
             return None
-    state = {"running": False, "error": None}
+    state: dict[str, Any] = {"running": False, "error": None}
     check: dict[str, Any] = {"running": False, "report": None, "stop": False}  # « Encore en ligne ? »
     lock = threading.Lock()
 
@@ -825,16 +856,17 @@ def create_app(demo: bool = False) -> Flask:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True)
 
-    def start_run(prepare: Callable[[dict[str, Any]], None] | None = None, query: str | None = None,
-                  queries: list[str] | None = None):
+    def launch(prepare: Callable[[dict[str, Any]], None] | None = None, query: str | None = None,
+               queries: list[str] | None = None) -> str | None:
         """Lance un passage en arrière-plan (un seul à la fois) ; `prepare` adapte la configuration.
         `query` : nom affiché d'une recherche ponctuelle (réaffiché après rechargement) ;
-        `queries` : ses termes (un ou plusieurs modèles), pour trier les résultats qui s'y rapportent."""
+        `queries` : ses termes (un ou plusieurs modèles), pour trier les résultats qui s'y rapportent.
+        Renvoie None si le passage est lancé, sinon la raison du refus (utilisable hors requête web)."""
         with lock:
             if state["running"]:
-                return jsonify(ok=False, message="Un passage est déjà en cours."), 409
+                return "Un passage est déjà en cours."
             if check["running"]:
-                return jsonify(ok=False, message="Une vérification « Encore en ligne ? » est en cours."), 409
+                return "Une vérification « Encore en ligne ? » est en cours."
             state["running"], state["error"], state["query"] = True, None, query
             state["queries"] = queries or ([query] if query else [])
 
@@ -852,7 +884,12 @@ def create_app(demo: bool = False) -> Flask:
                 state["running"] = False
 
         threading.Thread(target=worker, daemon=True).start()
-        return jsonify(ok=True)
+        return None
+
+    def start_run(prepare: Callable[[dict[str, Any]], None] | None = None, query: str | None = None,
+                  queries: list[str] | None = None):
+        refused = launch(prepare, query, queries)
+        return (jsonify(ok=False, message=refused), 409) if refused else jsonify(ok=True)
 
     # --- vérification « l'annonce est-elle toujours en ligne ? » -----------------------
 
@@ -924,15 +961,15 @@ def create_app(demo: bool = False) -> Flask:
     def run_now():
         return start_run()
 
-    @app.post("/api/search-now")
-    def search_now():
-        """Recherche ponctuelle : tous les sites cherchent CE terme en une fois, puis notation.
-        Recherche enregistrée : `queries` (plusieurs modèles, lancés ensemble) et `name` (son nom)."""
-        body = _json_body()
+    def build_search(body: dict[str, Any], loop: bool = False):
+        """Critères d'une recherche ponctuelle ou enregistrée → (nom affiché, modèles, préparation de la config).
+        Renvoie None sans modèle. `loop` : relance automatique d'une recherche enregistrée : seules les nouvelles
+        annonces comptent, les notifications suivent le réglage habituel (c'est tout l'intérêt de la boucle) et
+        le nombre d'annonces chargées par site reste celui des réglages."""
         queries = [str(q).strip() for q in body.get("queries") or [] if str(q).strip()][:MAX_SAVED_QUERIES]
         queries = queries or [q for q in [str(body.get("query") or "").strip()] if q]
         if not queries:
-            return jsonify(ok=False, error="Tapez ce que vous cherchez"), 400
+            return None
         label = str(body.get("name") or "").strip()[:60] or queries[0]
         condition = body.get("condition") if body.get("condition") in ("parts", "used") else "any"
         min_price, max_price = _number(body.get("min_price")), _number(body.get("max_price"))
@@ -953,12 +990,14 @@ def create_app(demo: bool = False) -> Flask:
 
         def prepare(config: dict[str, Any]) -> None:
             config["searches"] = searches              # recherche(s) de l'utilisateur, communes à tous les sites
-            config["notifier"]["enabled"] = False      # résultats à l'écran : pas de messages Telegram en plus
-            config["recheck_rejected"] = True          # réévalue ce qui avait été écarté avec d'autres critères
+            if not loop:
+                config["notifier"]["enabled"] = False  # résultats à l'écran : pas de messages Telegram en plus
+                config["recheck_rejected"] = True      # réévalue ce qui avait été écarté avec d'autres critères
             for name, site in config["sites"].items():
                 site["searches"] = []                  # on ignore les recherches habituelles
                 site["common_searches"] = True
-                site["limit"] = max(int(site.get("limit") or 25), 60)  # plus de résultats pour une recherche ciblée
+                if not loop:  # plus de résultats pour une recherche ciblée (la boucle garde le volume habituel)
+                    site["limit"] = max(int(site.get("limit") or 25), 60)
                 if sites and name not in sites:
                     site["enabled"] = False            # sites décochés : pas interrogés
             filters = config["filters"]
@@ -982,7 +1021,84 @@ def create_app(demo: bool = False) -> Flask:
             if max_ads:
                 config["analyzer"]["max_ads_per_run"] = int(max_ads)
 
+        return label, queries, prepare
+
+    @app.post("/api/search-now")
+    def search_now():
+        """Recherche ponctuelle : tous les sites cherchent CE terme en une fois, puis notation.
+        Recherche enregistrée : `queries` (plusieurs modèles, lancés ensemble) et `name` (son nom)."""
+        built = build_search(_json_body())
+        if built is None:
+            return jsonify(ok=False, error="Tapez ce que vous cherchez"), 400
+        label, queries, prepare = built
         return start_run(prepare, label, queries)
+
+    # ---------- Recherches enregistrées en boucle ----------
+    loops_file = data_dir() / "saved_loops.json"
+    loops: dict[str, Any] = {"active": False, "last": _read_json(loops_file), "current": None}
+
+    def loop_rows() -> list[dict[str, Any]]:
+        try:
+            rows = current_config().get("saved_searches") or []
+        except Exception:
+            return []
+        return [r for r in rows if isinstance(r, dict) and r.get("loop") and r.get("name") and r.get("queries")]
+
+    def loop_tick(now: float | None = None) -> str | None:
+        """Lance la recherche en boucle la plus en retard, si elle est due et que rien d'autre ne tourne.
+        Renvoie son nom (ou None)."""
+        from ..runlock import Busy, run_lock
+
+        now = time.time() if now is None else now
+        if state["running"] or check["running"]:
+            return None
+        due = [(float(loops["last"].get(r["name"]) or 0), r) for r in loop_rows()]
+        due = [(last, r) for last, r in due if now - last >= loop_every(r) * 60]
+        if not due:
+            return None
+        try:  # surveillance continue ou autre fenêtre en plein passage : on attend le prochain tour
+            with run_lock(data_dir(), "un test de verrou"):
+                pass
+        except Busy:
+            return None
+        _, row = min(due, key=lambda item: item[0])
+        built = build_search(dict(row), loop=True)
+        if built is None:
+            return None
+        label, queries, prepare = built
+        if launch(prepare, f"🔁 {label}", queries):
+            return None
+        loops["last"][row["name"]] = now
+        loops["current"] = row["name"]
+        _write_json(loops_file, loops["last"])
+        return row["name"]
+
+    def loop_scheduler() -> None:
+        while True:
+            time.sleep(LOOP_TICK_S)
+            try:
+                loop_tick()
+            except Exception as exc:  # le planificateur ne doit jamais s'arrêter
+                state["error"] = f"Recherche en boucle : {exc}"[:200]
+
+    if loops_enabled and not demo:
+        loops["active"] = True
+        threading.Thread(target=loop_scheduler, daemon=True, name="saved-loops").start()
+    app.extensions["loop_tick"] = loop_tick  # tests
+
+    @app.get("/api/saved-loops")
+    def saved_loops():
+        """Dernier et prochain scan de chaque recherche en boucle (affiché sur les cartes)."""
+        now = time.time()
+        rows = {}
+        for row in loop_rows():
+            last = float(loops["last"].get(row["name"]) or 0)
+            rows[row["name"]] = {"last_s": round(now - last) if last else None,
+                                 "next_s": max(0, round(last + loop_every(row) * 60 - now)) if last else 0,
+                                 "every": loop_every(row)}
+        return jsonify(active=loops["active"], searches=rows,
+                       running=loops["current"] if state["running"] and (state.get("query") or "").startswith("🔁")
+                       else None)
 
     @app.get("/api/search-results")
     def search_results():
