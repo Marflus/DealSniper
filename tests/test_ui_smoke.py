@@ -124,7 +124,7 @@ def test_saved_searches_tab(server):
         tags.press("Enter")
         tags.fill("switch oled")
         tags.press("Enter")
-        assert "2 modèles" in card.locator("[data-s-hint]").inner_text()
+        sync_api.expect(card.locator("[data-s-hint]")).to_contain_text("2 modèles")
         page.keyboard.press("Control+s")
         page.wait_for_function("document.querySelector('#save-status').innerText.includes('Tout est enregistré')")
         page.reload()

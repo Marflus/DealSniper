@@ -1131,6 +1131,7 @@ document.addEventListener("input", (e) => { if (e.target.type === "range") syncR
 let savedSnapshot = "";
 function markDirty() {
   if (!settings) return;
+  document.querySelectorAll("#saved-list [data-saved]").forEach(savedHint);  // nombre de modèles à jour
   const dirty = JSON.stringify(collectSettings()) !== savedSnapshot;
   $("#savebar").classList.toggle("dirty", dirty);
   $("#save-status").textContent = dirty ? "● Modifications non enregistrées" : "Tout est enregistré";
@@ -1477,10 +1478,6 @@ $("#saved-list").addEventListener("click", (e) => {
     launchSearch({ ...s, exclude: s.exclude.join(", ") }, s.name || s.queries.join(", "));
   }
 });
-["input", "click", "focusout", "keydown"].forEach((type) => $("#saved-list").addEventListener(type, (e) => {
-  const card = e.target.closest("[data-saved]");
-  if (card) setTimeout(() => savedHint(card));  // après l'ajout / le retrait d'une étiquette
-}));
 
 // Onglet Recherche → « ☆ Enregistrer » : la recherche en cours et ses critères deviennent une recherche enregistrée.
 $("#qs-save").addEventListener("click", async () => {
