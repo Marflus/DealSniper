@@ -74,3 +74,11 @@ les décisions en attente et les limites à respecter. Pour le détail technique
 Ouvrir http://127.0.0.1:5000, tout tester avec ses vraies données, lancer des recherches réelles et comparer
 avec ce que montrent Vinted, leboncoin et Facebook pour les mêmes recherches (que rate-t-on ?), puis corriger.
 Demander les décisions ci-dessus avant de coder ce qui en dépend.
+
+## Ajouté depuis la session cloud (23/11/2026)
+- Onglet **« Enregistrées »** : recherches enregistrées (`saved_searches` dans config.yaml) = plusieurs modèles
+  lancés d'un coup avec leurs critères (prix, état, remise, vendeur, zone, IA max, mots exclus). Exemples
+  fournis : « Mini-PC home lab » et « Tour évolutive home lab ». `/api/search-now` accepte `queries` + `name` ;
+  une annonce est gardée si elle correspond à L'UN des modèles (`filters.query_groups`).
+- Onglet Recherche : bouton « ☆ Enregistrer » (la recherche en cours devient une recherche enregistrée).
+
