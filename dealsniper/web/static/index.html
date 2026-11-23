@@ -26,6 +26,7 @@
     <nav class="tabs">
       <button class="tab active" data-tab="ads">Annonces</button>
       <button class="tab" data-tab="search">Recherche</button>
+      <button class="tab" data-tab="saved">Enregistrées</button>
       <button class="tab" data-tab="stats">Bilan</button>
       <button class="tab" data-tab="purchases">Achats</button>
       <button class="tab" data-tab="searches">Recherches</button>
@@ -122,6 +123,7 @@
       <form id="quick-search" class="quick-search">
         <input id="qs-query" placeholder="🔎  Ex. : thinkpad x1 carbon, dyson v11, steam deck…" autocomplete="off">
         <button id="qs-run" class="primary">Analyser maintenant</button>
+        <button id="qs-save" type="button" class="ghost" title="Garder cette recherche et ses critères dans l'onglet Enregistrées">☆ Enregistrer</button>
       </form>
       <div class="qs-options" id="qs-options">
         <span class="qs-title" title="Une annonce qui ne passe pas ces critères est écartée avant l'IA : elle ne coûte rien">⛔ Éliminatoire</span>
@@ -144,6 +146,14 @@
       <div id="search-report" hidden></div>
       <div id="search-filters" hidden><p id="search-count" class="muted small"></p></div>
       <div id="search-results" class="grid"></div>
+    </section>
+
+    <!-- RECHERCHES ENREGISTRÉES -->
+    <section id="tab-saved" class="page" hidden>
+      <div class="page-head"><h1>Recherches enregistrées</h1>
+        <p>Une liste de modèles, lancés d'un coup sur tous les sites, avec leurs critères.</p></div>
+      <div id="saved-list" class="saved-list"></div>
+      <button id="add-saved" class="add">＋ Nouvelle recherche enregistrée</button>
     </section>
 
     <!-- BILAN / TABLEAU DE BORD -->

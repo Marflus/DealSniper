@@ -929,29 +929,41 @@ $("#run").addEventListener("click", async () => {
 
 // ---------- Recherche ponctuelle (onglet dédié) ----------
 
-$("#quick-search").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  if (running) return cancelRun();
-  const query = $("#qs-query").value.trim();
-  if (!query) return;
-  searchQuery = query;
+// Critères de la recherche ponctuelle tels que saisis dans l'onglet Recherche.
+function quickSearchCriteria() {
+  return {
+    query: $("#qs-query").value.trim(), min_price: $("#qs-min").value, max_price: $("#qs-price").value,
+    condition: $("#qs-condition").value, exclude: $("#qs-exclude").value, max_ads: $("#qs-max").value,
+    sites: [...document.querySelectorAll("#qs-sites .chip.on")].map((b) => b.dataset.site),
+    delivery: $("#qs-delivery").value, seller: $("#qs-seller").value, near: $("#qs-near").value, km: $("#qs-km").value,
+  };
+}
+
+// Lance une recherche ponctuelle (un terme, ou les modèles d'une recherche enregistrée) et suit son avancement.
+async function launchSearch(payload, label) {
+  if (running) return toast("Un passage est déjà en cours.");
+  searchQuery = label;
   searchResults = [];
   setRunning(true);
+  showTab("search");
   $("#search-report").hidden = true;
   $("#search-filters").hidden = true;
   $("#search-results").innerHTML = "";
   try {
-    const sites = [...document.querySelectorAll("#qs-sites .chip.on")].map((b) => b.dataset.site);
-    await api("/api/search-now", { method: "POST", body: JSON.stringify({
-      query, min_price: $("#qs-min").value, max_price: $("#qs-price").value, condition: $("#qs-condition").value,
-      exclude: $("#qs-exclude").value, max_ads: $("#qs-max").value, sites,
-      delivery: $("#qs-delivery").value, seller: $("#qs-seller").value, near: $("#qs-near").value, km: $("#qs-km").value }) });
+    await api("/api/search-now", { method: "POST", body: JSON.stringify(payload) });
     if (!searchPoll) searchPoll = setInterval(pollSearch, 1200);
     pollSearch();
-  } catch (e2) {
-    toast(e2.message);
+  } catch (e) {
+    toast(e.message);
     setRunning(false);
   }
+}
+
+$("#quick-search").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (running) return cancelRun();
+  const criteria = quickSearchCriteria();
+  if (criteria.query) launchSearch(criteria, criteria.query);
 });
 
 // Choix des sites de la recherche ponctuelle : ceux qui sont prêts (aucun coché = tous).
@@ -1326,6 +1338,7 @@ async function loadSettings() {
   renderSites();
   renderCategories();
   renderWatchlist();
+  renderSaved();
   const f = settings.filters, n = settings.notifier, a = settings.analyzer, l = settings.location;
   setTags("#g-exclude", f.global_exclude_keywords);
   setTags("#g-signals", f.deal_signals);
@@ -1389,6 +1402,100 @@ function watchRow(w) {
     <button class="icon danger" data-remove-watch title="Supprimer">🗑</button>
   </div>`;
 }
+// ---------- Recherches enregistrées ----------
+const SS_CONDITIONS = { any: "Tous états", used: "Occasion (fonctionnel)", parts: "Pour pièces / HS" };
+const ssOptions = (map, value) => Object.entries(map)
+  .map(([v, label]) => `<option value="${v}" ${(value || "") === v ? "selected" : ""}>${label}</option>`).join("");
+
+function savedCard(s) {
+  const num = (key, ph, unit, step = "1") => `<span class="affix"><input data-s="${key}" type="number" min="0" step="${step}"
+    value="${esc(s[key] ?? "")}" placeholder="${ph}"><i>${unit}</i></span>`;
+  return `<article class="saved-card" data-saved>
+    <div class="saved-head">
+      <input class="saved-name" data-s="name" value="${esc(s.name || "")}" placeholder="Nom, ex. Mini-PC home lab">
+      <button type="button" class="primary" data-run-saved>▶ Lancer</button>
+      <button type="button" class="icon danger" data-remove-saved title="Supprimer cette recherche">🗑</button>
+    </div>
+    <div class="label">Modèles ou mots cherchés (chacun sur tous les sites)</div>
+    <div class="tags blue" data-s="queries" data-placeholder="ex. thinkcentre m920q"></div>
+    <div class="saved-criteria">
+      <label>Prix ${num("min_price", "min", "€")} à ${num("max_price", "max", "€")}</label>
+      <label>État <select data-s="condition">${ssOptions(SS_CONDITIONS, s.condition || "any")}</select></label>
+      <label>Remise <select data-s="delivery">${ssOptions({ "": "Peu importe", ship: "Livrable obligatoire" }, s.delivery)}</select></label>
+      <label>Vendeur <select data-s="seller">${ssOptions({ "": "Tous", particulier: "Particuliers", pro: "Pros" }, s.seller)}</select></label>
+      <label>Zone <input data-s="near" value="${esc(s.near || "")}" placeholder="Ville ou CP"> ≤ ${num("km", "km", "km")}</label>
+      <label title="Plafond d'annonces envoyées à l'IA">IA max ${num("max_ads", "—", "ann.")}</label>
+    </div>
+    <div class="label">Exclure (mots)</div>
+    <div class="tags red" data-s="exclude" data-placeholder="ex. boite vide"></div>
+    <p class="muted small" data-s-hint></p>
+  </article>`;
+}
+
+function savedHint(card) {
+  const n = getTags(card.querySelector('[data-s="queries"]')).length;
+  card.querySelector("[data-s-hint]").textContent = n
+    ? `${n} modèle${n > 1 ? "s" : ""} : ${n} recherche${n > 1 ? "s" : ""} par site actif, au rythme poli habituel.`
+    : "Ajoutez au moins un modèle (Entrée après chaque mot).";
+}
+
+function addSavedCard(s) {
+  $("#saved-list").insertAdjacentHTML("beforeend", savedCard(s));
+  const card = $("#saved-list").lastElementChild;
+  setTags(card.querySelector('[data-s="queries"]'), s.queries);
+  setTags(card.querySelector('[data-s="exclude"]'), s.exclude);
+  savedHint(card);
+  return card;
+}
+
+function renderSaved() {
+  $("#saved-list").innerHTML = "";
+  (settings.saved_searches || []).forEach(addSavedCard);
+}
+
+function readSaved(card) {
+  const v = (key) => card.querySelector(`[data-s="${key}"]`).value.trim();
+  return {
+    name: v("name"), queries: getTags(card.querySelector('[data-s="queries"]')),
+    min_price: v("min_price"), max_price: v("max_price"), condition: v("condition"), delivery: v("delivery"),
+    seller: v("seller"), near: v("near"), km: v("km"), max_ads: v("max_ads"),
+    exclude: getTags(card.querySelector('[data-s="exclude"]')),
+  };
+}
+
+$("#add-saved").addEventListener("click", () => {
+  addSavedCard({ queries: [], exclude: [] }).querySelector('[data-s="name"]').focus();
+  markDirty();
+});
+$("#saved-list").addEventListener("click", (e) => {
+  const card = e.target.closest("[data-saved]");
+  if (!card) return;
+  if (e.target.closest("[data-remove-saved]")) { card.remove(); markDirty(); return; }
+  if (e.target.closest("[data-run-saved]")) {
+    const s = readSaved(card);
+    if (!s.queries.length) return toast("Ajoutez au moins un modèle à cette recherche");
+    launchSearch({ ...s, exclude: s.exclude.join(", ") }, s.name || s.queries.join(", "));
+  }
+});
+["input", "click", "focusout", "keydown"].forEach((type) => $("#saved-list").addEventListener(type, (e) => {
+  const card = e.target.closest("[data-saved]");
+  if (card) setTimeout(() => savedHint(card));  // après l'ajout / le retrait d'une étiquette
+}));
+
+// Onglet Recherche → « ☆ Enregistrer » : la recherche en cours et ses critères deviennent une recherche enregistrée.
+$("#qs-save").addEventListener("click", async () => {
+  const c = quickSearchCriteria();
+  if (!c.query) return toast("Tapez d'abord ce que vous cherchez");
+  const name = prompt("Nom de la recherche enregistrée ?", c.query);
+  if (name === null) return;
+  if (!settings) await loadSettings();
+  if (!settings) return;
+  addSavedCard({ ...c, name: name.trim() || c.query, queries: [c.query],
+    exclude: c.exclude.split(",").map((w) => w.trim()).filter(Boolean) });
+  $("#save").click();  // enregistre dans config.yaml
+  toast("☆ Recherche enregistrée (onglet Enregistrées)");
+});
+
 function renderWatchlist() {
   $("#watch-list").innerHTML = (settings.watchlist || []).map(watchRow).join("");
 }
@@ -1428,6 +1535,7 @@ function collectSettings() {
   }));
   return {
     searches: commonCard ? searchRows(commonCard) : settings.searches, sites, categories, watchlist,
+    saved_searches: [...document.querySelectorAll("#saved-list [data-saved]")].map(readSaved),
     filters: { global_exclude_keywords: getTags("#g-exclude"), deal_signals: getTags("#g-signals"),
       desirable_brands: getTags("#g-brands"),
                buyer_ad_keywords: getTags("#g-buyer"), min_price: $("#g-minprice").value,
@@ -1824,7 +1932,7 @@ async function restoreLastSearch() {
   const data = await api(`/api/search-results?${nearParam().slice(1)}`).catch(() => null);
   if (!data || !data.query) return;
   searchQuery = data.query;
-  if (!$("#qs-query").value) $("#qs-query").value = data.query;
+  if (!$("#qs-query").value && (data.queries || []).length <= 1) $("#qs-query").value = data.query;
   if (data.running) {
     setRunning(true);
     if (!searchPoll) searchPoll = setInterval(pollSearch, 1200);

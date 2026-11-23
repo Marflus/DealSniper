@@ -26,7 +26,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 from .. import progress, purchases
-from ..config import DESIRABLE_BRANDS, config_file, data_dir, env, load_config
+from ..config import DEFAULT_SAVED_SEARCHES, DESIRABLE_BRANDS, config_file, data_dir, env, load_config
 from ..db import Database
 from ..geo import Geo
 from ..market import category_brands, model_key
@@ -132,6 +132,7 @@ def read_settings() -> dict[str, Any]:
         "sites": _plain(doc.get("sites") or {}),
         "categories": _plain(doc.get("categories") or []),
         "watchlist": _plain(doc.get("watchlist") or []),
+        "saved_searches": _plain(doc["saved_searches"]) if "saved_searches" in doc else DEFAULT_SAVED_SEARCHES,
         "filters": {"desirable_brands": DESIRABLE_BRANDS, **_plain(doc.get("filters") or {})},
         "location": _plain(doc.get("location") or {}),
         "notifier": _plain(doc.get("notifier") or {}),
@@ -155,6 +156,35 @@ def _set_numbers(doc: CommentedMap, section: str, values: dict[str, Any], keys: 
             target[key] = number
 
 
+MAX_SAVED_QUERIES = 25  # modèles par recherche enregistrée (chacun = une recherche par site)
+SAVED_SEARCH_CHOICES = {"condition": ("any", "used", "parts"), "delivery": ("ship",), "seller": ("particulier", "pro")}
+
+
+def _saved_searches(rows: Any) -> CommentedSeq:
+    """Recherches enregistrées reçues de l'interface → liste YAML lisible (listes de mots sur une ligne)."""
+    out = CommentedSeq()
+    for row in rows or []:
+        name = str((row or {}).get("name") or "").strip()
+        queries = _words(row.get("queries"))
+        if not name or not queries:
+            continue  # une recherche sans nom ou sans modèle ne sert à rien
+        entry = CommentedMap(name=DoubleQuotedScalarString(name[:60]))
+        entry["queries"] = _seq(None, queries, flow=True)
+        for key in ("min_price", "max_price", "km", "max_ads"):
+            value = _number(row.get(key))
+            if value is not None:
+                entry[key] = int(value) if float(value).is_integer() else value
+        for key, allowed in SAVED_SEARCH_CHOICES.items():
+            if row.get(key) in allowed and row.get(key) != "any":
+                entry[key] = row[key]
+        if str(row.get("near") or "").strip():
+            entry["near"] = DoubleQuotedScalarString(str(row["near"]).strip())
+        if _words(row.get("exclude")):
+            entry["exclude"] = _seq(None, _words(row.get("exclude")), flow=True)
+        out.append(entry)
+    return out
+
+
 def write_settings(new: dict[str, Any]) -> None:
     """Applique les réglages reçus de l'interface dans config.yaml en gardant le reste du fichier."""
     path = config_path()
@@ -165,6 +195,8 @@ def write_settings(new: dict[str, Any]) -> None:
         doc["searches"] = _search_rows(new["searches"], doc.get("searches"))
     if "watchlist" in new:
         doc["watchlist"] = _search_rows(new["watchlist"], doc.get("watchlist"))
+    if "saved_searches" in new:
+        doc["saved_searches"] = _saved_searches(new["saved_searches"])
 
     for name, site in (new.get("sites") or {}).items():
         target = doc.setdefault("sites", CommentedMap()).setdefault(name, CommentedMap())
@@ -793,15 +825,18 @@ def create_app(demo: bool = False) -> Flask:
             return jsonify(ok=False, error=str(exc)), 400
         return jsonify(ok=True)
 
-    def start_run(prepare: Callable[[dict[str, Any]], None] | None = None, query: str | None = None):
+    def start_run(prepare: Callable[[dict[str, Any]], None] | None = None, query: str | None = None,
+                  queries: list[str] | None = None):
         """Lance un passage en arrière-plan (un seul à la fois) ; `prepare` adapte la configuration.
-        `query` : terme d'une recherche ponctuelle, gardé pour réafficher son compte rendu après rechargement."""
+        `query` : nom affiché d'une recherche ponctuelle (réaffiché après rechargement) ;
+        `queries` : ses termes (un ou plusieurs modèles), pour trier les résultats qui s'y rapportent."""
         with lock:
             if state["running"]:
                 return jsonify(ok=False, message="Un passage est déjà en cours."), 409
             if check["running"]:
                 return jsonify(ok=False, message="Une vérification « Encore en ligne ? » est en cours."), 409
             state["running"], state["error"], state["query"] = True, None, query
+            state["queries"] = queries or ([query] if query else [])
 
         def worker() -> None:
             from ..engine import run_once
@@ -891,18 +926,24 @@ def create_app(demo: bool = False) -> Flask:
 
     @app.post("/api/search-now")
     def search_now():
-        """Recherche ponctuelle : tous les sites cherchent CE terme en une fois, puis notation."""
+        """Recherche ponctuelle : tous les sites cherchent CE terme en une fois, puis notation.
+        Recherche enregistrée : `queries` (plusieurs modèles, lancés ensemble) et `name` (son nom)."""
         body = _json_body()
-        query = str(body.get("query") or "").strip()
-        if not query:
+        queries = [str(q).strip() for q in body.get("queries") or [] if str(q).strip()][:MAX_SAVED_QUERIES]
+        queries = queries or [q for q in [str(body.get("query") or "").strip()] if q]
+        if not queries:
             return jsonify(ok=False, error="Tapez ce que vous cherchez"), 400
+        label = str(body.get("name") or "").strip()[:60] or queries[0]
         condition = body.get("condition") if body.get("condition") in ("parts", "used") else "any"
-        search: dict[str, Any] = {"query": query, "condition": condition}
         min_price, max_price = _number(body.get("min_price")), _number(body.get("max_price"))
-        if max_price is not None:
-            search["max_price"] = max_price
-            if min_price is not None:
-                search["min_price"] = min_price  # eBay filtre la fourchette côté API
+        searches: list[dict[str, Any]] = []
+        for query in queries:
+            search: dict[str, Any] = {"query": query, "condition": condition}
+            if max_price is not None:
+                search["max_price"] = max_price
+                if min_price is not None:
+                    search["min_price"] = min_price  # eBay filtre la fourchette côté API
+            searches.append(search)
         sites = {str(s) for s in body.get("sites") or []}  # vide = tous les sites actifs
         exclude = [normalize(str(w)) for w in _words(body.get("exclude") or [])]
         max_ads = _number(body.get("max_ads"))
@@ -911,7 +952,7 @@ def create_app(demo: bool = False) -> Flask:
         zone = {"near": str(body.get("near") or "").strip(), "km": _number(body.get("km"))}
 
         def prepare(config: dict[str, Any]) -> None:
-            config["searches"] = [search]              # une seule recherche, commune à tous les sites
+            config["searches"] = searches              # recherche(s) de l'utilisateur, communes à tous les sites
             config["notifier"]["enabled"] = False      # résultats à l'écran : pas de messages Telegram en plus
             config["recheck_rejected"] = True          # réévalue ce qui avait été écarté avec d'autres critères
             for name, site in config["sites"].items():
@@ -921,7 +962,8 @@ def create_app(demo: bool = False) -> Flask:
                 if sites and name not in sites:
                     site["enabled"] = False            # sites décochés : pas interrogés
             filters = config["filters"]
-            filters["query_words"] = query_words(query)  # résultats sans aucun mot de la recherche : écartés
+            # Résultats sans rapport avec AUCUNE des recherches : écartés (les sites renvoient des articles voisins).
+            filters["query_groups"] = [query_words(q) for q in queries]
             filters["drop_uncategorized"] = False      # ne pas écarter un terme hors catégories
             filters["ignore_category_budget"] = True   # seul VOTRE prix max compte (pas les budgets des catégories)
             filters["default_max_budget"] = None
@@ -940,7 +982,7 @@ def create_app(demo: bool = False) -> Flask:
             if max_ads:
                 config["analyzer"]["max_ads_per_run"] = int(max_ads)
 
-        return start_run(prepare, query)
+        return start_run(prepare, label, queries)
 
     @app.get("/api/search-results")
     def search_results():
@@ -959,12 +1001,13 @@ def create_app(demo: bool = False) -> Flask:
         except Exception:
             home = ""
         add_distances(items, (request.args.get("near") or "").strip() or home)
-        if state.get("query"):  # annonces déjà notées par une autre recherche et sans rapport avec celle-ci
-            words = query_words(state["query"])
+        if state.get("queries"):  # annonces déjà notées par une autre recherche et sans rapport avec celle-ci
+            groups = [query_words(q) for q in state["queries"]]
             items = [i for i in items if i.get("status") != "analyzed"
-                     or matches_query(f"{i.get('title', '')} {i.get('description', '')}", words)]
+                     or any(matches_query(f"{i.get('title', '')} {i.get('description', '')}", g) for g in groups)]
         # query : None après un passage normal (ces annonces ne sont pas celles d'une recherche)
-        return jsonify(ads=items, query=state.get("query"), running=state["running"])
+        return jsonify(ads=items, query=state.get("query"), queries=state.get("queries") or [],
+                       running=state["running"])
 
     @app.post("/api/test-notif")
     def test_notif():

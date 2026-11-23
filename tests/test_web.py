@@ -364,3 +364,56 @@ def test_search_results_say_which_search_they_belong_to(client):
 def test_unpause_unknown_site_is_refused(client):
     c, _ = client
     assert c.post("/api/sites/inconnu/unpause").status_code == 404
+
+
+def test_saved_searches_defaults_and_roundtrip(client):
+    from dealsniper.config import DEFAULT_SAVED_SEARCHES, load_config
+
+    c, path = client
+    saved = c.get("/api/settings").get_json()["saved_searches"]
+    assert saved == DEFAULT_SAVED_SEARCHES and "thinkcentre m920q" in saved[0]["queries"]
+    settings = c.get("/api/settings").get_json()
+    settings["saved_searches"] = [
+        {"name": "Mini-PC", "queries": ["m920q", "m720q"], "max_price": "180", "min_price": "", "condition": "any",
+         "delivery": "ship", "seller": "", "near": "", "km": "", "max_ads": "40", "exclude": ["boite vide"]},
+        {"name": "", "queries": ["sans nom"]},          # ignorée : pas de nom
+        {"name": "Vide", "queries": []},              # ignorée : pas de modèle
+    ]
+    assert c.put("/api/settings", json=settings).get_json()["ok"]
+    stored = load_config(path)["saved_searches"]
+    assert stored == [{"name": "Mini-PC", "queries": ["m920q", "m720q"], "max_price": 180, "max_ads": 40,
+                       "delivery": "ship", "exclude": ["boite vide"]}]
+    assert "queries: [" in path.read_text(encoding="utf-8")  # lisible : modèles sur une ligne
+
+
+def test_saved_search_runs_every_model(client, monkeypatch):
+    import time
+
+    c, _ = client
+    seen = []
+    monkeypatch.setattr("dealsniper.engine.run_once", lambda config: seen.append(config))
+    body = {"name": "Mini-PC home lab", "queries": ["thinkcentre m920q", "elitedesk 800 g4 mini"],
+            "max_price": "200", "delivery": "ship", "exclude": "boite vide"}
+    assert c.post("/api/search-now", json=body).get_json()["ok"]
+    start = time.time()
+    while not seen and time.time() - start < 10:
+        time.sleep(0.05)
+    config = seen[0]
+    assert [s["query"] for s in config["searches"]] == ["thinkcentre m920q", "elitedesk 800 g4 mini"]
+    assert all(s["max_price"] == 200 for s in config["searches"])
+    assert len(config["filters"]["query_groups"]) == 2 and config["filters"]["delivery"] == "ship"
+    report = c.get("/api/search-results").get_json()
+    assert report["query"] == "Mini-PC home lab" and len(report["queries"]) == 2
+
+
+def test_result_kept_if_it_matches_any_saved_model(config):
+    from dealsniper.filters import check
+    from dealsniper.models import Ad
+    from dealsniper.utils.products import query_words
+
+    config["filters"].update(drop_uncategorized=False, ignore_category_budget=True, default_max_budget=None,
+                             query_groups=[query_words("thinkcentre m920q"), query_words("elitedesk 800 g4 mini")])
+    hp = Ad(title="HP EliteDesk 800 G4 mini i5-8500T 16 Go", url="https://x/1", source="ebay", price=120)
+    tv = Ad(title="Télévision Samsung 55 pouces", url="https://x/2", source="ebay", price=120)
+    assert check(hp, config) is None
+    assert check(tv, config) == "hors sujet (trop peu de mots de la recherche)"

@@ -702,3 +702,15 @@ button.danger, .primary.danger { background: var(--bad) !important; border-color
 .deep-photo ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; color: var(--mid); }
 .demo-badge { font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: .06em; padding: 2px 6px; margin-left: 6px;
   border-radius: 5px; color: #fff; background: var(--mid); }
+
+/* Recherches enregistrées */
+.saved-list { display: grid; gap: 14px; margin-bottom: 12px; }
+.saved-card { padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); display: grid; gap: 8px; }
+.saved-head { display: flex; gap: 10px; align-items: center; }
+.saved-head .saved-name { flex: 1; font-size: 16px; font-weight: 700; padding: 8px 10px; }
+.saved-criteria { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; color: var(--muted); font-size: 13px; }
+.saved-criteria label { display: flex; align-items: center; gap: 6px; }
+.saved-criteria .affix input { width: 70px; }
+.saved-criteria [data-s="near"] { width: 110px; }
+.saved-card .label { margin: 4px 0 0; }
+@media (max-width: 560px) { .saved-head { flex-wrap: wrap; } .saved-head .saved-name { flex-basis: 100%; } }

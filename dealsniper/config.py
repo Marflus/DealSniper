@@ -36,6 +36,18 @@ DESIRABLE_BRANDS = [
     "salomon", "rossignol", "brompton",
 ]
 
+# Recherches enregistrées (onglet « Enregistrées ») : plusieurs modèles lancés d'un coup, avec leurs critères.
+DEFAULT_SAVED_SEARCHES = [
+    {"name": "Mini-PC home lab", "max_price": 200, "delivery": "ship",
+     "queries": ["thinkcentre m920q", "thinkcentre m720q", "thinkcentre m920x", "elitedesk 800 g4 mini",
+                 "elitedesk 800 g5 mini", "prodesk 600 g4 mini", "optiplex 7070 micro", "optiplex 7060 micro"],
+     "exclude": ["sans alimentation", "boite vide"]},
+    {"name": "Tour évolutive home lab", "max_price": 400,
+     "queries": ["thinkstation p330", "thinkstation p340", "thinkcentre m920t", "precision 3630",
+                 "precision 3640", "hp z2 g4", "elitedesk 800 g4 tower", "optiplex 7070 mt"],
+     "exclude": ["boite vide"]},
+]
+
 DEFAULTS: dict[str, Any] = {
     # Un bloc par site. `interval` = pause (secondes, tirée au hasard) entre deux passages en mode `watch`.
     "sites": {
@@ -60,6 +72,7 @@ DEFAULTS: dict[str, Any] = {
                                  "en cours de vente", "en cours d'achat", "vente en cours", "transaction en cours"]},
     "categories": [],
     "watchlist": [],  # veille : modèles précis repérés en priorité (watch.py)
+    "saved_searches": DEFAULT_SAVED_SEARCHES,  # recherches ponctuelles toutes prêtes (onglet « Enregistrées »)
     "analyzer": {"enabled": True, "model": "claude-haiku-5-5", "effort": None, "batch_size": 20,
                  "max_description_chars": 800,
                  "max_tokens": 4096, "max_daily_cost_usd": 1.00, "resale_haircut": 0.9, "auto_calibrate": True,

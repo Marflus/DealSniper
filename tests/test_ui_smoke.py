@@ -101,3 +101,38 @@ def test_main_interactions(server):
         page.wait_for_function("document.querySelector('#p-summary').innerText.includes('€/h')")
         browser.close()
     assert errors == [] and refused == []
+
+
+def test_saved_searches_tab(server):
+    """Onglet Enregistrées : exemples affichés, nouvelle recherche créée, enregistrée, lancée."""
+    sync_api = pytest.importorskip("playwright.sync_api")
+    errors, posted = [], []
+    with sync_api.sync_playwright() as p:
+        browser = _browser(p)
+        page = browser.new_page()
+        page.on("pageerror", lambda exc: errors.append(str(exc)))
+        page.on("request", lambda r: posted.append(r.post_data_json) if r.url.endswith("/api/search-now") else None)
+        page.goto(server)
+        page.click(".tab[data-tab=saved]")
+        page.wait_for_selector("#saved-list [data-saved]")
+        assert page.locator("#saved-list [data-saved]").count() == 2  # exemples fournis
+        page.click("#add-saved")
+        card = page.locator("#saved-list [data-saved]").last
+        card.locator('[data-s="name"]').fill("Consoles portables")
+        tags = card.locator('[data-s="queries"] .tag-input')
+        tags.fill("steam deck")
+        tags.press("Enter")
+        tags.fill("switch oled")
+        tags.press("Enter")
+        assert "2 modèles" in card.locator("[data-s-hint]").inner_text()
+        page.keyboard.press("Control+s")
+        page.wait_for_function("document.querySelector('#save-status').innerText.includes('Tout est enregistré')")
+        page.reload()
+        page.click(".tab[data-tab=saved]")
+        page.wait_for_selector("#saved-list [data-saved]:nth-child(3)")
+        page.locator("#saved-list [data-saved]").last.locator("[data-run-saved]").click()
+        page.wait_for_timeout(500)
+        browser.close()
+    assert errors == []
+    assert posted and posted[-1]["queries"] == ["steam deck", "switch oled"]
+    assert posted[-1]["name"] == "Consoles portables"

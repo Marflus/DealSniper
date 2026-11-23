@@ -67,8 +67,9 @@ def check(ad: Ad, config: dict[str, Any]) -> str | None:
     reason = sold_problem(ad, filters)
     if reason:
         return reason
-    words = filters.get("query_words")  # recherche ponctuelle : les sites renvoient aussi des articles voisins
-    if words and not matches_query(f"{ad.title} {ad.description}", words):
+    # Recherche ponctuelle (un ou plusieurs modèles) : les sites renvoient aussi des articles voisins.
+    groups = filters.get("query_groups") or ([filters["query_words"]] if filters.get("query_words") else [])
+    if groups and not any(matches_query(f"{ad.title} {ad.description}", words) for words in groups):
         return "hors sujet (trop peu de mots de la recherche)"
     cat = categorize(ad, config["categories"])
     if cat is None:
