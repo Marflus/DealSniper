@@ -27,6 +27,7 @@
       <button class="tab active" data-tab="ads">Annonces</button>
       <button class="tab" data-tab="search">Recherche</button>
       <button class="tab" data-tab="saved">Enregistrées</button>
+      <button class="tab" data-tab="analyze">Analyse</button>
       <button class="tab" data-tab="stats">Bilan</button>
       <button class="tab" data-tab="purchases">Achats</button>
       <button class="tab" data-tab="searches">Recherches</button>
@@ -154,6 +155,32 @@
         <p>Une liste de modèles, lancés d'un coup sur tous les sites, avec leurs critères.</p></div>
       <div id="saved-list" class="saved-list"></div>
       <button id="add-saved" class="add">＋ Nouvelle recherche enregistrée</button>
+    </section>
+
+    <!-- ANALYSE D'UN LIEN -->
+    <section id="tab-analyze" class="page" hidden>
+      <div class="page-head"><h1>Analyse d'une annonce</h1>
+        <p>Collez le lien d'une annonce (Vinted, leboncoin, eBay, Facebook…) : Claude Opus 5.5 lit l'annonce, examine
+          les photos, cherche les prix réels sur le web et fait le bilan.</p></div>
+      <form id="link-form" class="link-form">
+        <input id="link-url" type="url" placeholder="https://www.vinted.fr/items/…  ou  https://www.leboncoin.fr/…" autocomplete="off">
+        <button id="link-run" class="primary">Analyser</button>
+      </form>
+      <p class="muted small link-cost">Modèle le plus avancé, réflexion poussée : ≈ 0,15 à 0,40 $ par annonce, compté dans le budget IA du jour.
+        <button type="button" class="link" id="link-manual-toggle">Saisir les infos à la main</button></p>
+      <div id="link-manual" class="link-manual" hidden>
+        <p class="muted small" id="link-manual-why">Si le site refuse la lecture automatique, recopiez l'annonce ici.</p>
+        <div class="link-manual-grid">
+          <label>Titre <input id="lm-title" placeholder="ex. Lenovo ThinkCentre M920q i5-8500T 16 Go"></label>
+          <label>Prix <span class="affix"><input id="lm-price" type="number" min="0" placeholder="prix"><i>€</i></span></label>
+          <label class="wide">Description <textarea id="lm-description" rows="4" placeholder="Texte du vendeur"></textarea></label>
+          <label class="wide">Lien de la photo (facultatif) <input id="lm-image" placeholder="clic droit sur la photo → Copier l'adresse de l'image"></label>
+        </div>
+      </div>
+      <div id="link-progress" class="link-progress" hidden></div>
+      <div id="link-result"></div>
+      <h2 class="link-history-title" id="link-history-title" hidden>Analyses précédentes</h2>
+      <div id="link-history" class="link-history"></div>
     </section>
 
     <!-- BILAN / TABLEAU DE BORD -->

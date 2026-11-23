@@ -167,3 +167,46 @@ def test_saved_search_loop_toggle(server):
             "Dernier scan il y a 12 min · prochain dans 18 min")
         browser.close()
     assert errors == []
+
+
+def test_link_analysis_tab(server):
+    """Onglet Analyse : lien collé → suivi animé → bilan affiché ; site qui refuse → saisie manuelle."""
+    sync_api = pytest.importorskip("playwright.sync_api")
+    from test_link import BILAN
+
+    record = {"id": "1", "at": "2026-11-23T20:00:00+00:00",
+              "ad": {"title": "ThinkCentre M920q i5 16 Go", "url": "https://www.vinted.fr/items/1", "source": "vinted",
+                     "price": 95, "total_price": 95, "photos": [], "available": True},
+              "result": {**BILAN, "arnaque": {"niveau": "faible", "raisons": []}, "prix_achat_max": 96,
+                         "marge_visee": 48, "cost_usd": 0.21, "model": "claude-opus-5-5", "photos_analysees": 0}}
+    errors, bodies = [], []
+    with sync_api.sync_playwright() as p:
+        browser = _browser(p)
+        page = browser.new_page()
+        page.on("pageerror", lambda exc: errors.append(str(exc)))
+
+        def analysis(route):
+            body = route.request.post_data_json
+            bodies.append(body)
+            if "leboncoin" in body["url"] and not body.get("title"):
+                route.fulfill(status=422, json={"ok": False, "manual": True, "error": "leboncoin refuse : à la main"})
+            else:
+                route.fulfill(json={"ok": True, "item": record})
+
+        page.route("**/api/link-analysis", analysis)
+        page.goto(server)
+        page.click(".tab[data-tab=analyze]")
+        page.fill("#link-url", "https://www.leboncoin.fr/ad/x/1")
+        page.click("#link-run")
+        sync_api.expect(page.locator("#link-manual")).to_be_visible()
+        page.fill("#lm-title", "ThinkCentre M920q")
+        page.fill("#lm-price", "95")
+        page.click("#link-run")
+        report = page.locator("#link-result .link-report")
+        sync_api.expect(report).to_contain_text("À acheter")
+        sync_api.expect(report).to_contain_text("Points forts")
+        sync_api.expect(report.locator(".note-ring")).to_contain_text("8,4")
+        sync_api.expect(report).to_contain_text("Le BIOS est-il verrouillé ?")
+        browser.close()
+    assert errors == []
+    assert bodies[-1]["title"] == "ThinkCentre M920q" and bodies[-1]["price"] == "95"

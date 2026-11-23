@@ -366,3 +366,105 @@ def seller_questions(ad: Ad, config: dict[str, Any], deep: dict[str, Any] | None
     if not questions:
         raise AnalysisFailed("Aucune question proposée, réessayez.", cost)
     return {"questions": questions, "cost_usd": round(cost, 5)}
+
+
+# ---------- Analyse d'un lien collé (onglet « Analyse ») ----------
+
+LINK_MODEL = "claude-opus-5-5"  # le meilleur modèle courant : une annonce à la fois, à la demande
+PHOTO_JSON = '"photo": {"etat": "bon|moyen|mauvais|inconnu", "constat": "...", "alertes": ["..."]}'
+LINK_PROMPT = SYSTEM_PROMPT.replace("Termine TOUJOURS par un unique bloc JSON", """Ici l'acheteur te donne UNE annonce \
+qu'il hésite à acheter : fais un BILAN complet et franc, comme un ami expert. Plusieurs photos peuvent être jointes :
+examine-les toutes. Ajoute au JSON :
+- "modele_exact" : le modèle identifié (génération, configuration), ou ce qui reste incertain ;
+- "note" : note globale de l'affaire sur 10 (prix, état, risque, facilité de revente ou d'usage) ;
+- "points_forts" et "points_faibles" : 2 à 4 éléments courts chacun ;
+- "arnaque" : {"niveau": "faible|moyen|élevé", "raisons": ["..."]} (prix trop beau, photo de catalogue,
+  vendeur pressé, paiement hors site, description incohérente…) ;
+- "a_verifier" : 3 à 6 points à contrôler à la remise en main propre ou à la réception ;
+- "questions" : 3 ou 4 questions précises à poser au vendeur avant d'acheter.
+Termine TOUJOURS par un unique bloc JSON""").replace(PHOTO_JSON + "}",
+    PHOTO_JSON + ",\n"
+    ' "modele_exact": "...", "note": n, "points_forts": ["..."], "points_faibles": ["..."],\n'
+    ' "arnaque": {"niveau": "faible|moyen|élevé", "raisons": ["..."]}, "a_verifier": ["..."], "questions": ["..."]}')
+LINK_SEARCH_TOOL = {**WEB_SEARCH_TOOL, "max_uses": 8}
+SCAM_LEVELS = ("faible", "moyen", "élevé")
+
+
+def _texts(raw: Any, limit: int, size: int = 160) -> list[str]:
+    return [str(x).strip()[:size] for x in (raw if isinstance(raw, list) else []) if str(x).strip()][:limit]
+
+
+def analyze_link(ad: Ad, photos: list[str], config: dict[str, Any], client: Any = None,
+                 fetch: Any = None) -> dict[str, Any]:
+    """Bilan complet d'une annonce collée : Claude Opus 5.5 (réflexion poussée) + recherche web + photos.
+    Renvoie la même base que l'analyse approfondie (revente, achat max, ventes, photo…) plus le bilan."""
+    if not env("ANTHROPIC_API_KEY"):
+        raise RuntimeError("Clé Anthropic manquante (ANTHROPIC_API_KEY dans .env).")
+    cfg = config["analyzer"]
+    model = cfg.get("link_model") or LINK_MODEL
+    pricing = {**DEFAULT_PRICING, **{k: tuple(v) for k, v in (cfg.get("pricing") or {}).items()}}
+
+    if client is None:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"), max_retries=2,
+                                     timeout=max(240.0, float(cfg.get("timeout_seconds", 90))))
+
+    blocks = [b for b in (photo_block(url, fetch) for url in photos[:4]) if b]
+    note = f"\n{len(blocks)} photo(s) de l'annonce jointe(s)." if blocks else "\nAucune photo disponible."
+    place = f"\nVille : {ad.location}" if ad.location else ""
+    text = f"Site : {ad.source}\nLien : {ad.url}\n{_describe_full(ad)}{place}{note}"
+    messages: list[dict[str, Any]] = [{"role": "user", "content": [*blocks, {"type": "text", "text": text}]}]
+    cost, out = 0.0, ""
+    resp = None
+    for _ in range(6):  # recherche web : plusieurs tours possibles (pause_turn)
+        # Refus du modèle : l'API relance d'elle-même sur un modèle de repli adapté (« fallbacks »).
+        resp = client.beta.messages.create(
+            model=model, max_tokens=16000, system=LINK_PROMPT, messages=messages, tools=[LINK_SEARCH_TOOL],
+            output_config={"effort": cfg.get("link_effort") or "high"},
+            betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+        served = getattr(resp, "model", model) or model
+        price_in, price_out = pricing.get(served, pricing.get(model, (4.0, 20.0)))
+        cost += _usage_cost(getattr(resp, "usage", None), price_in, price_out,
+                            float(cfg.get("web_search_usd", WEB_SEARCH_USD)))
+        out = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+        if getattr(resp, "stop_reason", "") == "pause_turn":
+            messages.append({"role": "assistant", "content": resp.content})
+            continue
+        break
+    if getattr(resp, "stop_reason", "") == "refusal":
+        raise AnalysisFailed("Le modèle a refusé cette analyse.", cost)
+    try:
+        parsed = _parse_json(out) if out else {}
+    except ValueError as exc:
+        raise AnalysisFailed("Réponse illisible, réessayez.", cost) from exc
+    raw: dict[str, Any] = parsed if isinstance(parsed, dict) else {}
+    result = sanitize(raw, ad)
+    if result["revente_typique"] is None:
+        raise AnalysisFailed("Aucun prix de revente trouvé pour ce modèle, réessayez.", cost)
+    if not blocks:
+        result["photo"] = None
+    scam: dict[str, Any] = raw["arnaque"] if isinstance(raw.get("arnaque"), dict) else {}
+    level = str(scam.get("niveau", "")).strip().lower().replace("eleve", "élevé")
+    note_value = _clamp(raw.get("note"))
+    result.update(
+        modele_exact=str(raw.get("modele_exact") or "").strip()[:160],
+        note=None if note_value is None else min(10.0, round(note_value, 1)),
+        points_forts=_texts(raw.get("points_forts"), 4), points_faibles=_texts(raw.get("points_faibles"), 4),
+        arnaque={"niveau": level if level in SCAM_LEVELS else "moyen", "raisons": _texts(scam.get("raisons"), 4)},
+        a_verifier=_texts(raw.get("a_verifier"), 6), questions=_texts(raw.get("questions"), 4, 220),
+        photos_analysees=len(blocks), cost_usd=round(cost, 4),
+        model=getattr(resp, "model", model) or model)
+    return result
+
+
+def _describe_full(ad: Ad) -> str:
+    """Comme _describe, avec la description entière (une seule annonce : pas besoin de l'abréger)."""
+    parts = [f"Titre : {ad.title}"]
+    if ad.price is not None:
+        parts.append(f"Prix demandé : {ad.price:.0f} €")
+    if not ad.available:
+        parts.append("Le site l'indique vendue / indisponible.")
+    if ad.description:
+        parts.append(f"Description du vendeur : {ad.description[:3000]}")
+    return "\n".join(parts)

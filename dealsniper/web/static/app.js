@@ -79,7 +79,11 @@ async function copyText(text) {
 async function api(url, options = {}) {
   const resp = await fetch(url, { headers: { "Content-Type": "application/json" }, ...options });
   const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data.error || data.message || `HTTP ${resp.status}`);
+  if (!resp.ok) {
+    const err = new Error(data.error || data.message || `HTTP ${resp.status}`);
+    err.data = data;  // détails (ex. « manual » : saisie à la main proposée)
+    throw err;
+  }
   return data;
 }
 
@@ -98,8 +102,9 @@ function showTab(tab) {
   placeToolbar(tab);
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".page").forEach((p) => (p.hidden = p.id !== `tab-${tab}`));
-  $("#savebar").hidden = ["ads", "search", "purchases", "stats"].includes(tab);  // n'éditent pas config.yaml
+  $("#savebar").hidden = ["ads", "search", "purchases", "stats", "analyze"].includes(tab);  // n'éditent pas config.yaml
   if (tab === "purchases") loadPurchases();
+  else if (tab === "analyze") loadLinkHistory();
   else if (tab === "stats") loadStats();
   else if (!["ads", "search"].includes(tab) && !settings) loadSettings();
   if (tab === "saved") refreshLoops();
@@ -2029,6 +2034,158 @@ async function restoreLastSearch() {
   const prog = await api("/api/progress").catch(() => ({ progress: {} }));
   renderSearchReport(prog.progress || {}, data.ads);
 }
+
+// ---------- Analyse d'un lien (Claude Opus 5.5) ----------
+let linkHistory = [], linkTimer = null;
+const LINK_STEPS = [
+  [0, "Lecture de l'annonce"], [4, "Examen des photos"], [12, "Recherche des ventes réelles sur le web"],
+  [35, "Comparaison des prix et des pièges"], [60, "Rédaction du bilan"],
+];
+const SCAM = { faible: ["good", "Risque d'arnaque faible"], moyen: ["mid", "Risque d'arnaque moyen"],
+  "élevé": ["low", "Risque d'arnaque élevé"] };
+
+function linkProgress(on) {
+  const box = $("#link-progress");
+  clearInterval(linkTimer);
+  box.hidden = !on;
+  if (!on) return;
+  const start = Date.now();
+  const draw = () => {
+    const s = (Date.now() - start) / 1000;
+    const current = LINK_STEPS.filter(([at]) => s >= at).length - 1;
+    box.innerHTML = `<div class="lp-head"><span class="lp-spinner"></span><b>Analyse en cours</b>
+      <span class="muted small">${Math.floor(s)} s · souvent 30 à 90 s</span></div>
+      <ol>${LINK_STEPS.map(([, label], i) => `<li class="${i < current ? "done" : i === current ? "now" : ""}">${label}</li>`).join("")}</ol>
+      <div class="lp-bar"><span style="width:${Math.min(95, (s / 90) * 100).toFixed(1)}%"></span></div>`;
+  };
+  draw();
+  linkTimer = setInterval(draw, 500);
+}
+
+function noteRing(note) {
+  if (note == null) return "";
+  const cls = note >= 7 ? "good" : note >= 5 ? "mid" : "low";
+  const deg = Math.round((note / 10) * 360);
+  return `<div class="note-ring ${cls}" style="--deg:${deg}deg" title="Note globale de l'affaire"><b>${String(note).replace(".", ",")}</b><small>/10</small></div>`;
+}
+const listBlock = (title, items, cls = "") => (items || []).length
+  ? `<div class="lr-list ${cls}"><b>${title}</b><ul>${items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+
+function linkReport(rec, open = true) {
+  const ad = rec.ad, d = rec.result;
+  const v = deepVerdict(ad, d);
+  const [scamCls, scamLabel] = SCAM[d.arnaque?.niveau] || SCAM.moyen;
+  const range = [d.revente_basse, d.revente_haute].every((x) => x != null) ? `${euros(d.revente_basse)} – ${euros(d.revente_haute)}` : "—";
+  const photos = (ad.photos || []).length ? ad.photos : ad.image ? [ad.image] : [];
+  const when = new Date(rec.at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+  return `<article class="link-report ${open ? "" : "collapsed"}" data-rid="${esc(rec.id)}">
+    <header class="lr-head">
+      ${photos[0] ? `<img class="lr-photo" src="${esc(photos[0])}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="lr-photo empty">📦</div>'}
+      <div class="lr-title">
+        <span class="muted small">${esc(ad.source || "")} · ${when}${ad.location ? ` · ${esc(ad.location)}` : ""}</span>
+        <b>${esc(ad.title)}</b>
+        ${d.modele_exact ? `<span class="small">Modèle identifié : ${esc(d.modele_exact)}</span>` : ""}
+        ${ad.available === false ? '<span class="conf low">indiquée vendue / indisponible</span>' : ""}
+      </div>
+      <div class="lr-price"><b>${euros(ad.total_price ?? ad.price)}</b>${ad.url ? `<a href="${esc(ad.url)}" target="_blank" rel="noopener">Voir l'annonce ↗</a>` : ""}</div>
+      ${noteRing(d.note)}
+      <button type="button" class="link lr-toggle" data-lr-toggle title="Afficher / masquer">${open ? "▴" : "▾"}</button>
+    </header>
+    <div class="lr-body">
+      <div class="verdict ${v.cls}"><span class="v-icon">${v.icon}</span>
+        <div><b>${esc(v.title)}</b><p>${esc(v.text)}</p></div>
+        <div class="deep-meta"><span class="conf ${CONF_LEVEL[d.confiance] || "mid"}">confiance ${esc(d.confiance)}</span>
+          <span class="conf ${scamCls}">${scamLabel}</span><span>${d.cost_usd ? iaCost(d.cost_usd) : ""}</span></div>
+      </div>
+      ${photos.length > 1 ? `<div class="lr-gallery">${photos.map((u) => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer">`).join("")}</div>` : ""}
+      <div class="deep-grid">
+        <div class="deep-facts">
+          <div class="d-tiles three">
+            <div class="d-tile"><span>Revente réelle</span><b>${range}</b>${d.revente_typique != null ? `<small>typique ${euros(d.revente_typique)}</small>` : ""}</div>
+            <div class="d-tile ${d.prix_achat_max != null && d.prix_achat_max <= 0 ? "neg" : ""}"><span>Achat max</span><b>${d.prix_achat_max != null ? euros(d.prix_achat_max) : "—"}</b><small>pour +${d.marge_visee ?? 30} € net</small></div>
+            <div class="d-tile"><span>Demandé</span><b>${euros(ad.total_price ?? ad.price)}</b><small>&nbsp;</small></div>
+          </div>
+          ${d.resume ? `<p class="deep-summary">${esc(d.resume)}</p>` : ""}
+          <div class="lr-two">${listBlock("👍 Points forts", d.points_forts, "pos")}${listBlock("👎 Points faibles", d.points_faibles, "neg")}</div>
+          ${(d.arnaque?.raisons || []).length ? listBlock(`🛡️ ${scamLabel}`, d.arnaque.raisons, scamCls) : ""}
+          ${photoBlock(d)}
+          ${(d.sources || []).length ? `<div class="deep-sources">${d.sources.map((x) => `<span>${esc(x)}</span>`).join("")}</div>` : ""}
+        </div>
+        <div class="deep-charts">${salesChart(d) || '<div class="chart-empty">Pas de vente datée trouvée pour le graphique</div>'}
+          ${listBlock("✅ À vérifier en main propre", d.a_verifier, "check")}
+          ${listBlock("💬 À demander au vendeur", d.questions)}</div>
+      </div>
+      ${d.message_negociation ? negotiationBox(rec.id, d.message_negociation, d.prix_achat_max, ad.total_price ?? ad.price) : ""}
+      <div class="lr-foot"><span class="muted small">Analysé par ${esc(d.model || "Claude")}${d.photos_analysees ? ` · ${d.photos_analysees} photo(s) examinée(s)` : ""}</span>
+        <button type="button" class="lr-forget" data-lr-forget>Supprimer cette analyse</button></div>
+    </div>
+  </article>`;
+}
+
+function renderLinkHistory() {
+  const rest = linkHistory.slice(1);
+  $("#link-history-title").hidden = !rest.length;
+  $("#link-history").innerHTML = rest.map((r) => linkReport(r, false)).join("");
+  if (linkHistory[0] && !$("#link-result").innerHTML) $("#link-result").innerHTML = linkReport(linkHistory[0]);
+}
+async function loadLinkHistory() {
+  const data = await api("/api/link-analyses").catch(() => null);
+  if (!data) return;
+  linkHistory = data.items || [];
+  renderLinkHistory();
+}
+
+async function runLinkAnalysis(e) {
+  e?.preventDefault();
+  const manualOpen = !$("#link-manual").hidden;
+  const payload = { url: $("#link-url").value.trim() };
+  if (manualOpen && $("#lm-title").value.trim()) {
+    Object.assign(payload, { title: $("#lm-title").value.trim(), price: $("#lm-price").value,
+      description: $("#lm-description").value.trim(), image: $("#lm-image").value.trim() });
+  }
+  if (!payload.url && !payload.title) return toast("Collez le lien de l'annonce");
+  const btn = $("#link-run");
+  btn.disabled = true;
+  $("#link-result").innerHTML = "";
+  linkProgress(true);
+  try {
+    const data = await api("/api/link-analysis", { method: "POST", body: JSON.stringify(payload) });
+    linkHistory = [data.item, ...linkHistory.filter((r) => r.id !== data.item.id)];
+    $("#link-result").innerHTML = linkReport(data.item);
+    renderLinkHistory();
+    $("#link-result .link-report")?.classList.add("appear");
+    api("/api/progress").then((p) => renderBudget(p.cost_today, p.cost_cap)).catch(() => {});  // budget IA à jour
+  } catch (err) {
+    toast("❌ " + err.message);
+    if (err.data?.manual) {  // le site refuse la lecture : saisie manuelle proposée
+      $("#link-manual").hidden = false;
+      $("#link-manual-why").textContent = err.message;
+      $("#lm-title").focus();
+    }
+  } finally {
+    linkProgress(false);
+    btn.disabled = false;
+  }
+}
+$("#link-form").addEventListener("submit", runLinkAnalysis);
+$("#link-manual-toggle").addEventListener("click", () => {
+  $("#link-manual").hidden = !$("#link-manual").hidden;
+  if (!$("#link-manual").hidden) $("#lm-title").focus();
+});
+$("#tab-analyze").addEventListener("click", async (e) => {
+  const report = e.target.closest(".link-report");
+  if (e.target.closest("[data-copy-nego]")) return copyNegotiation(e.target.closest("[data-copy-nego]"));
+  if (!report) return;
+  if (e.target.closest("[data-lr-toggle]") || (report.classList.contains("collapsed") && e.target.closest(".lr-head") && !e.target.closest("a"))) {
+    report.classList.toggle("collapsed");
+    report.querySelector("[data-lr-toggle]").textContent = report.classList.contains("collapsed") ? "▾" : "▴";
+  } else if (e.target.closest("[data-lr-forget]")) {
+    await api(`/api/link-analyses/${encodeURIComponent(report.dataset.rid)}`, { method: "DELETE" }).catch(() => null);
+    linkHistory = linkHistory.filter((r) => r.id !== report.dataset.rid);
+    report.remove();
+    $("#link-history-title").hidden = !$("#link-history .link-report");
+  }
+});
 
 restoreFilters();
 syncMirrors();

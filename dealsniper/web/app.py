@@ -382,7 +382,8 @@ def _health(row: dict) -> dict:
 
 # Actions refusées en mode démo : elles contacteraient les vrais sites, Telegram / Discord ou l'IA payante.
 DEMO_BLOCKED = ("/api/run", "/api/search-now", "/api/check", "/api/test-notif", "/market-analysis", "/questions",
-                "/api/secrets")
+                "/api/secrets", "/api/link-analysis")
+LINK_HISTORY = 30  # analyses de liens gardées (onglet Analyse)
 
 
 def create_app(demo: bool = False, loops_enabled: bool = False) -> Flask:
@@ -529,6 +530,76 @@ def create_app(demo: bool = False, loops_enabled: bool = False) -> Flask:
                 db.update_analysis(uid, card[0]["analysis"])
             asyncio.run(db.add_cost(result.get("cost_usd", 0)))
         return jsonify(ok=True, market_deep=result, analysis=card[0].get("analysis"))
+
+    links_file = data_dir() / "link_analyses.json"
+
+    @app.get("/api/link-analyses")
+    def link_analyses():
+        """Analyses de liens déjà faites (les plus récentes d'abord)."""
+        return jsonify(items=_read_json(links_file).get("items") or [])
+
+    @app.delete("/api/link-analyses/<rid>")
+    def forget_link_analysis(rid: str):
+        history = _read_json(links_file).get("items") or []
+        _write_json(links_file, {"items": [r for r in history if r.get("id") != rid]})
+        return jsonify(ok=True)
+
+    @app.post("/api/link-analysis")
+    def link_analysis():
+        """Onglet Analyse : lien d'une annonce (Vinted, leboncoin…) → lecture de la page → bilan complet par
+        Claude Opus 5.5 (prix réels sur le web, photos, risque d'arnaque, verdict). Infos saisies à la main
+        si le site refuse la lecture automatique."""
+        from ..deep import AnalysisFailed, analyze_link
+        from ..link_reader import LinkUnreadable, check_url, fetch_ad, site_of
+        from ..models import Ad
+        from ..utils.urls import ad_uid, canonical_url
+
+        body = _json_body()
+        url = str(body.get("url") or "").strip()
+        manual = {k: str(body.get(k) or "").strip() for k in ("title", "price", "description", "image")}
+        try:
+            if url:
+                url = check_url(url)
+            photos: list[str] = []
+            if manual["title"]:  # saisie manuelle (site qui refuse la lecture, ou annonce hors ligne)
+                if not url and not manual["description"]:
+                    return jsonify(ok=False, error="Ajoutez au moins le lien ou la description"), 400
+                image = check_url(manual["image"]) if manual["image"] else None
+                ad = Ad(title=manual["title"][:200], url=canonical_url(url) if url else "",
+                        price=_number(manual["price"]), source=site_of(url) if url else "saisie manuelle",
+                        description=manual["description"][:3000], image=image)
+                photos = [image] if image else []
+            elif not url:
+                return jsonify(ok=False, error="Collez le lien de l'annonce"), 400
+            else:
+                with database() as db:
+                    known = db.ad_data(ad_uid(url))
+                if known and known.get("title"):  # déjà vue lors d'un passage : aucune requête vers le site
+                    ad = Ad.from_dict(known)
+                    photos = [ad.image] if ad.image else []
+                else:
+                    ad, photos = fetch_ad(url, current_config())
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        except LinkUnreadable as exc:
+            return jsonify(ok=False, error=str(exc), manual=True), 422
+        try:
+            result = analyze_link(ad, photos, current_config())
+        except AnalysisFailed as exc:
+            _charge(exc.cost_usd)
+            return jsonify(ok=False, error=str(exc)), 502
+        except Exception as exc:  # clé manquante, API indisponible…
+            return jsonify(ok=False, error=str(exc)[:200]), 502
+        _charge(result.get("cost_usd", 0))
+        record = {"id": datetime.now(UTC).strftime("%Y%m%d%H%M%S%f"),
+                  "at": datetime.now(UTC).isoformat(timespec="seconds"),
+                  "ad": {"title": ad.title, "url": ad.url, "source": ad.source, "price": ad.price,
+                         "total_price": ad.total_price, "location": ad.location, "image": ad.image,
+                         "photos": photos[:4], "available": ad.available, "description": ad.description[:600]},
+                  "result": result}
+        history = _read_json(links_file).get("items") or []
+        _write_json(links_file, {"items": [record, *history][:LINK_HISTORY]})
+        return jsonify(ok=True, item=record)
 
     @app.post("/api/ads/<uid>/questions")
     def ad_questions(uid: str):
