@@ -154,13 +154,18 @@ sauvegardée dans un fichier `config.<date>.bak.yaml`).
 GitHub retarde ou saute parfois des passages planifiés. Seul eBay y tourne : les autres sites demandent un navigateur.
 Sans clé eBay dans les secrets, les passages planifiés s'arrêtent donc tout de suite (rien à faire là-bas).
 
-**Raspberry Pi / serveur Linux** (24 h/24, plus réactif) : installez comme en section 1, puis
+**Home lab / Raspberry Pi / serveur Linux** (24 h/24) : clonez le dépôt puis lancez le script d'installation,
+qui installe les paquets (Python, Xvfb), l'environnement, les navigateurs, puis deux services systemd :
+la veille continue (`dealsniper`) et l'interface web sur le réseau local (`dealsniper-ui`).
 
 ```bash
-sudo cp deploy/dealsniper.service /etc/systemd/system/   # adaptez User et chemins dans le fichier
-sudo systemctl daemon-reload && sudo systemctl enable --now dealsniper
-journalctl -u dealsniper -f                               # suivre l'activité
+git clone https://github.com/Marflus/DealSniper.git && cd DealSniper
+bash deploy/install_homelab.sh             # à la fin : le lien (avec jeton) à ouvrir depuis le PC ou le téléphone
+journalctl -u dealsniper -f                # suivre la veille ; journalctl -u dealsniper-ui -f pour l'interface
 ```
+
+Les fichiers `deploy/*.service` contiennent `__USER__` et `__DIR__`, remplacés par le script : ne les copiez
+pas tels quels.
 
 Supprimez alors le bloc `schedule:` du workflow GitHub pour ne pas analyser deux fois les mêmes annonces.
 
@@ -250,7 +255,7 @@ DealSniper/
 │   ├── utils/                  prix, texte, localisation, URL
 │   └── web/                    interface : app.py (API Flask), security.py, preview.py (photos), static/
 ├── tests/                      pytest
-├── deploy/dealsniper.service   service systemd
+├── deploy/                     install_homelab.sh + services systemd (veille, interface)
 └── .github/workflows/          passage planifié + tests
 ```
 

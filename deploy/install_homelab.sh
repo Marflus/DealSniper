@@ -51,8 +51,20 @@ done
 sudo systemctl daemon-reload
 sudo systemctl enable --now dealsniper.service dealsniper-ui.service
 
+# L'interface écoute sur le réseau local : les autres appareils ont besoin du jeton d'accès (créé au démarrage).
+IP="$(hostname -I | awk '{print $1}')"
+TOKEN=""
+for _ in $(seq 1 15); do
+    [ -f "$APP_DIR/data/ui_token" ] && TOKEN="$(tr -d '[:space:]' < "$APP_DIR/data/ui_token")" && break
+    sleep 1
+done
+
 echo ""
 echo "Installation terminee !"
 echo "  Logs veille : journalctl -u dealsniper -f"
 echo "  Logs UI     : journalctl -u dealsniper-ui -f"
-echo "  Interface   : http://$(hostname -I | awk '{print $1}'):5000"
+if [ -n "$TOKEN" ]; then
+    echo "  Interface   : http://$IP:5000/?token=$TOKEN   (a ouvrir une fois par appareil)"
+else
+    echo "  Interface   : http://$IP:5000  (jeton : voir journalctl -u dealsniper-ui ou data/ui_token)"
+fi
