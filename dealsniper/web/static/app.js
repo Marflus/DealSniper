@@ -102,7 +102,7 @@ function showTab(tab) {
   if (tab === "purchases") loadPurchases();
   else if (tab === "stats") loadStats();
   else if (!["ads", "search"].includes(tab) && !settings) loadSettings();
-  if (tab === "saved" || loopPoll) refreshLoops();
+  if (tab === "saved") refreshLoops();
   store.set("tab", tab);
 }
 document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
@@ -1416,6 +1416,7 @@ function savedCard(s) {
   return `<article class="saved-card" data-saved>
     <div class="saved-head">
       <input class="saved-name" data-s="name" value="${esc(s.name || "")}" placeholder="Nom, ex. Mini-PC home lab">
+      <span class="loop-badge" aria-hidden="true"><i>↻</i> En boucle</span>
       <button type="button" class="primary" data-run-saved>▶ Lancer</button>
       <button type="button" class="icon danger" data-remove-saved title="Supprimer cette recherche">🗑</button>
     </div>
@@ -1437,6 +1438,7 @@ function savedCard(s) {
       <label>toutes les <span class="affix"><input data-s="every" type="number" min="${LOOP_MIN}" step="5"
         value="${esc(s.every ?? 60)}"><i>min</i></span></label>
       <span class="muted small" data-loop-status></span>
+      <div class="loop-bar" aria-hidden="true"><span></span></div>
     </div>
     <p class="muted small" data-s-hint></p>
   </article>`;
@@ -1476,34 +1478,70 @@ function readSaved(card) {
 }
 
 // Recherches en boucle : « dernier scan il y a… · prochain dans… » sur chaque carte, tant que l'onglet est ouvert.
-let loopInfo = null, loopPoll = null;
+let loopInfo = null, loopFetchedAt = 0, loopTicker = null, loopTicks = 0;
+const loopScanning = new Set();  // recherches en plein scan (pour l'effet « terminé » à la fin)
 const fmtWait = (s) => s < 60 ? "moins d'une minute" : s < 3600 ? `${Math.round(s / 60)} min`
   : `${Math.floor(s / 3600)} h ${String(Math.round((s % 3600) / 60)).padStart(2, "0")}`;
 
 function loopStatus(card) {
   const el = card.querySelector("[data-loop-status]");
+  const bar = card.querySelector(".loop-bar > span");
   const on = card.querySelector('[data-s="loop"]').checked;
   const every = Math.max(LOOP_MIN, Number(card.querySelector('[data-s="every"]').value) || 60);
   const name = card.querySelector('[data-s="name"]').value.trim();
   const info = loopInfo && loopInfo.searches[name];
+  const live = on && info && info.every === every && loopInfo.active;
+  const scanning = live && loopInfo.running === name;
   card.classList.toggle("looping", on);
-  if (!on) { el.textContent = ""; return; }
+  card.classList.toggle("loop-live", !!live);
+  card.classList.toggle("scanning", !!scanning);
+  if (scanning) loopScanning.add(name);
+  else if (loopScanning.delete(name)) {  // le scan vient de finir : petit éclat sur la carte
+    card.classList.remove("loop-done");
+    void card.offsetWidth;
+    card.classList.add("loop-done");
+  }
+  if (!on) { el.textContent = ""; bar.style.width = "0"; return; }
   if (!info || info.every !== every) {
     el.textContent = "Enregistrez pour l'activer. Elle tournera tant que Deal Sniper reste ouvert.";
+    bar.style.width = "0";
     return;
   }
   if (!loopInfo.active) { el.textContent = "À l'arrêt en mode démo : lancez start_ui.bat."; return; }
-  if (loopInfo.running === name) { el.textContent = "Scan en cours…"; return; }
-  el.textContent = info.last_s === null ? "Premier scan dans moins d'une minute."
-    : `Dernier scan il y a ${fmtWait(info.last_s)} · prochain dans ${fmtWait(info.next_s)}.`;
+  if (scanning) { el.textContent = "Scan en cours… les nouvelles annonces arrivent dans l'onglet Annonces."; return; }
+  const elapsed = (Date.now() - loopFetchedAt) / 1000;  // compte à rebours entre deux interrogations
+  if (info.last_s === null) {
+    el.textContent = "Premier scan dans moins d'une minute.";
+    bar.style.width = "100%";
+    return;
+  }
+  const next = Math.max(0, info.next_s - elapsed), since = info.last_s + elapsed;
+  bar.style.width = `${Math.min(100, (since / (every * 60)) * 100).toFixed(2)}%`;
+  el.textContent = next < 1 ? `Dernier scan il y a ${fmtWait(since)} · prochain imminent.`
+    : `Dernier scan il y a ${fmtWait(since)} · prochain dans ${fmtWait(next)}.`;
+}
+function loopTabBadge() {
+  const tab = $('.tab[data-tab="saved"]');
+  const count = loopInfo && loopInfo.active ? Object.keys(loopInfo.searches || {}).length : 0;
+  tab.classList.toggle("has-loop", count > 0);
+  tab.classList.toggle("loop-scanning", !!(loopInfo && loopInfo.running));
+  tab.title = count ? `${count} recherche${count > 1 ? "s" : ""} en boucle` : "";
 }
 async function refreshLoops() {
-  loopInfo = await api("/api/saved-loops").catch(() => loopInfo);
+  const data = await api("/api/saved-loops").catch(() => null);
+  if (data) { loopInfo = data; loopFetchedAt = Date.now(); }
   document.querySelectorAll("#saved-list [data-saved]").forEach(loopStatus);
-  const visible = !$("#tab-saved").hidden;
-  if (visible && !loopPoll) loopPoll = setInterval(refreshLoops, 30000);
-  if (!visible && loopPoll) { clearInterval(loopPoll); loopPoll = null; }
+  loopTabBadge();
 }
+// Chaque seconde : compte à rebours et barre de progression. Le serveur est interrogé toutes les 10 s
+// quand l'onglet est affiché (toutes les minutes sinon, pour la pastille de l'onglet).
+function loopTick() {
+  const visible = !$("#tab-saved").hidden;
+  loopTicks++;
+  if (loopTicks % (visible ? 10 : 60) === 0) refreshLoops();
+  else if (visible) document.querySelectorAll("#saved-list [data-saved].loop-live").forEach(loopStatus);
+}
+if (!loopTicker) loopTicker = setInterval(loopTick, 1000);
 $("#saved-list").addEventListener("input", (e) => {
   if (e.target.matches('[data-s="every"], [data-s="name"], [data-s="loop"]')) loopStatus(e.target.closest("[data-saved]"));
 });
@@ -2001,3 +2039,4 @@ showSettingsSection(store.get("set", "set-notif"));
 showTab(store.get("tab", "ads"));
 loadAds().then(restoreLastSearch).catch(() => {});
 setInterval(loadAds, 60000);
+refreshLoops();  // pastille de l'onglet Enregistrées si une boucle tourne
