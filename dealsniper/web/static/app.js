@@ -80,7 +80,11 @@ async function api(url, options = {}) {
   const resp = await fetch(url, { headers: { "Content-Type": "application/json" }, ...options });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    const err = new Error(data.error || data.message || `HTTP ${resp.status}`);
+    // 404 sans message : fonction absente du serveur, qui tourne encore avec l'ancienne version
+    const stale = resp.status === 404 && !data.error && !data.message;
+    const err = new Error(data.error || data.message || (stale
+      ? "Deal Sniper doit être redémarré pour cette fonction : fermez la fenêtre noire puis relancez start_ui.bat"
+      : `HTTP ${resp.status}`));
     err.data = data;  // détails (ex. « manual » : saisie à la main proposée)
     throw err;
   }
