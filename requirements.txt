@@ -9,3 +9,4 @@ playwright>=1.48.0       # navigateur persistant (Facebook Marketplace)
 patchright>=1.48.0       # navigateur persistant (leboncoin)
 flask>=3.0               # interface web (python -m dealsniper ui)
 ruamel.yaml>=0.18        # édition de config.yaml depuis l'interface (garde les commentaires)
+lbc>=1.1.0               # client leger API Leboncoin
